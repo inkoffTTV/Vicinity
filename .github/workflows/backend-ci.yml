@@ -21,6 +21,7 @@ jobs:
             build-essential \
             cmake \
             libdrogon-dev \
+            libjsoncpp-dev \
             libssl-dev
 
       - name: Configure backend
