@@ -14,16 +14,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+            - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-  	  build-essential \
-          cmake \
-          libdrogon-dev \
-          libjsoncpp-dev \
-          uuid-dev \
-          libssl-dev
+            build-essential \
+            cmake \
+            libdrogon-dev \
+            libjsoncpp-dev \
+            uuid-dev \
+            libssl-dev
 
       - name: Configure backend
         run: cmake -S backend -B build-ci/backend -DCMAKE_BUILD_TYPE=Release
