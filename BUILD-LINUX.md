@@ -1,28 +1,28 @@
-# Сборка Vicinity на Linux (CachyOS / Arch)
+# Building Vicinity on Linux (CachyOS / Arch)
 
-Backend (Drogon) и клиент (Qt6) кросс-платформенные. Аудио на Linux работает
-через **ALSA** (поверх PipeWire в CachyOS), на Windows — через winmm. Выбирается
-автоматически в CMake.
+The Drogon backend and Qt 6 client are cross-platform. On Linux, audio uses ALSA
+(typically routed through PipeWire); on Windows it uses WinMM.
 
-## 1. Зависимости (CachyOS использует pacman + paru)
+## 1. Dependencies
+
+CachyOS / Arch:
 
 ```bash
-# Базовые инструменты + Qt6 + ALSA + зависимости Drogon
 sudo pacman -S --needed base-devel cmake git \
     qt6-base qt6-declarative qt6-websockets qt6-shadertools qt6-wayland \
     alsa-lib jsoncpp openssl sqlite c-ares brotli zlib
 
-# Drogon из AUR (paru предустановлен в CachyOS)
 paru -S drogon
 ```
 
-Если `QtQuick.Effects` (для скругления аватарок) не найдётся — он входит в
-`qt6-declarative`; убедись что пакет установлен полностью.
+The client also needs libdatachannel, Opus and OpenH264. Install them using your
+preferred package manager or build method if they are not already available.
 
-## 2. Сборка
+## 2. Clone and build
 
 ```bash
-cd CPMessenger
+git clone https://github.com/inkoffTTV/Vicinity.git
+cd Vicinity
 
 # Backend
 cmake -S backend -B build-linux/backend -DCMAKE_BUILD_TYPE=Release
@@ -33,32 +33,45 @@ cmake -S client -B build-linux/client -DCMAKE_BUILD_TYPE=Release
 cmake --build build-linux/client -j$(nproc)
 ```
 
-(Или просто `./build-linux.sh`.)
-
-## 3. Запуск
+Or use:
 
 ```bash
-# Сервер (config.json копируется рядом с бинарником при сборке)
-cd build-linux/backend
-./VicinityServer        # слушает 0.0.0.0:8080
+chmod +x build-linux.sh
+./build-linux.sh
+```
 
-# Клиент (в другом терминале)
+## 3. Run
+
+```bash
+# Terminal 1: backend
+cd build-linux/backend
+./VicinityServer
+
+# Terminal 2: client (from repository root)
 ./build-linux/client/Vicinity
 ```
 
-В клиенте на экране входа адрес сервера: `127.0.0.1:8080` (локально),
-либо туннель/IP домашнего сервера.
+The backend listens on port `8080`. For a local setup, enter this server address
+in the client:
 
-## 4. Подключение к домашнему серверу (Windows)
-Просто запусти клиент на Linux и впиши адрес:
-`https://vicinitymsg.serveousercontent.com` — всё кросс-платформенно,
-Linux-клиент и Windows-сервер общаются по одному протоколу.
+```text
+127.0.0.1:8080
+```
 
-## Заметки
-- Голос: микрофон/динамики берутся из устройства ALSA `default` (= системное
-  по умолчанию, маршрутизируется PipeWire). Выбор конкретного устройства в UI
-  пока только на Windows; на Linux используется системное по умолчанию.
-- Если нет звука: проверь `pavucontrol` / `wpctl status`, что приложение
-  привязано к нужным микрофону и выводу.
-- Бинарники: `VicinityServer` и `Vicinity` (без .exe).
-- Данные клиента (сессия, тема, голос): `~/.config/Vicinity/Vicinity.conf`.
+## Audio notes
+
+- Linux audio uses the ALSA `default` device.
+- PipeWire/PulseAudio can route the application to the desired input/output.
+- If audio is not working, inspect devices with `wpctl status` or `pavucontrol`.
+- Windows supports device selection in the current UI; Linux currently relies
+  on the system default device.
+
+## Client data
+
+Qt settings are stored under the user's configuration directory, typically:
+
+```text
+~/.config/Vicinity/Vicinity.conf
+```
+
+For server deployment, see [DEPLOY-VPS.md](DEPLOY-VPS.md).
