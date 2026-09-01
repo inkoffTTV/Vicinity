@@ -1,0 +1,59 @@
+# Build
+build/
+build-*/
+cmake-build-*/
+out/
+CMakeFiles/
+CMakeCache.txt
+Debug/
+Release/
+*.obj
+*.o
+*.lib
+*.dll
+*.exe
+*.pdb
+
+# Runtime
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+uploads/
+
+# Debug and logs
+*.log
+qml_err*.txt
+qml_errors.txt
+qml_out.txt
+*_err.txt
+*_out.txt
+*_log.txt
+tun.txt
+possible_secrets.txt
+
+# IDE / local
+.vs/
+.vscode/
+.idea/
+tools/
+
+# AI local context
+.claude/
+HANDOFF.md
+PROJECT.md
+CLAUDE.md
+
+# Legacy project copy
+CPMessenger/
+
+# Secrets
+.env
+.env.*
+.env.example
+
+# Distribution binaries
+dist/Vicinity/
+dist/*.zip
+dist/*.exe

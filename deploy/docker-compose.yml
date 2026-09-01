@@ -1,0 +1,27 @@
+# Запуск сервера Vicinity на VPS.
+#   cd deploy && docker compose up -d --build
+# Данные (vicinity.db, uploads) хранятся в томе vicinity-data и переживают пересборки.
+services:
+  vicinity:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: vicinity-server
+    ports:
+      - "8080:8080"
+    volumes:
+      - vicinity-data:/data
+    restart: unless-stopped
+
+  # TURN/STUN для звонков. Настрой turnserver.conf (external-ip + пароль) перед запуском.
+  # host network — coturn нужен реальный IP и диапазон UDP-портов (49160-49200).
+  coturn:
+    image: coturn/coturn:latest
+    network_mode: host
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    restart: unless-stopped
+
+volumes:
+  vicinity-data:

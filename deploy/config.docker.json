@@ -1,0 +1,24 @@
+{
+    "listeners": [
+        {
+            "address": "0.0.0.0",
+            "port": 8080,
+            "https": false
+        }
+    ],
+    "db_clients": [
+        {
+            "rdbms": "sqlite3",
+            "filename": "/data/vicinity.db",
+            "connection_number": 1,
+            "name": "default"
+        }
+    ],
+    "app": {
+        "threads_num": 4,
+        "log_level": "WARN",
+        "upload_path": "/data/uploads",
+        "document_root": "/data",
+        "static_files_route": "^/uploads/.*"
+    }
+}

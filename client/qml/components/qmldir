@@ -1,0 +1,9 @@
+AnimatedAvatar 1.0 AnimatedAvatar.qml
+AppIcon 1.0 AppIcon.qml
+ChatBubble 1.0 ChatBubble.qml
+ColorPicker 1.0 ColorPicker.qml
+EditorField 1.0 EditorField.qml
+GradientRect 1.0 GradientRect.qml
+GradientPicker 1.0 GradientPicker.qml
+ProfileBanner 1.0 ProfileBanner.qml
+ThemeSwitcher 1.0 ThemeSwitcher.qml

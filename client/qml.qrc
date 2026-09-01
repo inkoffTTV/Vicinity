@@ -1,0 +1,28 @@
+<RCC>
+    <qresource prefix="/">
+        <file>qml/main.qml</file>
+        <file>qml/views/LoginView.qml</file>
+        <file>qml/views/ChatView.qml</file>
+        <file>qml/views/ProfileView.qml</file>
+        <file>qml/views/RolesView.qml</file>
+        <file>qml/views/AppearanceView.qml</file>
+        <file>qml/views/VoiceSettingsView.qml</file>
+        <file>qml/components/qmldir</file>
+        <file>qml/format.js</file>
+        <file>qml/views/ProfileCard.qml</file>
+        <file>qml/views/ProfileModal.qml</file>
+        <file>qml/views/CallOverlay.qml</file>
+        <file>qml/components/AnimatedAvatar.qml</file>
+        <file>qml/components/AppIcon.qml</file>
+        <file>qml/components/ProfileBanner.qml</file>
+        <file>qml/components/ColorPicker.qml</file>
+        <file>qml/components/EditorField.qml</file>
+        <file>qml/views/ProfileEditor.qml</file>
+        <file>qml/views/SettingsView.qml</file>
+        <file>qml/views/AccountView.qml</file>
+        <file>qml/components/GradientRect.qml</file>
+        <file>qml/components/GradientPicker.qml</file>
+        <file>qml/components/ChatBubble.qml</file>
+        <file>qml/components/ThemeSwitcher.qml</file>
+    </qresource>
+</RCC>
