@@ -2,10 +2,19 @@
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/HttpResponse.h>
 
+// Адрес из локальной/докер-сети — это наш reverse-proxy (nginx веб-клиента)
+static bool isPrivatePeer(const trantor::InetAddress& a) {
+    return a.isLoopbackIp() || a.isIntranetIp();
+}
+
 void RateLimitFilter::doFilter(const drogon::HttpRequestPtr& req,
                                drogon::FilterCallback&&      fcb,
                                drogon::FilterChainCallback&& fccb) {
     std::string ip = req->peerAddr().toIp();
+    // За nginx все веб-клиенты приходят с одного адреса — берём реальный IP из X-Real-IP,
+    // но только если запрос пришёл из приватной сети (снаружи заголовок подделывается).
+    const std::string& realIp = req->getHeader("X-Real-IP");
+    if (!realIp.empty() && isPrivatePeer(req->peerAddr())) ip = realIp;
     auto now = std::chrono::steady_clock::now();
 
     std::lock_guard<std::mutex> lock(mutex_);

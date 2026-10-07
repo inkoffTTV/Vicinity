@@ -6,8 +6,13 @@ void AuthFilter::doFilter(const drogon::HttpRequestPtr& req,
                           drogon::FilterCallback&&      fcb,
                           drogon::FilterChainCallback&& fccb) {
     std::string auth = req->getHeader("Authorization");
-    if (auth.size() > 7 && auth.substr(0, 7) == "Bearer ") {
-        std::string token = auth.substr(7);
+    std::string token;
+    if (auth.size() > 7 && auth.substr(0, 7) == "Bearer ")
+        token = auth.substr(7);
+    // Браузерный WebSocket не умеет ставить заголовки — для /ws принимаем ?token=
+    else if (req->path() == "/ws")
+        token = req->getParameter("token");
+    if (!token.empty()) {
         auto session = AppSessionManager::instance().validate(token);
         if (session) {
             req->attributes()->insert("user_id", session->userId);

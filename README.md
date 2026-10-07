@@ -13,6 +13,8 @@ It combines Discord-style servers and channels with direct messaging, voice chan
 
 > **Status:** alpha / active development. Windows is the primary platform; Linux support is available.
 
+> **Web version:** the browser client lives in [`web/`](web/README.md) and is deployed alongside the server (see [DEPLOY-VPS.md](DEPLOY-VPS.md#веб-версия)).
+
 ## Highlights
 
 - Real-time direct messages over WebSocket

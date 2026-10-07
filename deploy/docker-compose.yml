@@ -1,5 +1,6 @@
 # Запуск сервера Vicinity на VPS.
 #   cd deploy && docker compose up -d --build
+# Только сервер + веб (без coturn): docker compose up -d --build vicinity web
 # Данные (vicinity.db, uploads) хранятся в томе vicinity-data и переживают пересборки.
 services:
   vicinity:
@@ -11,6 +12,19 @@ services:
       - "8080:8080"
     volumes:
       - vicinity-data:/data
+    restart: unless-stopped
+
+  # Веб-версия: http://IP_VPS (порт 80). Проксирует /api, /ws, /uploads на сервис vicinity.
+  # Порт можно поменять через WEB_PORT, например: WEB_PORT=8081 docker compose up -d --build
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    container_name: vicinity-web
+    depends_on:
+      - vicinity
+    ports:
+      - "${WEB_PORT:-80}:80"
     restart: unless-stopped
 
   # TURN/STUN для звонков. Настрой turnserver.conf (external-ip + пароль) перед запуском.

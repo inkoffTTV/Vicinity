@@ -83,10 +83,32 @@ curl -s -o NUL -w "%{http_code}\n" http://IP_VPS:8080/api/v1/auth/me
 
 ---
 
+## Веб-версия
+Вместе с сервером поднимается веб-клиент (сервис `web` в `deploy/docker-compose.yml`):
+nginx отдаёт сайт и проксирует `/api`, `/ws`, `/uploads` на сервер. Десктоп-клиенты продолжают
+работать через `:8080` как раньше — база общая.
+
+```bash
+cd /root/vicinity && git pull
+cd deploy
+docker compose up -d --build vicinity web     # сервер + веб (coturn — отдельно, если настроен)
+ufw allow 80/tcp                              # + открыть TCP 80 в панели хостера, если там фаервол
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost/              # 200 — сайт отдаётся
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost/api/v1/auth/me # 401 — API через прокси жив
+```
+Открыть в браузере: **`http://IP_VPS`**. Занят 80-й порт — `WEB_PORT=8081 docker compose up -d --build web`,
+тогда адрес `http://IP_VPS:8081`.
+
+> Уведомления браузера и (в будущем) микрофон работают только по **HTTPS**. Для этого нужен домен:
+> направь его A-записью на IP VPS и поставь перед контейнером `web` Caddy/Nginx с Let's Encrypt
+> (или поменяй `WEB_PORT` и проксируй на него). Без домена сайт полностью работает по `http://`.
+
+---
+
 ## Обновление сервера (после правок бэкенда)
 ```bash
 cd /root/vicinity && git pull        # или заново scp backend/
-cd deploy && docker compose up -d --build
+cd deploy && docker compose up -d --build vicinity web
 ```
 База и загрузки сохранятся (том `vicinity-data`).
 
