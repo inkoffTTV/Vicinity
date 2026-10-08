@@ -19,6 +19,67 @@ export interface Me {
   developer: number | boolean;
 }
 
+/** Что требует регистрация на этом сервере (GET /auth/registration) */
+export interface RegistrationInfo {
+  mode: 'email' | 'captcha' | 'open' | 'closed';
+  captcha: boolean;
+  email: boolean;
+  open: boolean;
+}
+
+/** Задача капчи ALTCHA (GET /auth/challenge) */
+export interface AltchaChallenge {
+  algorithm: string;
+  challenge: string;
+  maxnumber: number;
+  salt: string;
+  signature: string;
+}
+
+export interface RegisterStart {
+  username: string;
+  password: string;
+  display_name: string;
+  email?: string;
+  /** base64(JSON решения капчи) */
+  altcha?: string;
+  /** ловушка для ботов — всегда пустая */
+  website?: string;
+}
+
+export type RegisterStartResult =
+  | { token: string; user_id: number; display_name: string }
+  | { pending_id: string; email: string; expires_in: number; resend_in: number };
+
+/** Пользователь в админ-панели (GET /admin/users) */
+export interface AdminUser {
+  id: number;
+  username: string;
+  display_name: string;
+  avatar_path: string;
+  email: string;
+  signup_ip: string;
+  created_at: string;
+  banned: boolean;
+  developer: boolean;
+  subscription_tier: number;
+}
+
+export interface AdminUsers {
+  users: AdminUser[];
+  top_ips: { ip: string; count: number; last: string }[];
+  total: number;
+  last_day: number;
+  banned: number;
+}
+
+export interface BlockedIp {
+  ip: string;
+  note: string;
+  created_at: string;
+  accounts: number;
+}
+
 export interface UserSummary {
   id: number;
   username: string;
@@ -311,6 +372,14 @@ export const api = {
     post<{ token: string; user_id: number }>('/auth/login', { username, password }),
   register: (username: string, password: string, display_name: string) =>
     post<{ token: string; user_id: number }>('/auth/register', { username, password, display_name }),
+  registrationInfo: () => get<RegistrationInfo>('/auth/registration'),
+  challenge: () => get<AltchaChallenge>('/auth/challenge'),
+  /** Режим email → {pending_id, …} (код ушёл на почту); иначе сразу {token, user_id} */
+  registerStart: (b: RegisterStart) => post<RegisterStartResult>('/auth/register/start', b),
+  registerVerify: (pending_id: string, code: string) =>
+    post<{ token: string; user_id: number }>('/auth/register/verify', { pending_id, code }),
+  registerResend: (pending_id: string) =>
+    post<{ resend_in: number; expires_in: number }>('/auth/register/resend', { pending_id }),
   logout: () => post('/auth/logout'),
   me: () => get<Me>('/auth/me'),
   changePassword: (old_password: string, new_password: string) =>
@@ -318,6 +387,15 @@ export const api = {
   sessions: () => get<{ sessions: Session[] }>('/auth/sessions').then((r) => r.sessions),
   revokeSession: (id: string) => del(`/auth/sessions/${encodeURIComponent(id)}`),
   revokeOtherSessions: () => del<{ status: string; revoked: number }>('/auth/sessions/others'),
+
+  // ── Админ-панель (developer) ──
+  adminUsers: (q = '') => get<AdminUsers>(`/admin/users?q=${encodeURIComponent(q)}`),
+  adminBan: (id: number, banned: boolean) => post<{ id: number; banned: boolean }>(`/admin/users/${id}/ban`, { banned }),
+  adminDeleteUser: (id: number) => del<{ status: string }>(`/admin/users/${id}`),
+  adminBlockedIps: () => get<{ blocked: BlockedIp[] }>('/admin/blocked-ips').then((r) => r.blocked),
+  adminBlockIp: (ip: string, note: string, ban_accounts: boolean) =>
+    post<{ ip: string; banned: number }>('/admin/blocked-ips', { ip, note, ban_accounts }),
+  adminUnblockIp: (ip: string) => del<{ status: string }>(`/admin/blocked-ips/${encodeURIComponent(ip)}`),
 
   // ── Пользователи / лички ──
   searchUsers: (q: string) =>

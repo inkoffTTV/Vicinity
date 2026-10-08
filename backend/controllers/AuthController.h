@@ -6,7 +6,12 @@ using namespace drogon;
 class AuthController : public HttpController<AuthController> {
 public:
     METHOD_LIST_BEGIN
+    ADD_METHOD_TO(AuthController::registrationInfo, "/api/v1/auth/registration", Get, Options);
+    ADD_METHOD_TO(AuthController::challenge,      "/api/v1/auth/challenge",       Get,  Options, "RateLimitFilter");
     ADD_METHOD_TO(AuthController::registerUser, "/api/v1/auth/register", Post, Options, "RateLimitFilter");
+    ADD_METHOD_TO(AuthController::registerStart,  "/api/v1/auth/register/start",  Post, Options, "RateLimitFilter");
+    ADD_METHOD_TO(AuthController::registerVerify, "/api/v1/auth/register/verify", Post, Options, "RateLimitFilter");
+    ADD_METHOD_TO(AuthController::registerResend, "/api/v1/auth/register/resend", Post, Options, "RateLimitFilter");
     ADD_METHOD_TO(AuthController::login,        "/api/v1/auth/login",    Post, Options, "RateLimitFilter");
     ADD_METHOD_TO(AuthController::logout,       "/api/v1/auth/logout",   Post, Options, "AuthFilter");
     ADD_METHOD_TO(AuthController::me,           "/api/v1/auth/me",       Get,  Options, "AuthFilter");
@@ -16,7 +21,12 @@ public:
     ADD_METHOD_TO(AuthController::revokeSession,  "/api/v1/auth/sessions/{id}",   Delete, Options, "AuthFilter");
     METHOD_LIST_END
 
+    void registrationInfo(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void challenge     (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void registerUser(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void registerStart (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void registerVerify(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void registerResend(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void login       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void logout      (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void me          (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);

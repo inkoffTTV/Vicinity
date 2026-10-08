@@ -7,7 +7,7 @@ FROM ubuntu:22.04 AS build
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake git ca-certificates \
-        libjsoncpp-dev uuid-dev zlib1g-dev libssl-dev libsqlite3-dev \
+        libjsoncpp-dev uuid-dev zlib1g-dev libssl-dev libsqlite3-dev libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Drogon (с trantor-сабмодулем): та же версия и те же опции, что в CI (.github/workflows)
@@ -29,9 +29,10 @@ RUN cmake -S /app/backend -B /app/build -DCMAKE_BUILD_TYPE=Release \
 # ───── runtime ─────
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
-# curl — для healthcheck в docker-compose.yml, sqlite3 — для онлайн-бэкапа базы (deploy/backup.sh)
+# curl — для healthcheck в docker-compose.yml, libcurl4 — письма с кодом подтверждения (SMTP),
+# sqlite3 — для онлайн-бэкапа базы (deploy/backup.sh)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libjsoncpp25 libssl3 libsqlite3-0 zlib1g libuuid1 ca-certificates curl sqlite3 \
+        libjsoncpp25 libssl3 libsqlite3-0 zlib1g libuuid1 ca-certificates curl libcurl4 sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/build/VicinityServer /app/VicinityServer

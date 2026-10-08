@@ -30,6 +30,19 @@
         ]
     },
     "custom_config": {
+        "registration": {
+            "mode": "",
+            "signups_per_ip_per_day": 3,
+            "site_url": ""
+        },
+        "smtp": {
+            "host": "",
+            "port": 465,
+            "user": "",
+            "password": "",
+            "from": "",
+            "security": ""
+        },
         "trusted_proxies": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"],
         "rtc": {
             "stun": ["stun:stun.l.google.com:19302"],

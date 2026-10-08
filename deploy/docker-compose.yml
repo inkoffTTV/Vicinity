@@ -27,6 +27,16 @@ services:
       VICINITY_TURN_URLS: ${VICINITY_TURN_URLS:-turn:${PUBLIC_IP}:3478?transport=udp,turn:${PUBLIC_IP}:3478?transport=tcp}
       VICINITY_STUN_URLS: ${VICINITY_STUN_URLS:-}
       VICINITY_TRUSTED_PROXIES: ${VICINITY_TRUSTED_PROXIES:-}
+      # Регистрация: капча, подтверждение почты, лимит с одного IP (env.example, раздел «Регистрация»)
+      VICINITY_REGISTRATION: ${VICINITY_REGISTRATION:-}
+      VICINITY_SIGNUPS_PER_IP: ${VICINITY_SIGNUPS_PER_IP:-}
+      VICINITY_SITE_URL: ${VICINITY_SITE_URL:-}
+      VICINITY_SMTP_HOST: ${VICINITY_SMTP_HOST:-}
+      VICINITY_SMTP_PORT: ${VICINITY_SMTP_PORT:-}
+      VICINITY_SMTP_USER: ${VICINITY_SMTP_USER:-}
+      VICINITY_SMTP_PASSWORD: ${VICINITY_SMTP_PASSWORD:-}
+      VICINITY_SMTP_FROM: ${VICINITY_SMTP_FROM:-}
+      VICINITY_SMTP_SECURITY: ${VICINITY_SMTP_SECURITY:-}
     ports:
       # Прямой доступ для десктоп-клиентов: http://IP_VPS:8080. Закрыть снаружи — BACKEND_BIND=127.0.0.1
       # (правила ufw на опубликованные порты Docker не действуют)

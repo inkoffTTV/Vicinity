@@ -32,6 +32,11 @@
         ]
     },
     "custom_config": {
+        "registration": {
+            "mode": "open",
+            "signups_per_ip_per_day": 0,
+            "site_url": ""
+        },
         "trusted_proxies": [],
         "rtc": {
             "stun": ["stun:stun.l.google.com:19302"],

@@ -99,6 +99,8 @@ interface State {
   retryBoot: () => void;
   login: (u: string, p: string) => Promise<void>;
   register: (u: string, p: string, d: string) => Promise<void>;
+  /** Войти с токеном, выданным регистрацией (/auth/register/start или /verify) */
+  signInWithToken: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
   refreshServers: () => Promise<void>;
@@ -1029,6 +1031,11 @@ export const useStore = create<State>((set, get) => {
     register: async (u, p, d) => {
       const r = await api.register(u, p, d);
       setToken(r.token);
+      await startSession();
+    },
+
+    signInWithToken: async (token) => {
+      setToken(token);
       await startSession();
     },
 

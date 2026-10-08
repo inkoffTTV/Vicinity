@@ -12,6 +12,48 @@ WebSocket `/ws` принимает токен в заголовке или ка�
 
 ---
 
+## 0. Регистрация и админ-панель **[new]**
+
+Режим регистрации — `custom_config.registration.mode` (Docker: `VICINITY_REGISTRATION`):
+`email` (капча + код из письма; по умолчанию, если настроен SMTP), `captcha` (только капча; по умолчанию без SMTP),
+`open` (без проверок), `closed`. Лимит — `signups_per_ip_per_day` успешных регистраций с одного IP за сутки
+(по умолчанию 3, `0` — без лимита). IP — адрес соединения или `X-Real-IP` от доверенного прокси (`trusted_proxies`).
+
+- GET `/auth/registration` → `{mode, captcha, email, open}` — что требуется; форма регистрации подстраивается.
+- GET `/auth/challenge` → задача капчи [ALTCHA](https://altcha.org/docs/server-integration/):
+  `{algorithm:"SHA-256", challenge, maxnumber, salt, signature}`. Решение — число `n ≤ maxnumber`, при котором
+  `hex(SHA-256(salt + n)) == challenge`; в запрос кладётся `base64(JSON{algorithm, challenge, number, salt, signature})`.
+  Задача живёт 10 минут, каждое решение принимается один раз, ключ подписи меняется при перезапуске сервера.
+- POST `/auth/register/start` `{username, password, display_name, email?, altcha?, website?}`:
+  `website` — ловушка для ботов (должно быть пустым), `altcha` обязателен в режимах `email` и `captcha`,
+  `email` — в режиме `email`.
+  - режим `email` → **202** `{pending_id, email (замаскированный), expires_in, resend_in}`, код ушёл на почту;
+  - режим `captcha`/`open` → **201** `{token, user_id, display_name}` — как старый `/auth/register`.
+  Ошибки: 400 (поля, капча, одноразовая почта), 403 (закрыто, IP заблокирован), 409 (логин или почта заняты),
+  429 (лимит с IP), 503 (режим `email` без SMTP).
+- POST `/auth/register/verify` `{pending_id, code}` → **201** `{token, user_id, display_name}`.
+  Код — 6 цифр, действует 15 минут, 5 неверных попыток — регистрация сбрасывается (429); устарела — 410.
+- POST `/auth/register/resend` `{pending_id}` → `{resend_in, expires_in}` — новый код; не чаще раза в минуту
+  и не больше 5 писем (429).
+- POST `/auth/register` (старый путь, десктоп) работает только в режиме `open`; иначе **403** с текстом
+  «Регистрация теперь проходит на сайте …» — десктоп показывает его как ошибку.
+- Почта нормализуется для правила «один ящик — один аккаунт»: нижний регистр, без `+метки`, у Gmail без точек.
+
+Заблокированный аккаунт (`users.banned = 1`): вход — **403** «Аккаунт заблокирован администратором»,
+все его токены — 401, WS-подключения закрываются.
+
+Админ-панель — только `developer = 1` (остальным 403):
+- GET `/admin/users?q=&limit=` → `{users:[{id, username, display_name, avatar_path, email, signup_ip, created_at,
+  banned, developer, subscription_tier}], top_ips:[{ip, count, last}], total, last_day, banned}` — `q` ищет по логину,
+  имени, почте и IP; `top_ips` — адреса с несколькими регистрациями за 7 дней.
+- POST `/admin/users/{id}/ban` `{banned: true|false}` — блокировка завершает все сессии и выводит из чужих
+  серверов; администратора заблокировать нельзя.
+- DELETE `/admin/users/{id}` — удалить **заблокированный** аккаунт со всеми сообщениями, реакциями и участием
+  (409, если не заблокирован или владеет серверами).
+- GET `/admin/blocked-ips` → `{blocked:[{ip, note, created_at, accounts}]}`;
+  POST `/admin/blocked-ips` `{ip, note, ban_accounts}` — запретить регистрацию с адреса
+  (`ban_accounts` — заодно заблокировать все аккаунты, созданные с него); DELETE `/admin/blocked-ips/{ip}`.
+
 ## 1. Доступ к каналам
 
 Канал доступен пользователю, если:

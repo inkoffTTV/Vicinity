@@ -26,9 +26,10 @@ std::optional<SessionInfo> AppSessionManager::validate(const std::string& token)
     auto db = drogon::app().getDbClient();
     try {
         std::string tokenHash = CryptoUtils::sha256Hex(token);
+        // Сессия заблокированного аккаунта недействительна, даже если её строка ещё не удалена
         auto res = db->execSqlSync(
-            "SELECT token, user_id, expires_at FROM sessions "
-            "WHERE token = ? AND expires_at > datetime('now')",
+            "SELECT s.token, s.user_id, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id "
+            "WHERE s.token = ? AND s.expires_at > datetime('now') AND u.banned = 0",
             tokenHash);
         if (res.empty()) return std::nullopt;
         SessionInfo info;
@@ -78,6 +79,13 @@ int AppSessionManager::deleteOtherSessions(int64_t userId, const std::string& cu
     const std::string currentHash = CryptoUtils::sha256Hex(currentToken);
     auto rows = drogon::app().getDbClient()->execSqlSync(
         "DELETE FROM sessions WHERE user_id = ? AND token != ? RETURNING token", userId, currentHash);
+    for (const auto& r : rows) WSManager::instance().closeSession(r["token"].as<std::string>());
+    return static_cast<int>(rows.size());
+}
+
+int AppSessionManager::deleteAllSessions(int64_t userId) {
+    auto rows = drogon::app().getDbClient()->execSqlSync(
+        "DELETE FROM sessions WHERE user_id = ? RETURNING token", userId);
     for (const auto& r : rows) WSManager::instance().closeSession(r["token"].as<std::string>());
     return static_cast<int>(rows.size());
 }

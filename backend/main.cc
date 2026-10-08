@@ -6,6 +6,9 @@
 #include "models/Database.h"
 #include "managers/SessionManager.h"
 #include "utils/Uploads.h"
+#ifdef VICINITY_HAVE_CURL
+#include <curl/curl.h>
+#endif
 
 // Переменные окружения поверх custom_config из config.json (Docker: deploy/env.example → .env).
 // Незаданная или пустая переменная оставляет значение из файла; списки — через запятую.
@@ -30,6 +33,17 @@ static void applyEnvOverrides(Json::Value& config) {
     if (const auto v = env("VICINITY_TURN_URLS"); !v.empty())       custom["rtc"]["turn"] = list(v);
     if (const auto v = env("VICINITY_STUN_URLS"); !v.empty())       custom["rtc"]["stun"] = list(v);
     if (const auto v = env("VICINITY_TRUSTED_PROXIES"); !v.empty()) custom["trusted_proxies"] = list(v);
+
+    // Регистрация и почта (deploy/env.example, раздел «Регистрация»)
+    if (const auto v = env("VICINITY_REGISTRATION"); !v.empty())    custom["registration"]["mode"] = v;
+    if (const auto v = env("VICINITY_SIGNUPS_PER_IP"); !v.empty())  custom["registration"]["signups_per_ip_per_day"] = v;
+    if (const auto v = env("VICINITY_SITE_URL"); !v.empty())        custom["registration"]["site_url"] = v;
+    if (const auto v = env("VICINITY_SMTP_HOST"); !v.empty())       custom["smtp"]["host"] = v;
+    if (const auto v = env("VICINITY_SMTP_PORT"); !v.empty())       custom["smtp"]["port"] = v;
+    if (const auto v = env("VICINITY_SMTP_USER"); !v.empty())       custom["smtp"]["user"] = v;
+    if (const auto v = env("VICINITY_SMTP_PASSWORD"); !v.empty())   custom["smtp"]["password"] = v;
+    if (const auto v = env("VICINITY_SMTP_FROM"); !v.empty())       custom["smtp"]["from"] = v;
+    if (const auto v = env("VICINITY_SMTP_SECURITY"); !v.empty())   custom["smtp"]["security"] = v;
 }
 
 int main() {
@@ -49,6 +63,10 @@ int main() {
         }
     }
     applyEnvOverrides(config);
+#ifdef VICINITY_HAVE_CURL
+    // До запуска потоков: письма отправляются из фоновых потоков (utils/Mailer.cc)
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+#endif
 
     drogon::app()
         .loadConfigJson(std::move(config))

@@ -365,6 +365,71 @@ label select {
   font-size: 14px;
 }
 
+/* Регистрация: капча ALTCHA, поле кода из письма, ловушка для ботов */
+.captcha-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  font-size: 14px;
+}
+.captcha-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid var(--text-3);
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+.captcha-box.solving .captcha-check {
+  border-color: var(--accent);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: captcha-spin 0.8s linear infinite;
+}
+.captcha-box.done .captcha-check {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.captcha-box.error .captcha-check {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.captcha-brand {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+@keyframes captcha-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .captcha-box.solving .captcha-check {
+    animation: none;
+  }
+}
+.code-input {
+  font-size: 28px;
+  letter-spacing: 0.4em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.hp-field {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 /* ── Общий каркас ── */
 
 .app {
@@ -3333,5 +3398,77 @@ kbd {
   }
   .composer-row textarea {
     font-size: max(16px, var(--chat-font));
+  }
+}
+
+/* ── Админ-панель (Настройки → Администрирование, только developer) ── */
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  text-align: center;
+}
+.admin-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.admin-stats strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.admin-search {
+  max-width: 240px;
+}
+.admin-list,
+.admin-users {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.admin-list li,
+.admin-users li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--bg-main);
+  min-width: 0;
+}
+.admin-users li.banned {
+  opacity: 0.7;
+}
+.admin-user-info {
+  min-width: 0;
+}
+.admin-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-active);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+.admin-tag.danger {
+  background: var(--danger);
+  color: #fff;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+@media (max-width: 640px) {
+  .admin-users li {
+    flex-wrap: wrap;
+  }
+  .admin-search {
+    max-width: none;
+    width: 100%;
   }
 }

@@ -9,6 +9,7 @@ find_package(OpenSSL REQUIRED)
 
 add_executable(VicinityServer
     main.cc
+    controllers/AdminController.cc
     controllers/AuthController.cc
     controllers/ChannelController.cc
     controllers/ChatController.cc
@@ -31,9 +32,12 @@ add_executable(VicinityServer
     models/Database.cc
     models/User.cc
     utils/Access.cc
+    utils/Altcha.cc
     utils/Broadcast.cc
     utils/CryptoUtils.cc
+    utils/EmailUtils.cc
     utils/FileSystem.cc
+    utils/Mailer.cc
     utils/Messages.cc
     utils/NetUtils.cc
     utils/TextUtils.cc
@@ -57,3 +61,14 @@ add_custom_command(TARGET VicinityServer POST_BUILD
             ${CMAKE_CURRENT_SOURCE_DIR}/config.json
             $<TARGET_FILE_DIR:VicinityServer>/config.json
 )
+
+# libcurl — отправка писем с кодом подтверждения (SMTP). Необязательна: без неё сервер собирается,
+# но режим регистрации «email» недоступен (utils/Mailer.cc).
+find_package(CURL QUIET)
+if(CURL_FOUND)
+    target_link_libraries(VicinityServer PRIVATE CURL::libcurl)
+    target_compile_definitions(VicinityServer PRIVATE VICINITY_HAVE_CURL)
+    message(STATUS "Vicinity: SMTP via libcurl enabled")
+else()
+    message(WARNING "Vicinity: libcurl not found - e-mail verification is disabled")
+endif()

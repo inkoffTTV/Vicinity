@@ -20,6 +20,9 @@ static User rowToUser(const drogon::orm::Row& row) {
     u.createdAt        = row["created_at"].as<std::string>();
     u.subscriptionTier = row["subscription_tier"].as<int>();
     u.developer        = row["developer"].as<int>();
+    if (!row["email"].isNull())     u.email    = row["email"].as<std::string>();
+    if (!row["signup_ip"].isNull()) u.signupIp = row["signup_ip"].as<std::string>();
+    u.banned           = row["banned"].as<int>();
     return u;
 }
 
@@ -43,13 +46,16 @@ std::optional<User> findById(int64_t id) {
 
 int64_t create(const std::string& username,
                const std::string& passwordHash,
-               const std::string& displayName) {
+               const std::string& displayName,
+               const std::string& email,
+               const std::string& signupIp) {
     auto db = drogon::app().getDbClient();
     // id берём из того же запроса: отдельный last_insert_rowid() может вернуть
     // rowid чужой вставки, выполненной между двумя запросами из другого потока
     auto res = db->execSqlSync(
-        "INSERT INTO users(username, password_hash, display_name) VALUES(?, ?, ?) RETURNING id",
-        username, passwordHash, displayName);
+        "INSERT INTO users(username, password_hash, display_name, email, signup_ip) "
+        "VALUES(?, ?, ?, NULLIF(?, ''), NULLIF(?, '')) RETURNING id",
+        username, passwordHash, displayName, email, signupIp);
     return res[0]["id"].as<int64_t>();
 }
 

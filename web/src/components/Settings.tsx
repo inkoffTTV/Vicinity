@@ -5,11 +5,12 @@ import { NOTIFY_LEVELS, serverLevel, useNotifySettings } from '../lib/notify';
 import { ACCENTS, DEFAULT_ACCENT, FontSize, Theme, useAppearance } from '../lib/prefs';
 import { useStore } from '../lib/store';
 import { fullWhen } from '../lib/time';
+import { AdminPanel } from './AdminPanel';
 import { AudioSettingsPanel } from './AudioSettings';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { Modal } from './Modal';
 
-type Tab = 'profile' | 'account' | 'appearance' | 'notifications' | 'voice';
+type Tab = 'profile' | 'account' | 'appearance' | 'notifications' | 'voice' | 'admin';
 
 const TABS: [Tab, string][] = [
   ['profile', 'Профиль'],
@@ -22,13 +23,16 @@ const TABS: [Tab, string][] = [
 export function Settings() {
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
   const [tab, setTab] = useState<Tab>('profile');
+  const isAdmin = useStore((s) => Boolean(s.me?.developer));
+  // Администрирование — только разработчикам (developer = 1)
+  const tabs: [Tab, string][] = isAdmin ? [...TABS, ['admin', 'Администрирование']] : TABS;
   const close = useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
 
   return (
     <Modal title="Настройки" onClose={close} className="settings-modal">
       <div className="settings-layout">
         <div className="settings-tabs" role="tablist" aria-label="Разделы настроек">
-          {TABS.map(([id, label]) => (
+          {tabs.map(([id, label]) => (
             <button
               key={id}
               role="tab"
@@ -48,6 +52,7 @@ export function Settings() {
           {tab === 'appearance' && <AppearanceTab />}
           {tab === 'notifications' && <NotificationsTab />}
           {tab === 'voice' && <AudioSettingsPanel />}
+          {tab === 'admin' && isAdmin && <AdminPanel />}
         </div>
       </div>
     </Modal>

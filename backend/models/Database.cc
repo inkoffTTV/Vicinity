@@ -222,6 +222,39 @@ void initialize() {
         }
     }
 
+    // ── Защита регистрации (docs/API.md §0) ──────────────────────────────────
+    // Почта (нормализованная, один ящик — один аккаунт), IP регистрации (лимит в сутки, админ-панель),
+    // блокировка аккаунта администратором
+    exec("ALTER TABLE users ADD COLUMN email TEXT DEFAULT NULL");
+    exec("ALTER TABLE users ADD COLUMN signup_ip TEXT DEFAULT NULL");
+    exec("ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0");
+    exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL");
+    exec("CREATE INDEX IF NOT EXISTS idx_users_signup_ip ON users(signup_ip, created_at)");
+
+    // Регистрация, ждущая кода из письма. Пароль уже в виде хэша; код — только хэш (sha256(id:код)).
+    exec("CREATE TABLE IF NOT EXISTS pending_signups ("
+         "id TEXT PRIMARY KEY,"
+         "username TEXT NOT NULL,"
+         "password_hash TEXT NOT NULL,"
+         "display_name TEXT NOT NULL,"
+         "email TEXT NOT NULL,"          // нормализованный — для уникальности
+         "send_to TEXT NOT NULL,"        // как ввёл пользователь — на него уходит письмо
+         "code_hash TEXT NOT NULL,"
+         "attempts INTEGER NOT NULL DEFAULT 0,"
+         "sends INTEGER NOT NULL DEFAULT 1,"
+         "last_sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "ip TEXT,"
+         "created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "expires_at DATETIME NOT NULL)");
+    exec("CREATE INDEX IF NOT EXISTS idx_pending_signups_email ON pending_signups(email)");
+    exec("CREATE INDEX IF NOT EXISTS idx_pending_signups_ip ON pending_signups(ip, created_at)");
+
+    // Адреса, с которых регистрация запрещена (админ-панель: «заблокировать IP»)
+    exec("CREATE TABLE IF NOT EXISTS blocked_ips ("
+         "ip TEXT PRIMARY KEY,"
+         "note TEXT DEFAULT NULL,"
+         "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+
     // Цвет профиля #AARRGGBB (старый сервер сохранял цвет десктопа как есть) — без альфы, как принимает API
     exec("UPDATE users SET accent_color = '#' || substr(accent_color, 4) "
          "WHERE length(accent_color) = 9 AND substr(accent_color, 1, 1) = '#' "
