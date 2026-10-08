@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useAppearance } from './lib/prefs';
 import { setAppBadge } from './lib/pwa';
 import { useInvite } from './lib/router';
 import { useSearch } from './lib/search';
@@ -54,6 +55,10 @@ export default function App() {
 
   // На мобильном — закрывать меню при переходе
   useEffect(() => setNavOpen(false), [view]);
+
+  // «Тема по умолчанию на серверах»: на сервере можно показывать стандартную тему вместо своей
+  const inServer = !!me && view.kind === 'server';
+  useEffect(() => useAppearance.getState().setInServer(inServer), [inServer]);
 
   // Счётчик во вкладке браузера и на значке приложения: личные сообщения и упоминания
   const unreadTotal = useStore(attentionCount);

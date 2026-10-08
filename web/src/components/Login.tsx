@@ -166,6 +166,8 @@ export function Login() {
   if (mode === 'verify' && pending) {
     return (
       <div className="auth-screen">
+        <AuthHero />
+        <div className="auth-side">
         <form className="auth-card" onSubmit={submit}>
           <div className="auth-logo">
             <img src="/favicon.svg" alt="" width={48} height={48} />
@@ -202,6 +204,7 @@ export function Login() {
             </button>
           </div>
         </form>
+        </div>
       </div>
     );
   }
@@ -211,6 +214,8 @@ export function Login() {
 
   return (
     <div className="auth-screen">
+      <AuthHero />
+      <div className="auth-side">
       <form className="auth-card" onSubmit={submit}>
         <div className="auth-logo">
           <img src="/favicon.svg" alt="" width={48} height={48} />
@@ -309,6 +314,47 @@ export function Login() {
           {registering ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться'}
         </button>
       </form>
+      </div>
     </div>
+  );
+}
+
+const PERKS: [string, string][] = [
+  ['Чаты, беседы и серверы', 'Личные сообщения, группы и серверы с текстовыми и голосовыми каналами'],
+  ['Голос и звонки в браузере', 'Звонки с камерой и демонстрация экрана в 1080p — без установки'],
+  ['На компьютере и телефоне', 'Сайт, приложение для ПК и установка на телефон — один аккаунт везде'],
+  ['Ваш собственный сервер', 'Переписка хранится у вас, а не у чужой компании'],
+  ['Темы и оформление', 'Светлая, тёмная, графит и чёрная — плюс цветовые темы с подпиской'],
+  ['Бесплатно', 'Всё основное доступно сразу, подписка только добавляет приятное'],
+];
+
+/** Левая колонка экрана входа: что такое Vicinity */
+function AuthHero() {
+  return (
+    <section className="auth-hero" aria-label="О Vicinity">
+      <div className="auth-brand">
+        <span className="auth-mark" aria-hidden="true">
+          V
+        </span>
+        Vicinity
+      </div>
+      <div>
+        <h1>Мессенджер для своих</h1>
+        <p>Общайтесь текстом и голосом, созванивайтесь и показывайте экран — всё в одном месте.</p>
+      </div>
+      <ul className="auth-perks">
+        {PERKS.map(([title, text]) => (
+          <li key={title}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5 12l5 5 9-10" />
+            </svg>
+            <div>
+              <strong>{title}</strong>
+              <span>{text}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

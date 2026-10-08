@@ -1,4 +1,4 @@
-import { FocusEvent, KeyboardEvent, MouseEvent, useEffect, useRef, useState } from 'react';
+import { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent, useEffect, useRef, useState } from 'react';
 import { Message, parseTs, Reaction } from '../lib/api';
 import { copyText } from '../lib/clipboard';
 import { isEmojiOnly, mentionsUser, plainText } from '../lib/markdown';
@@ -10,6 +10,17 @@ import { Attachment } from './Attachment';
 import { Avatar } from './Avatar';
 import { EmojiPicker } from './EmojiPicker';
 import { Markdown } from './Markdown';
+
+/** Ник подписчика: цветом профиля (Basic+), градиентом (Ultra) — utils/Tiers.h на сервере */
+function authorNameStyle(msg: Message): { className: string; style?: CSSProperties } {
+  const tier = msg.author_tier ?? 0;
+  const color = msg.author_accent && /^#[0-9a-f]{6}$/i.test(msg.author_accent) ? msg.author_accent : '';
+  if (tier < 1 || !color) return { className: '' };
+  return {
+    className: tier >= 3 ? ' tier-gradient' : ' tier-color',
+    style: { ['--author-color' as string]: color } as CSSProperties,
+  };
+}
 
 const QUICK_EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'];
 
@@ -84,6 +95,10 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
   if (msg.local) classes.push(msg.local === 'sending' ? 'pending' : 'failed');
   if (mentioned) classes.push('mentioned');
   if (flash) classes.push('flash');
+  // Только что пришедшее сообщение появляется с анимацией (theme.css .msg.fresh)
+  const [fresh] = useState(() => Date.now() - time.getTime() < 8000);
+  if (fresh) classes.push('fresh');
+  const nameStyle = authorNameStyle(msg);
 
   return (
     <div className={classes.join(' ')} data-mid={msg.id} onClick={onClick} onMouseLeave={() => setPicker(false)}>
@@ -109,7 +124,12 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
         <div className="msg-body">
           {!grouped && (
             <div className="msg-meta">
-              <button className="msg-author plain" onClick={() => showProfile(msg.author_id)} {...userMenuProps(msg.author_id)}>
+              <button
+                className={`msg-author plain${nameStyle.className}`}
+                style={nameStyle.style}
+                onClick={() => showProfile(msg.author_id)}
+                {...userMenuProps(msg.author_id)}
+              >
                 {msg.author_name}
               </button>
               <span className="msg-time" title={time.toLocaleString('ru-RU')}>

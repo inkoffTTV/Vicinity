@@ -1,7 +1,5 @@
 // Вложения: что можно отправить (docs/API.md §2), как показать в ленте и подписать размер.
-
-/** Сервер принимает файлы до 15 МБ */
-const MAX_UPLOAD = 15 * 1024 * 1024;
+import { usePlan } from './plan';
 
 // Расширения, которые сервер отклоняет (415): исполняемое и то, что браузер может выполнить
 const BLOCKED = new Set(
@@ -18,7 +16,9 @@ function extOf(name: string): string {
 
 /** Почему файл нельзя отправить; '' — можно */
 export function uploadProblem(f: File): string {
-  if (f.size > MAX_UPLOAD) return `«${f.name}» больше 15 МБ`;
+  // Лимит по подписке (15 МБ бесплатно, до 100 МБ с Ultra) — сервер проверяет его сам
+  const mb = usePlan.getState().current.files_mb;
+  if (f.size > mb * 1024 * 1024) return `«${f.name}» больше ${mb} МБ`;
   if (f.size === 0) return `«${f.name}» пустой`;
   if (BLOCKED.has(extOf(f.name))) return `Файлы .${extOf(f.name)} отправлять нельзя`;
   return '';

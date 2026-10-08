@@ -16,7 +16,7 @@
     ],
     "app": {
         "threads_num": 4,
-        "client_max_body_size": "20M",
+        "client_max_body_size": "110M",
         "log_level": "DEBUG",
         "log_path": "./log",
         "log_file": "vicinity",

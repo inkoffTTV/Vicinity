@@ -7,6 +7,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Ошибка');
 const TIERS = ['', 'Basic', 'Standard', 'Ultra'];
+const TIER_NAMES = ['Без подписки', 'Basic', 'Standard', 'Ultra'];
 
 interface Confirm {
   title: string;
@@ -175,6 +176,21 @@ export function AdminPanel() {
                   )}
                 </div>
               </div>
+              <select
+                aria-label={`Подписка @${u.username}`}
+                className="admin-tier"
+                value={u.subscription_tier}
+                onChange={(e) => {
+                  const tier = Number(e.target.value);
+                  void act(() => api.adminSetTier(u.id, tier), `@${u.username}: ${TIER_NAMES[tier]}`);
+                }}
+              >
+                {TIER_NAMES.map((n, i) => (
+                  <option key={n} value={i}>
+                    {n}
+                  </option>
+                ))}
+              </select>
               {!u.developer && (
                 <div className="stack-row">
                   <button type="button" className="btn small" onClick={() => askBan(u)}>

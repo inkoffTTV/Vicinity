@@ -61,10 +61,13 @@ static Json::Value defaults() {
     return v;
 }
 
-static Json::Value load(int64_t userId) {
+// stored — настройки уже сохранялись (иначе клиент отправит свои, а не возьмёт значения по умолчанию)
+static Json::Value load(int64_t userId, bool* stored = nullptr) {
     Json::Value out = defaults();
+    if (stored) *stored = false;
     auto rows = app().getDbClient()->execSqlSync("SELECT appearance FROM user_settings WHERE user_id = ?", userId);
     if (rows.empty() || rows[0]["appearance"].isNull()) return out;
+    if (stored) *stored = true;
     Json::Value stored;
     if (!JsonUtils::parse(rows[0]["appearance"].as<std::string>(), stored) || !stored.isObject()) return out;
     for (const auto& key : out.getMemberNames())
@@ -74,7 +77,7 @@ static Json::Value load(int64_t userId) {
 
 // Ответ: настройки + что из премиум-оформления доступно. Тема, на которую подписки больше нет
 // (подписку сняли), отдаётся пустой — клиент не применяет то, что сохранить уже нельзя.
-static Json::Value withAccess(Json::Value v, int tier) {
+static Json::Value withAccess(Json::Value v, int tier, bool stored = true) {
     if (!Tiers::colorThemes(tier)) v["color_theme"] = Json::nullValue;
     if (!Tiers::customTheme(tier)) v["custom_theme"] = Json::nullValue;
     Json::Value out;
@@ -82,6 +85,7 @@ static Json::Value withAccess(Json::Value v, int tier) {
     out["access"]["color_themes"] = Tiers::colorThemes(tier);
     out["access"]["custom_theme"] = Tiers::customTheme(tier);
     out["access"]["tier"]         = Tiers::clamp(tier);
+    out["stored"]                 = stored;
     return out;
 }
 
@@ -102,7 +106,9 @@ void SettingsController::getAppearance(const HttpRequestPtr& req, std::function<
     const int64_t userId = req->attributes()->get<int64_t>("user_id");
     try {
         const auto me = UserModel::findById(userId);
-        cb(jsonResp(withAccess(load(userId), me ? me->subscriptionTier : 0)));
+        bool stored = false;
+        Json::Value v = load(userId, &stored);
+        cb(jsonResp(withAccess(v, me ? me->subscriptionTier : 0, stored)));
     } catch (const std::exception& e) {
         cb(error(e.what(), k500InternalServerError));
     }

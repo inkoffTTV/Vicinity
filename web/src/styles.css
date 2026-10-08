@@ -12,6 +12,8 @@
   --text-3: #80848e;
   --accent: #5865f2;
   --accent-hover: #4752c4;
+  /* Текст на акцентном фоне — prefs.ts подбирает по яркости акцента */
+  --on-accent: #fff;
   --danger: #da373c;
   --ok: #23a55a;
   --idle: #f0b232;
@@ -213,7 +215,7 @@ label select {
 }
 .btn.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .btn.primary:hover:not(:disabled) {
   background: var(--accent-hover);
@@ -494,7 +496,7 @@ label select {
 .rail-item.active {
   border-radius: 16px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .rail-item.active::before {
   content: '';
@@ -760,7 +762,7 @@ button.side-head:hover {
 }
 .dropdown button:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .user-panel {
@@ -1970,7 +1972,7 @@ button.reply-quote:hover .reply-text {
 }
 .mention:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .mention.me {
   background: color-mix(in srgb, var(--idle) 30%, transparent);
@@ -2289,7 +2291,7 @@ a.file-name:hover {
 .popover.menu button:hover,
 .popover.menu button:focus-visible {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   outline: none;
 }
 .menu-label {
@@ -2426,7 +2428,7 @@ a.file-name:hover {
 }
 .search-scopes button.on {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .search-error {
   margin: 0 12px;
@@ -2795,7 +2797,7 @@ label.plain-label {
 }
 .segmented button.on {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .swatches {
@@ -2976,7 +2978,7 @@ label.plain-label {
   display: grid;
   place-items: center;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 30px;
   font-weight: 600;
 }
@@ -3056,7 +3058,7 @@ label.plain-label {
   display: grid;
   place-items: center;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 9px;
   font-weight: 700;
 }
@@ -3189,7 +3191,7 @@ kbd {
   display: grid;
   place-items: center;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 28px;
   font-weight: 600;
 }

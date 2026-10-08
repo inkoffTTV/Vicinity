@@ -191,8 +191,8 @@ server {
     listen 80;
     server_name chat.example.com;
 
-    # Аватары и вложения до 15 МБ (+ запас на multipart)
-    client_max_body_size 20m;
+    # Вложения до 100 МБ у подписчиков Ultra (+ запас на multipart)
+    client_max_body_size 110m;
 
     location / {
         proxy_pass http://127.0.0.1:8081;
@@ -259,7 +259,7 @@ certbot renew --dry-run                              # проверка авто
 ```caddyfile
 chat.example.com {
 	request_body {
-		max_size 20MB
+		max_size 110MB
 	}
 	header Strict-Transport-Security "max-age=31536000"
 	reverse_proxy 127.0.0.1:8081
@@ -562,7 +562,7 @@ curl -si --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebS
 Сообщения ограничены 10 за 5 секунд на пользователя — это нормальная защита от флуда.
 
 **`413 Request Entity Too Large` при загрузке файла.**
-В nginx хоста нет `client_max_body_size 20m;` в блоке Vicinity (в Caddy — `request_body`).
+В nginx хоста нет `client_max_body_size 110m;` в блоке Vicinity (в Caddy — `request_body`).
 
 **Сертификат не выпускается.**
 A-запись ещё не обновилась (`getent hosts chat.твой-домен.ru`), порт 80 закрыт в панели хостера или

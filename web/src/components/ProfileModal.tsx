@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError, Member, parseTs, Profile } from '../lib/api';
 import { useCall } from '../lib/call';
+import { useAppearance } from '../lib/prefs';
 import { useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
@@ -12,6 +13,8 @@ import { ServerIcon } from './ServerRail';
 const NO_ROLES: Member['roles'] = [];
 
 export function ProfileModal({ userId }: { userId: number }) {
+  // «Применить тему к профилям других пользователей» — чужие карточки в моих цветах (Настройки → Тема)
+  const applyMine = useAppearance((s) => s.applyToProfiles);
   const showProfile = useStore((s) => s.showProfile);
   const openDmWith = useStore((s) => s.openDmWith);
   const refreshFriends = useStore((s) => s.refreshFriends);
@@ -55,14 +58,15 @@ export function ProfileModal({ userId }: { userId: number }) {
     );
 
   const presence = p.friendship_status === 'self' ? p.presence : livePresence ?? p.presence;
-  const accent = p.accent_color || '#5865f2';
+  const theirs = !applyMine || p.friendship_status === 'self';
+  const accent = (theirs && p.accent_color) || 'var(--theme-gradient, var(--accent))';
 
   return (
     <Modal onClose={close} bare>
       <div className="profile-card">
         <div
           className="profile-banner"
-          style={p.banner_path ? { backgroundImage: `url("${p.banner_path}")` } : { background: accent }}
+          style={theirs && p.banner_path ? { backgroundImage: `url("${p.banner_path}")` } : { background: accent }}
         />
         <div className="profile-avatar">
           <Avatar name={p.display_name} src={p.avatar_path} id={p.id} size={88} presence={presence} />

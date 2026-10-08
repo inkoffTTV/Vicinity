@@ -1,3 +1,4 @@
+import { usePlan } from './plan';
 import { create } from 'zustand';
 import { api } from './api';
 import {
@@ -29,11 +30,21 @@ const DISCONNECT_GRACE = 5_000;
 // Ответ сервера call_unavailable на наш же call_end уже завершённого звонка — не показываем
 const ENDED_QUIET = 10_000;
 const FALLBACK_ICE: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
-const CAMERA: MediaTrackConstraints = {
-  width: { ideal: 1280 },
-  height: { ideal: 720 },
-  frameRate: { ideal: 30, max: 30 },
-};
+// Качество камеры и показа экрана — по подписке (GET /subscription, lib/plan.ts):
+// экран от 1080p 30 к/с у всех до 4K 60 у Ultra, камера 720p (Ultra — 1080p)
+function cameraConstraints(): MediaTrackConstraints {
+  const h = usePlan.getState().current.camera_height;
+  return { width: { ideal: Math.round((h * 16) / 9) }, height: { ideal: h }, frameRate: { ideal: 30, max: 30 } };
+}
+function screenConstraints(): MediaTrackConstraints {
+  const { height, fps } = usePlan.getState().current.screen;
+  return { height: { ideal: height, max: height }, frameRate: { ideal: fps, max: fps } };
+}
+/** Битрейт показа экрана: 1080p30 ≈ 4 Мбит/с, выше — больше */
+function screenBitrate(): number {
+  const { height, fps } = usePlan.getState().current.screen;
+  return Math.round(4_000_000 * ((height * height) / (1080 * 1080)) * (fps / 30));
+}
 
 interface CallState {
   phase: CallPhase;
@@ -395,8 +406,8 @@ async function startVideo(s: Session, role: 'video' | 'screen') {
   try {
     stream =
       role === 'video'
-        ? await navigator.mediaDevices.getUserMedia({ video: CAMERA })
-        : await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+        ? await navigator.mediaDevices.getUserMedia({ video: cameraConstraints() })
+        : await navigator.mediaDevices.getDisplayMedia({ video: screenConstraints(), audio: false });
   } catch (e) {
     if (sess === s) toast(mediaError(e, role === 'video' ? 'camera' : 'screen'), 'error');
     return;
@@ -415,11 +426,11 @@ async function startVideo(s: Session, role: 'video' | 'screen') {
   if (role === 'video') {
     s.cam = stream;
     useCall.setState({ camera: true, localCamera: stream });
-    void limitSender(t.sender, 1_500_000, 30);
+    void limitSender(t.sender, usePlan.getState().current.camera_height >= 1080 ? 3_000_000 : 1_500_000, 30);
   } else {
     s.scr = stream;
     useCall.setState({ screen: true });
-    void limitSender(t.sender, 2_500_000, 15);
+    void limitSender(t.sender, screenBitrate(), usePlan.getState().current.screen.fps);
   }
   // Камеру отключили или нажали «Прекратить показ» в браузере
   track.addEventListener('ended', () => {

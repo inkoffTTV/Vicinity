@@ -51,6 +51,46 @@ export type RegisterStartResult =
   | { token: string; user_id: number; display_name: string }
   | { pending_id: string; email: string; expires_in: number; resend_in: number };
 
+/** Настройки оформления на сервере (GET/PATCH /settings/appearance) */
+export interface AppearanceSettings {
+  follow_system: boolean;
+  base_theme: 'light' | 'dark' | 'graphite' | 'black';
+  color_theme: string | null;
+  custom_theme: { colors: string[]; angle: number; base: 'light' | 'dark' } | null;
+  sync_devices: boolean;
+  apply_to_profiles: boolean;
+  server_theme: 'mine' | 'default';
+  accent: string;
+  font_size: 's' | 'm' | 'l';
+  compact: boolean;
+  reduce_motion: boolean;
+  saturation: number;
+  high_contrast: boolean;
+}
+
+export interface AppearanceResponse {
+  settings: AppearanceSettings;
+  access: { color_themes: boolean; custom_theme: boolean; tier: number };
+  stored: boolean;
+}
+
+/** Что даёт подписка (GET /subscription) — лимиты проверяет сервер */
+export interface Plan {
+  tier: number;
+  name: string;
+  files_mb: number;
+  screen: { height: number; fps: number };
+  camera_height: number;
+  /** -1 — без лимита */
+  servers: number;
+  bio: number;
+  animated_banner: boolean;
+  color_themes: boolean;
+  custom_theme: boolean;
+  name_color: boolean;
+  gradient_name: boolean;
+}
+
 /** Пользователь в админ-панели (GET /admin/users) */
 export interface AdminUser {
   id: number;
@@ -112,6 +152,9 @@ export interface Message {
   author_id: number;
   author_name: string;
   author_avatar: string;
+  /** Подписка автора (цветной ник с Basic, градиентный с Ultra) — нет у старых серверов */
+  author_tier?: number;
+  author_accent?: string;
   text: string;
   created_at: string;
   edited: boolean;
@@ -388,7 +431,13 @@ export const api = {
   revokeSession: (id: string) => del(`/auth/sessions/${encodeURIComponent(id)}`),
   revokeOtherSessions: () => del<{ status: string; revoked: number }>('/auth/sessions/others'),
 
+  // ── Подписка и оформление ──
+  subscription: () => get<{ tier: number; current: Plan; plans: Plan[] }>('/subscription'),
+  appearance: () => get<AppearanceResponse>('/settings/appearance'),
+  saveAppearance: (s: Partial<AppearanceSettings>) => request<AppearanceResponse>('PATCH', '/settings/appearance', s),
+
   // ── Админ-панель (developer) ──
+  adminSetTier: (id: number, tier: number) => post<{ id: number; tier: number }>(`/admin/users/${id}/tier`, { tier }),
   adminUsers: (q = '') => get<AdminUsers>(`/admin/users?q=${encodeURIComponent(q)}`),
   adminBan: (id: number, banned: boolean) => post<{ id: number; banned: boolean }>(`/admin/users/${id}/ban`, { banned }),
   adminDeleteUser: (id: number) => del<{ status: string }>(`/admin/users/${id}`),

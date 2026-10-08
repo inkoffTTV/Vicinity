@@ -1,0 +1,859 @@
+/* Оформление Vicinity поверх styles.css: палитры базовых тем, «плавающие» панели, цветовые темы,
+   специальные возможности и анимации. Тему выбирает lib/prefs.ts атрибутами на <html>:
+   data-theme (light | dark | graphite | black), data-gradient, data-contrast, data-saturation. */
+
+/* ── Палитры ── */
+
+:root,
+:root[data-theme='dark'] {
+  --bg-ground: #0e1015;
+  --bg-rail: #161920;
+  --bg-side: #161920;
+  --bg-main: #161920;
+  --bg-panel: #161920;
+  --bg-input: #1e222b;
+  --bg-raised: #1e222b;
+  --bg-modal: #181b22;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.09);
+  --border: rgba(255, 255, 255, 0.07);
+  --text: #e8eaf0;
+  --text-2: #a3a9b7;
+  --text-3: #8c93a3;
+  --accent: #2bc6a4;
+  --accent-hover: #22a88b;
+  --on-accent: #06231c;
+  --link: #7fe3cc;
+  --ok: #3dd68c;
+  --idle: #f2b33d;
+  --dnd: #f0616d;
+  --danger: #e5484d;
+  --radius: 12px;
+  --panel-radius: 18px;
+  --gap: 8px;
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  color-scheme: dark;
+}
+
+:root[data-theme='graphite'] {
+  --bg-ground: #1a1b1f;
+  --bg-rail: #232429;
+  --bg-side: #232429;
+  --bg-main: #232429;
+  --bg-panel: #232429;
+  --bg-input: #2c2d33;
+  --bg-raised: #2c2d33;
+  --bg-modal: #26272c;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.09);
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #ececf1;
+  --text-2: #b0b3bd;
+  --text-3: #9599a5;
+  color-scheme: dark;
+}
+
+:root[data-theme='black'] {
+  --bg-ground: #000000;
+  --bg-rail: #0b0b0d;
+  --bg-side: #0b0b0d;
+  --bg-main: #0b0b0d;
+  --bg-panel: #0b0b0d;
+  --bg-input: #16171a;
+  --bg-raised: #16171a;
+  --bg-modal: #0f1012;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #f0f1f4;
+  --text-2: #a9adb8;
+  --text-3: #8f94a1;
+  color-scheme: dark;
+}
+
+/* Светлая — и при «Как тема устройства» на светлой системе (prefs.ts ставит data-theme='light') */
+:root[data-theme='light'] {
+  --bg-ground: #e9ecf1;
+  --bg-rail: #ffffff;
+  --bg-side: #ffffff;
+  --bg-main: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-input: #f0f2f5;
+  --bg-raised: #f4f5f8;
+  --bg-modal: #ffffff;
+  --bg-hover: rgba(15, 20, 30, 0.05);
+  --bg-active: rgba(15, 20, 30, 0.09);
+  --border: rgba(15, 20, 30, 0.09);
+  --text: #14161b;
+  --text-2: #4a505c;
+  --text-3: #5f6573;
+  --accent: #138a72;
+  --accent-hover: #0f7360;
+  --on-accent: #ffffff;
+  --link: #0f7360;
+  --ok: #1a9a5a;
+  --idle: #b7791f;
+  --dnd: #d23c48;
+  --shadow: 0 12px 40px rgba(20, 30, 50, 0.16);
+  color-scheme: light;
+}
+
+/* Цветовая тема: градиент под полупрозрачными панелями */
+:root[data-gradient] {
+  --bg-ground: var(--theme-tint, #0e1015);
+}
+:root[data-gradient][data-theme='dark'] {
+  --bg-rail: rgba(10, 12, 18, 0.62);
+  --bg-side: rgba(10, 12, 18, 0.62);
+  --bg-main: rgba(10, 12, 18, 0.62);
+  --bg-panel: rgba(10, 12, 18, 0.62);
+  --bg-input: rgba(255, 255, 255, 0.07);
+  --bg-raised: rgba(255, 255, 255, 0.06);
+  --bg-modal: rgba(16, 18, 26, 0.94);
+}
+:root[data-gradient][data-theme='light'] {
+  --bg-rail: rgba(255, 255, 255, 0.66);
+  --bg-side: rgba(255, 255, 255, 0.66);
+  --bg-main: rgba(255, 255, 255, 0.72);
+  --bg-panel: rgba(255, 255, 255, 0.72);
+  --bg-input: rgba(255, 255, 255, 0.75);
+  --bg-raised: rgba(255, 255, 255, 0.6);
+  --bg-modal: rgba(255, 255, 255, 0.96);
+}
+
+/* Высокий контраст: текст ярче, границы заметнее */
+:root[data-contrast] {
+  --text-2: var(--text);
+  --text-3: color-mix(in srgb, var(--text) 80%, transparent);
+  --border: color-mix(in srgb, var(--text) 28%, transparent);
+}
+:root[data-contrast] :is(.btn, .icon-btn, input, textarea, select) {
+  border: 1px solid var(--border);
+}
+
+/* Насыщенность цветов (Специальные возможности) */
+:root[data-saturation] #root {
+  filter: saturate(var(--saturation, 1));
+}
+
+/* ── Шрифты и основа ── */
+
+body {
+  font-family: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: var(--bg-ground);
+}
+:root[data-gradient] body {
+  background: var(--theme-gradient) fixed;
+}
+a {
+  color: var(--link, var(--accent));
+}
+.display,
+.auth-logo h1,
+.splash {
+  font-family: 'Unbounded', 'Onest', system-ui, sans-serif;
+}
+
+/* ── Каркас: панели-карточки с промежутками ── */
+
+.app {
+  gap: var(--gap);
+  padding: var(--gap);
+  box-sizing: border-box;
+  background: transparent;
+}
+.nav {
+  gap: var(--gap);
+}
+.rail,
+.sidebar,
+.main,
+.members,
+.group-panel,
+.search-panel {
+  background: var(--bg-panel);
+  border-radius: var(--panel-radius);
+  overflow: hidden;
+}
+:root[data-gradient] :is(.rail, .sidebar, .main, .members, .group-panel, .search-panel, .modal) {
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+.rail {
+  width: 68px;
+  padding: 12px 0;
+  gap: 10px;
+}
+.rail-item {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--bg-raised);
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.18s, border-radius 0.18s, box-shadow 0.18s;
+}
+.rail-item:hover {
+  transform: translateY(-1px) scale(1.05);
+  border-radius: 14px;
+}
+.rail-item.active {
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 4px var(--accent);
+}
+.rail-item.active::before {
+  left: -14px;
+  background: var(--accent);
+}
+.rail-item.add {
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--accent);
+}
+.rail-item.add:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+.sidebar {
+  width: 260px;
+}
+.side-head,
+.chat-head {
+  height: 56px;
+  box-shadow: none;
+}
+.side-item {
+  border-radius: 10px;
+  padding: 7px 10px;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+}
+.side-item:hover {
+  transform: translateX(2px);
+}
+.side-item.active {
+  background: var(--bg-active);
+  transform: none;
+}
+.side-section {
+  letter-spacing: 0.06em;
+  font-size: 11px;
+}
+.voice-bar {
+  margin: 0 8px 8px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--bg-raised);
+}
+.user-panel {
+  height: 60px;
+  padding: 0 10px;
+  background: transparent;
+  border-top: 1px solid var(--border);
+}
+.members {
+  width: 250px;
+  padding: 10px;
+}
+.member {
+  border-radius: 10px;
+}
+
+/* Чат */
+.chat-title {
+  font-weight: 600;
+}
+.msg {
+  margin-left: 8px;
+  margin-right: 8px;
+  border-radius: 12px;
+  transition: background 0.15s;
+}
+.msg-author {
+  font-weight: 600;
+}
+.composer {
+  padding: 0 14px 14px;
+}
+.composer-row {
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.composer-row:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Ник подписчика: цветом профиля (Basic+) или градиентом (Ultra) — Message.tsx */
+.msg-author.tier-color {
+  color: var(--author-color);
+}
+.msg-author.tier-gradient {
+  background: linear-gradient(90deg, var(--author-color), #b78cf7);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.tier-tag {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  vertical-align: 1px;
+}
+.tier-tag.t1 {
+  background: #b7bdc9;
+  color: #15181e;
+}
+.tier-tag.t2 {
+  background: #7db8f5;
+  color: #071b30;
+}
+.tier-tag.t3 {
+  background: #b78cf7;
+  color: #1d1236;
+}
+
+/* Кнопки и поля */
+.btn {
+  border-radius: 10px;
+  transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.btn.primary {
+  font-weight: 600;
+}
+.icon-btn {
+  border-radius: 10px;
+  transition: background 0.15s, color 0.15s, transform 0.12s;
+}
+.icon-btn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+input,
+textarea,
+select {
+  border-radius: 10px;
+}
+.modal {
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.toast {
+  border-radius: 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+}
+
+/* ── Анимации (выключаются в «Специальных возможностях» и системой — styles.css) ── */
+
+@keyframes vc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes vc-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes vc-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes vc-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Появление интерфейса после входа: панели по очереди */
+.app > .nav .rail {
+  animation: vc-rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.app > .nav .sidebar {
+  animation: vc-rise 0.35s 0.05s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.app > .main {
+  animation: vc-rise 0.35s 0.1s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.app > .members,
+.app > .group-panel {
+  animation: vc-rise 0.35s 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+/* Новое сообщение */
+.msg.fresh {
+  animation: vc-rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.modal {
+  animation: vc-pop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.toast {
+  animation: vc-pop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.side-scroll .side-item {
+  animation: vc-slide-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.splash {
+  animation: vc-fade 0.4s ease-out both;
+}
+
+/* ── Экран входа ── */
+
+.auth-screen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 20px;
+  min-height: 100%;
+  height: auto;
+  overflow-y: auto;
+  box-sizing: border-box;
+  align-items: stretch;
+  background: var(--bg-ground);
+}
+.auth-hero {
+  flex: 1 1 420px;
+  min-width: 0;
+  border-radius: 24px;
+  background: var(--bg-panel);
+  padding: clamp(28px, 5vw, 56px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+  animation: vc-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'Unbounded', 'Onest', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+}
+.auth-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+  font-family: 'Unbounded', 'Onest', sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+}
+.auth-hero h1 {
+  margin: 0;
+  font-family: 'Unbounded', 'Onest', sans-serif;
+  font-size: clamp(30px, 4vw, 46px);
+  line-height: 1.1;
+}
+.auth-hero p {
+  margin: 12px 0 0;
+  color: var(--text-2);
+  font-size: 17px;
+  line-height: 1.55;
+  max-width: 480px;
+}
+.auth-perks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.auth-perks li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  line-height: 1.45;
+  animation: vc-slide-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.auth-perks li:nth-child(1) { animation-delay: 0.15s; }
+.auth-perks li:nth-child(2) { animation-delay: 0.22s; }
+.auth-perks li:nth-child(3) { animation-delay: 0.29s; }
+.auth-perks li:nth-child(4) { animation-delay: 0.36s; }
+.auth-perks li:nth-child(5) { animation-delay: 0.43s; }
+.auth-perks li:nth-child(6) { animation-delay: 0.5s; }
+.auth-perks svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.auth-perks strong {
+  display: block;
+}
+.auth-perks span {
+  color: var(--text-2);
+  font-size: 14px;
+}
+.auth-side {
+  flex: 1 1 400px;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+.auth-card {
+  max-width: 420px;
+  border-radius: 24px;
+  background: var(--bg-panel);
+  box-shadow: none;
+  animation: vc-pop 0.4s 0.08s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.auth-card .btn.primary {
+  height: 48px;
+  border-radius: 14px;
+  font-size: 16px;
+}
+
+/* ── Настройки: «Тема», «Подписка», «Специальные возможности» ── */
+
+.theme-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.theme-section > h3 {
+  margin: 0;
+}
+.theme-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.theme-row .theme-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.theme-row strong {
+  font-size: 15px;
+}
+.base-themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.base-theme {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  transition: transform 0.15s, border-color 0.15s;
+}
+.base-theme:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+.base-theme[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-panel) inset;
+}
+.base-theme .check {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+  animation: vc-pop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.base-theme.sync {
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text-2);
+}
+.theme-promo {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+}
+.theme-promo-art {
+  width: 120px;
+  height: 72px;
+  flex: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2b1a8f, #a3168a 55%, #1c7ad6);
+  position: relative;
+  overflow: hidden;
+}
+.theme-promo-art::before,
+.theme-promo-art::after {
+  content: '';
+  position: absolute;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.22);
+}
+.theme-promo-art::before {
+  left: 10px;
+  top: 10px;
+  width: 22px;
+  bottom: 10px;
+}
+.theme-promo-art::after {
+  left: 40px;
+  top: 10px;
+  right: 10px;
+  height: 14px;
+}
+.theme-promo-text {
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.theme-promo-text strong {
+  font-size: 17px;
+}
+.color-themes {
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.color-themes-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.color-themes-head .grow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 10px;
+}
+.color-swatch {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.color-swatch:hover {
+  transform: translateY(-2px) scale(1.04);
+}
+.color-swatch[aria-pressed='true'] {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--bg-panel) inset;
+}
+.color-swatch.previewing {
+  border-color: var(--accent);
+}
+.color-swatch.custom {
+  display: grid;
+  place-items: center;
+  background: var(--bg-raised);
+  border: 2px dashed color-mix(in srgb, #e879a6 70%, transparent);
+  color: var(--text);
+}
+.color-swatch .new-tag {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.color-swatch .lock {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  animation: vc-pop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.custom-theme-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+.custom-theme-editor .preview {
+  width: 96px;
+  height: 60px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+.link-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  text-align: left;
+  transition: background 0.15s;
+}
+.link-card:hover {
+  background: var(--bg-hover);
+}
+.link-card .link-card-icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-raised);
+}
+.plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+.plan {
+  padding: 16px;
+  border-radius: 16px;
+  border: 2px solid var(--border);
+  background: var(--bg-raised);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plan.current {
+  border-color: var(--accent);
+}
+.plan ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+.plan li::before {
+  content: '✓ ';
+  color: var(--accent);
+  font-weight: 700;
+}
+.plan-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.plan-stats div {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-input);
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.plan-stats strong {
+  font-size: 15px;
+  color: var(--text);
+}
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.range-row input[type='range'] {
+  flex: 1;
+  padding: 0;
+  accent-color: var(--accent);
+  background: transparent;
+}
+
+/* ── Адаптив ── */
+
+@media (max-width: 760px) {
+  .app {
+    padding: 0;
+    gap: 0;
+  }
+  .rail,
+  .sidebar,
+  .main,
+  .members,
+  .group-panel,
+  .search-panel {
+    border-radius: 0;
+  }
+  .nav {
+    gap: 0;
+    background: var(--bg-ground);
+  }
+  .auth-screen {
+    padding: 12px;
+    gap: 12px;
+  }
+  .auth-hero {
+    padding: 24px;
+    gap: 20px;
+  }
+}
+
+.admin-tier {
+  width: auto;
+  flex: none;
+  padding: 6px 8px;
+  font-size: 13px;
+}

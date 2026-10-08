@@ -54,6 +54,51 @@ WebSocket `/ws` принимает токен в заголовке или ка�
   POST `/admin/blocked-ips` `{ip, note, ban_accounts}` — запретить регистрацию с адреса
   (`ban_accounts` — заодно заблокировать все аккаунты, созданные с него); DELETE `/admin/blocked-ips/{ip}`.
 
+### Подписка **[new]**
+
+Уровни: 0 — бесплатно, 1 — Basic, 2 — Standard, 3 — Ultra (`users.subscription_tier`). Оплаты нет — уровень
+выдаёт администратор: POST `/admin/users/{id}/tier` `{tier}` (только `developer = 1`). Лимиты — `backend/utils/Tiers.cc`:
+
+| | Бесплатно | Basic | Standard | Ultra |
+|---|---|---|---|---|
+| Вложения | 15 МБ | 25 МБ | 50 МБ | 100 МБ |
+| Показ экрана | 1080p 30 | 1080p 60 | 1440p 60 | 4K 60 |
+| Камера | 720p | 720p | 720p | 1080p |
+| Своих серверов | 10 | 25 | 50 | без лимита |
+| «О себе» | 190 | 190 | 400 | 400 |
+| Прочее | | ник цветом профиля | + GIF-баннер, цветовые темы | + своя тема, градиентный ник |
+
+Сервер проверяет сам: размер вложения (413), длину «о себе» (400), GIF-баннер (403), число своих серверов
+при создании (403; уже созданные не трогаются), цветовые темы (403). Качество камеры и показа экрана выставляет
+клиент — WebRTC идёт напрямую между участниками.
+
+- GET `/subscription` → `{tier, current: Plan, plans: [Plan × 4]}`, `Plan` = `{tier, name, files_mb,
+  screen:{height, fps}, camera_height, servers (-1 — без лимита), bio, animated_banner, color_themes, custom_theme,
+  name_color, gradient_name}`.
+- В сообщениях — `author_tier` и `author_accent` (для цветного ника).
+
+### Настройки оформления **[new]**
+
+GET `/settings/appearance` → `{settings, access:{color_themes, custom_theme, tier}, stored}`
+(`stored` — сохранялись ли настройки; иначе клиент отправляет свои).
+PATCH `/settings/appearance` `{любые поля settings}` → то же. `settings`:
+
+| Поле | Значения |
+|---|---|
+| `follow_system` | bool — «Как тема устройства» |
+| `base_theme` | `light` \| `dark` \| `graphite` \| `black` |
+| `color_theme` | null \| id готовой темы (`mint`, `peach`, … — список в `SettingsController.cc` и `web/src/lib/themes.ts`) — **Standard+, иначе 403** `{error, required_tier: 2}` |
+| `custom_theme` | null \| `{colors: [2–3 × "#rrggbb"], angle: 0–360, base: "dark"\|"light"}` — **Ultra, иначе 403** `{error, required_tier: 3}` |
+| `sync_devices` | bool — синхронизировать между устройствами |
+| `apply_to_profiles` | bool — чужие профили в своих цветах |
+| `server_theme` | `mine` \| `default` — тема на серверах |
+| `accent` | `""` \| `#rrggbb` |
+| `font_size` | `s` \| `m` \| `l` |
+| `compact`, `reduce_motion`, `high_contrast` | bool |
+| `saturation` | 0–100 |
+
+Тема, на которую подписки уже нет, в GET приходит как `null`. Неизвестные поля игнорируются, некорректные значения — 400.
+
 ## 1. Доступ к каналам
 
 Канал доступен пользователю, если:
