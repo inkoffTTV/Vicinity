@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, ApiError, UserSummary } from '../lib/api';
 import { useCall } from '../lib/call';
 import { useChannelMembers } from '../lib/channelMembers';
 import { useNotifySettings } from '../lib/notify';
 import { activeChannelId, useStore } from '../lib/store';
+import { userMenuProps } from '../lib/userMenu';
 import { useVoice } from '../lib/voice';
+import { AddMemberDialog } from './AddMemberDialog';
 import { Avatar } from './Avatar';
 import { Composer } from './Composer';
 import { MessageList } from './MessageList';
-import { Modal } from './Modal';
 import { NotifyMenu } from './NotifyMenu';
 import { PinsPanel } from './PinsPanel';
 import { SearchBox } from './Search';
@@ -70,7 +70,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
           ☰
         </button>
         {dm ? (
-          <button className="chat-title clickable" onClick={() => showProfile(dm.user_id)}>
+          <button className="chat-title clickable" onClick={() => showProfile(dm.user_id)} {...userMenuProps(dm.user_id)}>
             <Avatar name={dm.display_name} src={dm.avatar_path} id={dm.user_id} size={26} presence={presence ?? 'offline'} />
             <strong className="ellipsis">{dm.display_name}</strong>
           </button>
@@ -108,7 +108,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
             ➕
           </button>
         )}
-        {view.kind === 'server' && (
+        {(view.kind === 'server' || view.kind === 'group') && (
           <button
             className={`icon-btn${membersOpen ? ' on' : ''}`}
             title="Участники"
@@ -156,7 +156,12 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
       ) : (
         <div className="empty-state">В этом сервере пока нет текстовых каналов</div>
       )}
-      {adding && <AddMemberDialog onClose={() => setAdding(false)} />}
+      {adding && view.kind === 'group' && (
+        <AddMemberDialog target={{ kind: 'group', channelId: view.channelId }} onClose={() => setAdding(false)} />
+      )}
+      {adding && view.kind === 'server' && (
+        <AddMemberDialog target={{ kind: 'server', serverId: view.serverId }} onClose={() => setAdding(false)} />
+      )}
       {panel === 'pins' && channelId && pinsBtn.current && (
         <PinsPanel channelId={channelId} anchor={pinsBtn.current} onClose={() => setPanel(null)} />
       )}
@@ -164,74 +169,5 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
         <NotifyMenu channelId={channelId} serverId={serverId} anchor={notifyBtn.current} onClose={() => setPanel(null)} />
       )}
     </div>
-  );
-}
-
-// ── Добавить участника в беседу/сервер ──
-
-function AddMemberDialog({ onClose }: { onClose: () => void }) {
-  const view = useStore((s) => s.view);
-  const friends = useStore((s) => s.friends);
-  const refreshServer = useStore((s) => s.refreshServer);
-  const toast = useStore((s) => s.toast);
-  const [q, setQ] = useState('');
-  const [results, setResults] = useState<UserSummary[] | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    const query = q.trim();
-    if (!query) return setResults(null);
-    // Ответ на устаревший запрос (пользователь уже печатает дальше) не должен перетереть свежий
-    let current = true;
-    const t = window.setTimeout(() => {
-      api.searchUsers(query).then(
-        (r) => current && setResults(r),
-        () => current && setResults([]),
-      );
-    }, 250);
-    return () => {
-      current = false;
-      window.clearTimeout(t);
-    };
-  }, [q]);
-
-  const add = async (u: UserSummary) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      if (view.kind === 'group') await api.addGroupMember(view.channelId, u.id);
-      else if (view.kind === 'server') {
-        await api.addServerMember(view.serverId, u.id);
-        void refreshServer(view.serverId);
-      }
-      toast(`${u.display_name} добавлен(а)`);
-      onClose();
-    } catch (e) {
-      toast(e instanceof ApiError ? e.message : 'Ошибка', 'error');
-      setBusy(false);
-    }
-  };
-
-  const list = results ?? friends;
-  return (
-    <Modal title="Добавить участника" onClose={onClose}>
-      <input autoFocus placeholder="Поиск по логину или имени" value={q} onChange={(e) => setQ(e.target.value)} />
-      <div className="user-list">
-        {results === null && <div className="muted small">Друзья</div>}
-        {list.length === 0 && <div className="muted">Никого не найдено</div>}
-        {list.map((u) => (
-          <div key={u.id} className="user-row">
-            <Avatar name={u.display_name} src={u.avatar_path} id={u.id} size={32} />
-            <div className="grow">
-              <div>{u.display_name}</div>
-              <div className="muted small">@{u.username}</div>
-            </div>
-            <button className="btn small primary" onClick={() => add(u)} disabled={busy}>
-              Добавить
-            </button>
-          </div>
-        ))}
-      </div>
-    </Modal>
   );
 }

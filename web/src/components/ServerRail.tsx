@@ -42,7 +42,7 @@ export function ServerRail() {
             aria-current={active ? 'page' : undefined}
             onClick={() => open({ kind: 'server', serverId: srv.id, channelId: null })}
           >
-            {srv.icon ? <img src={srv.icon} alt="" /> : <span>{initials(srv.name)}</span>}
+            <ServerIcon name={srv.name} icon={srv.icon} />
             {n > 0 && <span className="badge">{n}</span>}
           </button>
         );
@@ -58,6 +58,11 @@ export function ServerRail() {
       {adding && <AddServerDialog onClose={() => setAdding(false)} />}
     </nav>
   );
+}
+
+/** Иконка сервера или его инициалы */
+export function ServerIcon({ name, icon }: { name: string; icon: string }) {
+  return icon ? <img src={icon} alt="" /> : <span>{initials(name)}</span>;
 }
 
 function initials(name: string) {
@@ -105,7 +110,9 @@ function AddServerDialog({ onClose }: { onClose: () => void }) {
   const join = (e: FormEvent) => {
     e.preventDefault();
     if (!code.trim()) return;
-    void go(async () => (await api.joinByCode(code.trim())).server_id);
+    // Вставили целую ссылку-приглашение — берём из неё код
+    const raw = code.trim();
+    void go(async () => (await api.joinByCode(raw.match(/\/invite\/([A-Za-z0-9]+)/)?.[1] ?? raw)).server_id);
   };
 
   return (
@@ -123,7 +130,7 @@ function AddServerDialog({ onClose }: { onClose: () => void }) {
       <form onSubmit={join} className="stack">
         <label>
           Вступить по коду приглашения
-          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Например, AB3XK9" />
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Код или ссылка, например AB3XK9" />
         </label>
         <button className="btn" disabled={busy || !code.trim()}>
           Вступить

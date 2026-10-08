@@ -1,10 +1,12 @@
 import { FormEvent, useState } from 'react';
 import { ApiError } from '../lib/api';
+import { useInvite } from '../lib/router';
 import { useStore } from '../lib/store';
 
 export function Login() {
   const login = useStore((s) => s.login);
   const register = useStore((s) => s.register);
+  const invite = useInvite((s) => s.code);
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -40,6 +42,12 @@ export function Login() {
           <h1>Vicinity</h1>
         </div>
         <p className="muted center">{mode === 'login' ? 'С возвращением!' : 'Создайте аккаунт'}</p>
+        {invite && (
+          <div className="invite-hint">
+            Вас пригласили на сервер (код <strong>{invite}</strong>). Войдите или зарегистрируйтесь, чтобы принять
+            приглашение.
+          </div>
+        )}
 
         <label>
           Логин

@@ -5,6 +5,7 @@ import {
   Dm,
   getToken,
   Group,
+  LastMessage,
   Me,
   Member,
   Message,
@@ -18,6 +19,7 @@ import {
 } from './api';
 import { mentionsUser } from './markdown';
 import { notifyMessage } from './notify';
+import { parsePath, viewForRoute } from './routes';
 import { socket, WsEvent } from './ws';
 
 // Что открыто в основной области
@@ -114,7 +116,22 @@ interface State {
   deleteMessage: (channelId: number, id: number) => Promise<void>;
   react: (channelId: number, id: number, emoji: string) => Promise<void>;
   kickMember: (serverId: number, userId: number) => Promise<void>;
-  setPresence: (p: Presence) => void;
+  // ── Управление серверами и беседами (docs/API.md §7, §8) ──
+  /** Изменить сервер в списке (новый код приглашения, имя, иконка из ответа API) */
+  patchServer: (id: number, patch: Partial<Server>) => void;
+  /** Забанить участника; true — получилось */
+  banMember: (serverId: number, userId: number) => Promise<boolean>;
+  leaveServer: (id: number) => Promise<boolean>;
+  deleteServer: (id: number) => Promise<boolean>;
+  /** Переименовать беседу или канал сервера */
+  renameChannel: (channelId: number, name: string) => Promise<boolean>;
+  /** Удалить канал сервера или беседу */
+  deleteChannel: (channelId: number) => Promise<boolean>;
+  leaveGroup: (channelId: number) => Promise<boolean>;
+  /** auto — статус поставлен автоматически (простой), а не выбран пользователем */
+  setPresence: (p: Presence, auto?: boolean) => void;
+  /** Текущий «Не активен» поставлен автоматически — снимается сам, когда пользователь вернётся */
+  presenceAuto: boolean;
   showProfile: (id: number | null) => void;
   setSettingsOpen: (v: boolean) => void;
   toast: (text: string, kind?: 'info' | 'error') => void;
@@ -369,6 +386,19 @@ export const useStore = create<State>((set, get) => {
     dropChannelState(channels);
   };
 
+  // Сервер больше недоступен этому пользователю (вышел, удалил) — убрать без ожидания событий
+  const dropServer = (id: number) => {
+    set({ servers: get().servers.filter((x) => x.id !== id) });
+    forgetServers([id]);
+    leaveViewIfGone();
+  };
+
+  const dropGroup = (id: number) => {
+    set({ groups: get().groups.filter((g) => g.id !== id) });
+    dropChannelState([id]);
+    leaveViewIfGone();
+  };
+
   // Непрочитанное по каналам, которых больше нет в списках, иначе оно навсегда висит в заголовке
   const pruneUnread = () => {
     const s = get();
@@ -511,9 +541,47 @@ export const useStore = create<State>((set, get) => {
     });
   };
 
+  // Последнее сообщение лички/беседы для списка слева (только если сервер его присылает — иначе
+  // поле не появляется, и список остаётся в серверном порядке)
+  let lastRefreshTimer: number | undefined;
+  const applyLastMessage = (ev: WsEvent) => {
+    const s = get();
+    const ch: number = ev.channel_id;
+    const patch = (lm: LastMessage | null | undefined): LastMessage | null | undefined => {
+      if (lm === undefined) return lm;
+      if (ev.type === 'new_message')
+        return lm && lm.id > ev.id
+          ? lm
+          : {
+              id: ev.id,
+              author_id: ev.author_id,
+              author_name: ev.author_name,
+              text: [...String(ev.text ?? '')].slice(0, REPLY_PREVIEW).join(''),
+              attachment: ev.attachment ?? '',
+              created_at: ev.created_at,
+            };
+      if (!lm || lm.id !== ev.id) return lm;
+      if (ev.type === 'message_edited') return { ...lm, text: [...String(ev.text ?? '')].slice(0, REPLY_PREVIEW).join('') };
+      // Удалили последнее — каким стало новое последнее, знает только сервер
+      window.clearTimeout(lastRefreshTimer);
+      lastRefreshTimer = window.setTimeout(() => void get().refreshDms(), 300);
+      return lm;
+    };
+    const dm = s.dms.find((d) => d.channel_id === ch);
+    const group = s.groups.find((g) => g.id === ch);
+    if (dm) {
+      const lm = patch(dm.last_message);
+      if (lm !== dm.last_message) set({ dms: s.dms.map((d) => (d === dm ? { ...d, last_message: lm } : d)) });
+    } else if (group) {
+      const lm = patch(group.last_message);
+      if (lm !== group.last_message) set({ groups: s.groups.map((g) => (g === group ? { ...g, last_message: lm } : g)) });
+    }
+  };
+
   const onMessageEvent = (ev: WsEvent) => {
     const ch: number = ev.channel_id;
     inflight.get(ch)?.events.push(ev);
+    if (ev.type !== 'reaction_update') applyLastMessage(ev);
     // В ленте открыто окно старой истории — новое сообщение встанет на место при возврате к последним
     if (ev.type !== 'new_message' || !get().hasNewer[ch]) updateList(ch, (list) => applyMessageEvent(list, ev, get().me?.user_id));
     if (ev.type !== 'new_message') return;
@@ -576,6 +644,8 @@ export const useStore = create<State>((set, get) => {
         void s.refreshServers();
         break;
       case 'server_removed':
+        // Свой выход или удаление сервера уже убраны из списка — сообщать не о чем
+        if (!s.servers.some((x) => x.id === ev.server_id)) break;
         s.toast(`Вас удалили с сервера «${ev.name}»`, 'error');
         set({ servers: s.servers.filter((x) => x.id !== ev.server_id) });
         forgetServers([ev.server_id]);
@@ -741,16 +811,22 @@ export const useStore = create<State>((set, get) => {
     socket.connect(getToken()!);
     await Promise.all([get().refreshServers(), get().refreshDms(), get().refreshFriends()]);
     if (e !== epoch) return;
+    // Экран из адреса (прямая ссылка, перезагрузка), иначе последний открытый — если он ещё доступен
+    const route = parsePath(location.pathname);
+    const s = get();
+    let v: View | null = route && route.kind !== 'invite' ? viewForRoute(s, route) : null;
+    if (!v) {
+      const last = recallView();
+      const ok =
+        last.kind === 'friends' ||
+        (last.kind === 'dm' && s.dms.some((d) => d.channel_id === last.channelId)) ||
+        (last.kind === 'group' && s.groups.some((g) => g.id === last.channelId)) ||
+        (last.kind === 'server' && s.servers.some((x) => x.id === last.serverId));
+      v = ok ? last : { kind: 'friends' };
+    }
     // Интерфейс показываем только с загруженными данными нового пользователя
     set({ me, presence: { ...get().presence, [me.user_id]: me.presence } });
-    // Восстановить последний открытый экран, если он ещё доступен
-    const v = recallView();
-    const s = get();
-    const ok =
-      (v.kind === 'dm' && s.dms.some((d) => d.channel_id === v.channelId)) ||
-      (v.kind === 'group' && s.groups.some((g) => g.id === v.channelId)) ||
-      (v.kind === 'server' && s.servers.some((x) => x.id === v.serverId));
-    get().open(ok ? v : { kind: 'friends' });
+    get().open(v);
     void get().loadUnread();
   };
 
@@ -799,6 +875,7 @@ export const useStore = create<State>((set, get) => {
     focusMessage: null,
     replyingTo: {},
     unreadAtOpen: null,
+    presenceAuto: false,
   });
 
   // Полный сброс при выходе/401: следующему пользователю в этой вкладке не должно достаться ничего
@@ -822,6 +899,7 @@ export const useStore = create<State>((set, get) => {
     latestId.clear();
     unreadDuring = null;
     window.clearTimeout(unreadTimer);
+    window.clearTimeout(lastRefreshTimer);
     readUnsupported = false;
     sessionConnected = false;
     set(initialSession());
@@ -1224,6 +1302,87 @@ export const useStore = create<State>((set, get) => {
       }
     },
 
+    patchServer: (id, patch) => set({ servers: get().servers.map((x) => (x.id === id ? { ...x, ...patch } : x)) }),
+
+    banMember: async (serverId, userId) => {
+      try {
+        await api.ban(serverId, userId);
+        const list = get().membersByServer[serverId];
+        if (list)
+          set({ membersByServer: { ...get().membersByServer, [serverId]: list.filter((m) => m.id !== userId) } });
+        return true;
+      } catch (e) {
+        errorToast(e);
+        return false;
+      }
+    },
+
+    leaveServer: async (id) => {
+      try {
+        await api.leaveServer(id);
+        dropServer(id);
+        return true;
+      } catch (e) {
+        errorToast(e);
+        return false;
+      }
+    },
+
+    deleteServer: async (id) => {
+      try {
+        await api.deleteServer(id);
+        dropServer(id);
+        return true;
+      } catch (e) {
+        errorToast(e);
+        return false;
+      }
+    },
+
+    renameChannel: async (channelId, name) => {
+      try {
+        const r = await api.renameChannel(channelId, name);
+        const s = get();
+        set({
+          groups: s.groups.map((g) => (g.id === channelId ? { ...g, name: r.name } : g)),
+          channelsByServer: Object.fromEntries(
+            Object.entries(s.channelsByServer).map(([sid, chs]) => [
+              sid,
+              chs.map((c) => (c.id === channelId ? { ...c, name: r.name } : c)),
+            ]),
+          ),
+        });
+        return true;
+      } catch (e) {
+        errorToast(e);
+        return false;
+      }
+    },
+
+    deleteChannel: async (channelId) => {
+      try {
+        await api.deleteChannel(channelId);
+        const v = viewForChannel(get(), channelId);
+        if (v?.kind === 'server') await refreshChannels(v.serverId);
+        else dropGroup(channelId);
+        return true;
+      } catch (e) {
+        errorToast(e);
+        return false;
+      }
+    },
+
+    leaveGroup: async (channelId) => {
+      try {
+        await api.leaveGroup(channelId);
+        dropGroup(channelId);
+        return true;
+      } catch (e) {
+        errorToast(e);
+        return false;
+      }
+    },
+
     react: async (channelId, id, emoji) => {
       try {
         const r = await api.react(channelId, id, emoji);
@@ -1234,11 +1393,11 @@ export const useStore = create<State>((set, get) => {
       }
     },
 
-    setPresence: (p) => {
+    setPresence: (p, auto = false) => {
       const me = get().me;
       if (!me) return;
       socket.send({ type: 'set_presence', presence: p });
-      set({ me: { ...me, presence: p }, presence: { ...get().presence, [me.user_id]: p } });
+      set({ me: { ...me, presence: p }, presence: { ...get().presence, [me.user_id]: p }, presenceAuto: auto && p === 'idle' });
     },
 
     showProfile: (id) => set({ profileUserId: id }),

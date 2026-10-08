@@ -4,6 +4,7 @@ import { copyText } from '../lib/clipboard';
 import { isEmojiOnly, mentionsUser, plainText } from '../lib/markdown';
 import { usePins } from '../lib/pins';
 import { useStore } from '../lib/store';
+import { userMenuProps } from '../lib/userMenu';
 import { useUserDirectory } from '../lib/users';
 import { Attachment } from './Attachment';
 import { Avatar } from './Avatar';
@@ -94,7 +95,13 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
               {time.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
             </span>
           ) : (
-            <button className="plain" onClick={() => showProfile(msg.author_id)} tabIndex={-1} aria-hidden="true">
+            <button
+              className="plain"
+              onClick={() => showProfile(msg.author_id)}
+              tabIndex={-1}
+              aria-hidden="true"
+              {...userMenuProps(msg.author_id)}
+            >
               <Avatar name={msg.author_name} src={msg.author_avatar} id={msg.author_id} size={40} />
             </button>
           )}
@@ -102,7 +109,7 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
         <div className="msg-body">
           {!grouped && (
             <div className="msg-meta">
-              <button className="msg-author plain" onClick={() => showProfile(msg.author_id)}>
+              <button className="msg-author plain" onClick={() => showProfile(msg.author_id)} {...userMenuProps(msg.author_id)}>
                 {msg.author_name}
               </button>
               <span className="msg-time" title={time.toLocaleString('ru-RU')}>
@@ -314,7 +321,11 @@ function EditBox({ msg, onDone }: { msg: Message; onDone: () => void }) {
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (composing(e)) return; // Enter/Esc в IME подтверждает или отменяет ввод иероглифов
-    if (e.key === 'Escape') onDone();
+    if (e.key === 'Escape') {
+      // Esc отменяет правку — и только её (не закрывает заодно панели)
+      e.preventDefault();
+      onDone();
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void save();

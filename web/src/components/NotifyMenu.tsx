@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { NOTIFY_LEVELS, serverLevel, useNotifySettings } from '../lib/notify';
 import { Popover } from './Popover';
 
@@ -9,10 +9,12 @@ interface Props {
   anchor?: HTMLElement;
   point?: { x: number; y: number };
   onClose: () => void;
+  /** Пункты над уведомлениями (действия владельца с каналом) */
+  children?: ReactNode;
 }
 
 /** Меню уведомлений канала: заглушить канал, уровень уведомлений сервера, разрешение браузера */
-export function NotifyMenu({ channelId, serverId, anchor, point, onClose }: Props) {
+export function NotifyMenu({ channelId, serverId, anchor, point, onClose, children }: Props) {
   const level = useNotifySettings((s) => (serverId !== null ? serverLevel(s, serverId) : null));
   const muted = useNotifySettings((s) => s.muted.includes(channelId));
   const setServerLevel = useNotifySettings((s) => s.setServerLevel);
@@ -21,6 +23,7 @@ export function NotifyMenu({ channelId, serverId, anchor, point, onClose }: Prop
 
   return (
     <Popover anchor={anchor} point={point} onClose={onClose} className="menu" role="menu" label="Уведомления">
+      {children}
       <button
         role="menuitemcheckbox"
         aria-checked={muted}

@@ -1,5 +1,7 @@
 import { useStore } from '../lib/store';
+import { userMenuProps } from '../lib/userMenu';
 import { Avatar } from './Avatar';
+import { RoleChips } from './RoleChips';
 
 export function MemberList({ serverId }: { serverId: number }) {
   const members = useStore((s) => s.membersByServer[serverId] ?? []);
@@ -31,12 +33,17 @@ export function MemberList({ serverId }: { serverId: number }) {
           const topRole = m.roles[0];
           return (
             <div key={m.id} className={`member${dim ? ' dim' : ''}`}>
-              <button className="plain member-main" onClick={() => showProfile(m.id)}>
+              <button className="plain member-main" onClick={() => showProfile(m.id)} {...userMenuProps(m.id)}>
                 <Avatar name={m.display_name} src={m.avatar_path} id={m.id} size={32} presence={presence[m.id] ?? m.presence ?? 'offline'} />
-                <span className="ellipsis" style={topRole ? { color: topRole.color } : undefined}>
-                  {m.display_name}
+                <span className="member-names">
+                  <span className="member-name">
+                    <span className="ellipsis" style={topRole ? { color: topRole.color } : undefined}>
+                      {m.display_name}
+                    </span>
+                    {m.is_owner && <span title="Владелец">👑</span>}
+                  </span>
+                  <RoleChips roles={m.roles} />
                 </span>
-                {m.is_owner && <span title="Владелец">👑</span>}
               </button>
               {amOwner && !m.is_owner && (
                 <button

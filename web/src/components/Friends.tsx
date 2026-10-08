@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError, UserSummary } from '../lib/api';
 import { useStore } from '../lib/store';
+import { userMenuProps } from '../lib/userMenu';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { SearchBox } from './Search';
 
@@ -37,7 +38,7 @@ export function Friends({ onMenu }: { onMenu: () => void }) {
     const p = presence[u.id] ?? u.presence ?? 'offline';
     return (
       <div key={u.id} className="friend-row">
-        <button className="plain friend-main" onClick={() => showProfile(u.id)}>
+        <button className="plain friend-main" onClick={() => showProfile(u.id)} {...userMenuProps(u.id)}>
           <Avatar name={u.display_name} src={u.avatar_path} id={u.id} size={36} presence={p} />
           <span className="friend-names">
             <strong className="ellipsis">{u.display_name}</strong>

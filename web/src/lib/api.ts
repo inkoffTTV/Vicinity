@@ -137,12 +137,24 @@ export interface Member extends UserSummary {
   roles: { name: string; color: string }[];
 }
 
+/** Последнее сообщение лички/беседы для списка слева (docs/API.md §7); у старого сервера его нет */
+export interface LastMessage {
+  id: number;
+  author_id: number;
+  author_name: string;
+  /** Не длиннее 200 символов */
+  text: string;
+  attachment: string;
+  created_at: string;
+}
+
 export interface Dm {
   channel_id: number;
   user_id: number;
   username: string;
   display_name: string;
   avatar_path: string;
+  last_message?: LastMessage | null;
 }
 
 export interface Group {
@@ -150,6 +162,29 @@ export interface Group {
   type: string;
   name: string;
   created_at: string;
+  owner_id?: number;
+  last_message?: LastMessage | null;
+}
+
+/** Сессия входа (docs/API.md §9) */
+export interface Session {
+  id: string;
+  created_at: string;
+  expires_at: string;
+  current: boolean;
+}
+
+export interface BannedUser {
+  id: number;
+  username: string;
+  display_name: string;
+  avatar_path: string;
+}
+
+export interface ServerUpdate {
+  server_id: number;
+  name: string;
+  icon: string;
 }
 
 export interface Profile {
@@ -270,6 +305,11 @@ export const api = {
     post<{ token: string; user_id: number }>('/auth/register', { username, password, display_name }),
   logout: () => post('/auth/logout'),
   me: () => get<Me>('/auth/me'),
+  changePassword: (old_password: string, new_password: string) =>
+    post<{ status: string; revoked: number }>('/auth/password', { old_password, new_password }),
+  sessions: () => get<{ sessions: Session[] }>('/auth/sessions').then((r) => r.sessions),
+  revokeSession: (id: string) => del(`/auth/sessions/${encodeURIComponent(id)}`),
+  revokeOtherSessions: () => del<{ status: string; revoked: number }>('/auth/sessions/others'),
 
   // ── Пользователи / лички ──
   searchUsers: (q: string) =>
@@ -285,6 +325,12 @@ export const api = {
     post<{ channel_id: number }>('/channels', { type: 'group', name }),
   addGroupMember: (channelId: number, user_id: number) =>
     post(`/channels/${channelId}/members`, { user_id }),
+  /** Переименовать беседу или канал сервера */
+  renameChannel: (channelId: number, name: string) =>
+    post<{ channel_id: number; name: string }>(`/channels/${channelId}/update`, { name }),
+  /** Удалить канал сервера (владелец) или беседу (её владелец) */
+  deleteChannel: (channelId: number) => del(`/channels/${channelId}`),
+  leaveGroup: (channelId: number) => post(`/channels/${channelId}/leave`),
 
   // ── Сообщения ──
   messages: (channelId: number, opts: { before?: number; limit?: number } = {}) => {
@@ -333,6 +379,18 @@ export const api = {
   members: (id: number) => get<{ members: Member[] }>(`/servers/${id}/members`).then((r) => r.members),
   addServerMember: (id: number, user_id: number) => post(`/servers/${id}/members`, { user_id }),
   kick: (id: number, uid: number) => del(`/servers/${id}/members/${uid}`),
+  renameServer: (id: number, name: string) => post<ServerUpdate>(`/servers/${id}/update`, { name }),
+  uploadServerIcon: (id: number, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    return request<ServerUpdate>('POST', `/servers/${id}/icon`, fd);
+  },
+  regenerateInvite: (id: number) => post<{ invite_code: string }>(`/servers/${id}/invite`),
+  bans: (id: number) => get<{ bans: BannedUser[] }>(`/servers/${id}/bans`).then((r) => r.bans),
+  ban: (id: number, user_id: number) => post(`/servers/${id}/bans`, { user_id }),
+  unban: (id: number, uid: number) => del(`/servers/${id}/bans/${uid}`),
+  leaveServer: (id: number) => post(`/servers/${id}/leave`),
+  deleteServer: (id: number) => del(`/servers/${id}`),
 
   // ── Друзья ──
   friends: () => get<{ friends: UserSummary[] }>('/friends').then((r) => r.friends),

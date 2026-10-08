@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
-import { api, ApiError, parseTs, Profile } from '../lib/api';
+import { api, ApiError, Member, parseTs, Profile } from '../lib/api';
 import { useCall } from '../lib/call';
 import { useStore } from '../lib/store';
+import { userMenuProps } from '../lib/userMenu';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { Markdown } from './Markdown';
 import { Modal } from './Modal';
+import { RoleChips } from './RoleChips';
+import { ServerIcon } from './ServerRail';
+
+const NO_ROLES: Member['roles'] = [];
 
 export function ProfileModal({ userId }: { userId: number }) {
   const showProfile = useStore((s) => s.showProfile);
@@ -13,6 +18,10 @@ export function ProfileModal({ userId }: { userId: number }) {
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
   const livePresence = useStore((s) => s.presence[userId]);
   const toast = useStore((s) => s.toast);
+  const open = useStore((s) => s.open);
+  const servers = useStore((s) => s.servers);
+  // Роли — из списков участников серверов, где этот пользователь уже встречался
+  const roles = useStore((s) => Object.values(s.membersByServer).flat().find((m) => m.id === userId)?.roles ?? NO_ROLES);
   const callIdle = useCall((s) => s.phase === 'idle');
   const startCall = useCall((s) => s.start);
   const [p, setP] = useState<Profile | null>(null);
@@ -89,16 +98,45 @@ export function ProfileModal({ userId }: { userId: number }) {
             <h4>В Vicinity с</h4>
             <p>{parseTs(p.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
           </section>
+          {roles.length > 0 && (
+            <section>
+              <h4>Роли</h4>
+              <RoleChips roles={roles} />
+            </section>
+          )}
           {p.mutual_servers.length > 0 && p.friendship_status !== 'self' && (
             <section>
               <h4>Общие серверы — {p.mutual_servers.length}</h4>
-              <p>{p.mutual_servers.map((s) => s.name).join(', ')}</p>
+              <div className="profile-links">
+                {p.mutual_servers.map((s) => (
+                  <button
+                    key={s.id}
+                    className="profile-link"
+                    onClick={() => {
+                      close();
+                      open({ kind: 'server', serverId: s.id, channelId: null });
+                    }}
+                  >
+                    <span className="profile-link-icon">
+                      <ServerIcon name={s.name} icon={servers.find((x) => x.id === s.id)?.icon ?? ''} />
+                    </span>
+                    <span className="ellipsis">{s.name}</span>
+                  </button>
+                ))}
+              </div>
             </section>
           )}
           {p.mutual_friends.length > 0 && (
             <section>
               <h4>Общие друзья — {p.mutual_friends.length}</h4>
-              <p>{p.mutual_friends.map((s) => s.display_name).join(', ')}</p>
+              <div className="profile-links">
+                {p.mutual_friends.map((f) => (
+                  <button key={f.id} className="profile-link" onClick={() => showProfile(f.id)} {...userMenuProps(f.id)}>
+                    <Avatar name={f.display_name} src={f.avatar_path} id={f.id} size={20} />
+                    <span className="ellipsis">{f.display_name}</span>
+                  </button>
+                ))}
+              </div>
             </section>
           )}
           <div className="profile-actions">

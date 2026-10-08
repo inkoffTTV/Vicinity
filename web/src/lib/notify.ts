@@ -18,11 +18,14 @@ interface Settings {
   servers: Record<number, NotifyLevel>;
   /** Каналы (в том числе лички и беседы) без уведомлений */
   muted: number[];
+  /** Звуковой сигнал о новых сообщениях */
+  sound: boolean;
 }
 
 interface State extends Settings {
   setServerLevel: (serverId: number, level: NotifyLevel) => void;
   toggleMute: (channelId: number) => void;
+  setSound: (on: boolean) => void;
 }
 
 const KEY = 'vicinity.notify';
@@ -33,15 +36,16 @@ function load(): Settings {
     return {
       servers: raw && typeof raw.servers === 'object' && raw.servers ? raw.servers : {},
       muted: Array.isArray(raw?.muted) ? raw.muted.filter((x: unknown) => typeof x === 'number') : [],
+      sound: raw?.sound !== false,
     };
   } catch {
-    return { servers: {}, muted: [] };
+    return { servers: {}, muted: [], sound: true };
   }
 }
 
 function save(s: Settings) {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ servers: s.servers, muted: s.muted }));
+    localStorage.setItem(KEY, JSON.stringify({ servers: s.servers, muted: s.muted, sound: s.sound }));
   } catch {
     /* приватный режим — настройки живут до перезагрузки */
   }
@@ -56,6 +60,10 @@ export const useNotifySettings = create<State>((set, get) => ({
   toggleMute: (channelId) => {
     const muted = get().muted;
     set({ muted: muted.includes(channelId) ? muted.filter((x) => x !== channelId) : [...muted, channelId] });
+    save(get());
+  },
+  setSound: (sound) => {
+    set({ sound });
     save(get());
   },
 }));
@@ -85,7 +93,7 @@ export function notifyMessage(msg: Message, ctx: NotifyContext) {
   }
   const focused = !document.hidden && document.hasFocus();
   if (ctx.active && focused) return;
-  playChime();
+  if (s.sound) playChime();
   if (focused || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   try {
     const n = new Notification(ctx.mentioned ? `${msg.author_name} упоминает вас` : msg.author_name, {

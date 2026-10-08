@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Message, parseTs } from '../lib/api';
 import { canManagePins, usePins } from '../lib/pins';
+import { prefersReducedMotion } from '../lib/prefs';
 import { useStore } from '../lib/store';
 import { MessageRow } from './Message';
 import { Modal } from './Modal';
@@ -12,8 +13,7 @@ const STICK_ZONE = 120;
 // У самого низа: последнее сообщение на экране — канал прочитан
 const READ_ZONE = 40;
 
-const smooth = (): ScrollBehavior =>
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+const smooth = (): ScrollBehavior => (prefersReducedMotion() ? 'auto' : 'smooth');
 
 const newestId = (list: Message[] | undefined) => (list ?? []).reduce((a, m) => (m.local ? a : Math.max(a, m.id)), 0);
 
