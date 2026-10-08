@@ -1,21 +1,51 @@
-# Запуск сервера Vicinity на VPS.
-#   cd deploy && docker compose up -d --build
-# Только сервер + веб (без coturn): docker compose up -d --build vicinity web
-# Данные (vicinity.db, uploads) хранятся в томе vicinity-data и переживают пересборки.
+# Vicinity на VPS: сервер (vicinity), веб-клиент (web, nginx), TURN для звонков (coturn)
+# и необязательный Caddy с автоматическим HTTPS (профиль "https").
+#
+#   cd deploy
+#   cp env.example .env      # заполнить PUBLIC_IP, VICINITY_TURN_SECRET и выбрать сценарий портов
+#   docker compose up -d --build
+#
+# Пошагово — DEPLOY-VPS.md. Обновление — sh update.sh, резервная копия — sh backup.sh.
+# Данные (vicinity.db, uploads) лежат в томе vicinity-data и переживают пересборки.
+
+x-logging: &logging
+  # Логи контейнеров не съедают диск маленького VPS: до 3 файлов по 10 МБ на сервис
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   vicinity:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
     container_name: vicinity-server
+    environment:
+      # Поверх custom_config из config.docker.json (пустое значение оставляет значение из файла)
+      VICINITY_TURN_SECRET: ${VICINITY_TURN_SECRET:?впиши VICINITY_TURN_SECRET в deploy/.env (openssl rand -hex 32)}
+      VICINITY_TURN_URLS: ${VICINITY_TURN_URLS:-turn:${PUBLIC_IP}:3478?transport=udp,turn:${PUBLIC_IP}:3478?transport=tcp}
+      VICINITY_STUN_URLS: ${VICINITY_STUN_URLS:-}
+      VICINITY_TRUSTED_PROXIES: ${VICINITY_TRUSTED_PROXIES:-}
     ports:
-      - "8080:8080"
+      # Прямой доступ для десктоп-клиентов: http://IP_VPS:8080. Закрыть снаружи — BACKEND_BIND=127.0.0.1
+      # (правила ufw на опубликованные порты Docker не действуют)
+      - "${BACKEND_BIND:-0.0.0.0}:${BACKEND_PORT:-8080}:8080"
     volumes:
       - vicinity-data:/data
+    healthcheck:
+      # 401 от /auth/me без токена — сервер жив и отвечает
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/v1/auth/me | grep -qx 401"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
+    logging: *logging
 
-  # Веб-версия: http://IP_VPS (порт 80). Проксирует /api, /ws, /uploads на сервис vicinity.
-  # Порт можно поменять через WEB_PORT, например: WEB_PORT=8081 docker compose up -d --build
+  # Веб-версия: отдаёт сайт и проксирует /api, /ws, /uploads на сервис vicinity.
+  # Адрес публикации — WEB_BIND:WEB_PORT (по умолчанию 0.0.0.0:80, т. е. http://IP_VPS).
+  # За Caddy из профиля "https" или nginx/Caddy хоста — 127.0.0.1:8081 (см. env.example).
   web:
     build:
       context: ..
@@ -24,18 +54,64 @@ services:
     depends_on:
       - vicinity
     ports:
-      - "${WEB_PORT:-80}:80"
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-80}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
+    logging: *logging
 
-  # TURN/STUN для звонков. Настрой turnserver.conf (external-ip + пароль) перед запуском.
-  # host network — coturn нужен реальный IP и диапазон UDP-портов (49160-49200).
+  # TURN/STUN для звонков: UDP/TCP 3478 и relay-порты UDP 49160-49200 (открыть в файерволе).
+  # Сеть хоста — coturn нужен реальный IP и диапазон UDP-портов без NAT Docker.
+  # Публичный IP и секрет — флагами из .env, turnserver.conf править не нужно.
   coturn:
-    image: coturn/coturn:latest
+    image: coturn/coturn:4.7.0
+    container_name: vicinity-coturn
     network_mode: host
+    # turnserver напрямую, без docker-entrypoint.sh образа: тот вычисляет аргументы через eval
+    entrypoint: ["turnserver"]
+    command:
+      - "-c"
+      - "/etc/coturn/turnserver.conf"
+      - "--log-file=stdout"
+      - "--external-ip=${PUBLIC_IP:?впиши PUBLIC_IP (публичный IP VPS) в deploy/.env}"
+      - "--static-auth-secret=${VICINITY_TURN_SECRET:?впиши VICINITY_TURN_SECRET в deploy/.env (openssl rand -hex 32)}"
     volumes:
       - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
-    command: ["-c", "/etc/coturn/turnserver.conf"]
     restart: unless-stopped
+    logging: *logging
+
+  # HTTPS с автоматическим сертификатом Let's Encrypt для DOMAIN — только если порты 80/443 свободны.
+  # Включается профилем: COMPOSE_PROFILES=https в .env (или docker compose --profile https up -d).
+  caddy:
+    image: caddy:2.10.2-alpine
+    container_name: vicinity-caddy
+    profiles: ["https"]
+    depends_on:
+      - web
+    environment:
+      DOMAIN: ${DOMAIN:-}
+    # Без DOMAIN Caddyfile читался бы иначе — останавливаемся с понятной ошибкой в логах
+    command:
+      - "sh"
+      - "-c"
+      - 'test -n "$$DOMAIN" || { echo "DOMAIN не задан в deploy/.env" >&2; exit 1; }; exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    logging: *logging
 
 volumes:
   vicinity-data:
+  # Сертификаты и ключ аккаунта Let's Encrypt — не выпускаются заново при каждом пересоздании
+  caddy-data:
+  caddy-config:

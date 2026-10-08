@@ -2,7 +2,7 @@
 # Контекст сборки = корень репозитория (см. docker-compose.yml).
 
 # ───── build ─────
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci

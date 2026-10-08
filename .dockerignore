@@ -1,8 +1,17 @@
+# Контекст сборки образов из deploy/ — корень репозитория; образам нужны только
+# backend/, shared/, web/ и файлы deploy/. Секреты (.env) в контекст не попадают.
 .git
-web/node_modules
-web/dist
+.github
+.claude
+**/.env
 build
 build-*
 client
 installer
 dist
+docs
+web/node_modules
+web/dist
+web/e2e
+web/playwright-report
+web/test-results

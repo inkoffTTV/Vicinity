@@ -10,11 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libjsoncpp-dev uuid-dev zlib1g-dev libssl-dev libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Drogon (с trantor-сабмодулем). Тег можно поднять при желании.
-RUN git clone --recurse-submodules --depth 1 --branch v1.9.8 \
+# Drogon (с trantor-сабмодулем): та же версия и те же опции, что в CI (.github/workflows)
+ARG DROGON_VERSION=v1.9.13
+RUN git clone --recurse-submodules --depth 1 --branch "$DROGON_VERSION" \
         https://github.com/drogonframework/drogon /tmp/drogon \
-    && cmake -S /tmp/drogon -B /tmp/drogon/build \
-        -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLES=OFF -DBUILD_CTL=OFF \
+    && cmake -S /tmp/drogon -B /tmp/drogon/build -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_ORM=ON -DBUILD_SQLITE=ON -DBUILD_MYSQL=OFF -DBUILD_POSTGRESQL=OFF -DBUILD_REDIS=OFF \
+        -DBUILD_CTL=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF \
     && cmake --build /tmp/drogon/build -j"$(nproc)" --target install \
     && rm -rf /tmp/drogon
 
@@ -27,8 +29,9 @@ RUN cmake -S /app/backend -B /app/build -DCMAKE_BUILD_TYPE=Release \
 # ───── runtime ─────
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
+# curl — для healthcheck в docker-compose.yml, sqlite3 — для онлайн-бэкапа базы (deploy/backup.sh)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libjsoncpp25 libssl3 libsqlite3-0 zlib1g libuuid1 ca-certificates \
+        libjsoncpp25 libssl3 libsqlite3-0 zlib1g libuuid1 ca-certificates curl sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/build/VicinityServer /app/VicinityServer

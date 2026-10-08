@@ -1,0 +1,16 @@
+# Vicinity за Caddy хоста (сценарий Б в DEPLOY-VPS.md: на сервере уже есть Caddy, например у Telegram-бота).
+#   1) замени chat.example.com на свой поддомен (его A-запись — на IP VPS);
+#   2) в deploy/.env: WEB_BIND=127.0.0.1 и WEB_PORT=8081, затем docker compose up -d;
+#   3) допиши блок ниже в конец /etc/caddy/Caddyfile (блоки бота не трогай), затем
+#      sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+# Сертификат Let's Encrypt Caddy выпустит и продлит сам. WebSocket, X-Forwarded-For и
+# X-Forwarded-Proto reverse_proxy передаёт сам, таймаутов для WebSocket у него нет.
+
+chat.example.com {
+	# Аватары и вложения до 15 МБ (+ запас на multipart) — как в контейнере
+	request_body {
+		max_size 20MB
+	}
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy 127.0.0.1:8081
+}

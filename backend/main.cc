@@ -1,10 +1,56 @@
 #include <drogon/drogon.h>
+#include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <sstream>
 #include "models/Database.h"
 #include "managers/SessionManager.h"
 
+// Переменные окружения поверх custom_config из config.json (Docker: deploy/env.example → .env).
+// Незаданная или пустая переменная оставляет значение из файла; списки — через запятую.
+static void applyEnvOverrides(Json::Value& config) {
+    const auto env = [](const char* name) {
+        const char* value = std::getenv(name);
+        return std::string(value ? value : "");
+    };
+    const auto list = [](const std::string& text) {
+        Json::Value out(Json::arrayValue);
+        std::istringstream in(text);
+        std::string item;
+        while (std::getline(in, item, ',')) {
+            const auto first = item.find_first_not_of(" \t");
+            if (first == std::string::npos) continue;
+            out.append(item.substr(first, item.find_last_not_of(" \t") - first + 1));
+        }
+        return out;
+    };
+    Json::Value& custom = config["custom_config"];
+    if (const auto v = env("VICINITY_TURN_SECRET"); !v.empty())     custom["rtc"]["turn_secret"] = v;
+    if (const auto v = env("VICINITY_TURN_URLS"); !v.empty())       custom["rtc"]["turn"] = list(v);
+    if (const auto v = env("VICINITY_STUN_URLS"); !v.empty())       custom["rtc"]["stun"] = list(v);
+    if (const auto v = env("VICINITY_TRUSTED_PROXIES"); !v.empty()) custom["trusted_proxies"] = list(v);
+}
+
 int main() {
+    Json::Value config;
+    {
+        std::ifstream file("config.json");
+        Json::CharReaderBuilder reader;
+        reader["collectComments"] = false;
+        std::string errors;
+        if (!file) {
+            std::cerr << "Config file config.json not found!" << std::endl;
+            return 1;
+        }
+        if (!Json::parseFromStream(reader, file, &config, &errors)) {
+            std::cerr << "Error reading config file config.json: " << errors << std::endl;
+            return 1;
+        }
+    }
+    applyEnvOverrides(config);
+
     drogon::app()
-        .loadConfigFile("config.json")
+        .loadConfigJson(std::move(config))
         // Статика раздаётся только из каталога загрузок (locations в config.json), но
         // Drogon не проверяет «..» внутри location — «/uploads/../vicinity.db» вышел бы
         // за его пределы. Такие пути отсекаем до маршрутизации.
