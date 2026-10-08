@@ -13,6 +13,8 @@ Limit limitFor(UserRateLimiter::Action a) {
         case A::JoinByCode:    return {10, 60};
         case A::ChannelCreate: return {10, 60};
         case A::CallInvite:    return {10, 60};
+        case A::Typing:        return {1, 2};
+        case A::Search:        return {30, 60};
     }
     return {10, 60};
 }

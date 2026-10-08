@@ -10,11 +10,14 @@ find_package(OpenSSL REQUIRED)
 add_executable(VicinityServer
     main.cc
     controllers/AuthController.cc
+    controllers/ChannelController.cc
     controllers/ChatController.cc
     controllers/FriendsController.cc
     controllers/ProfileController.cc
+    controllers/ReadController.cc
     controllers/RoleController.cc
     controllers/RtcController.cc
+    controllers/SearchController.cc
     controllers/ServerController.cc
     controllers/UserController.cc
     controllers/WSController.cc
@@ -24,12 +27,14 @@ add_executable(VicinityServer
     managers/UserRateLimiter.cc
     managers/WSManager.cc
     managers/VoiceManager.cc
+    models/Cascade.cc
     models/Database.cc
     models/User.cc
     utils/Access.cc
     utils/Broadcast.cc
     utils/CryptoUtils.cc
     utils/FileSystem.cc
+    utils/Messages.cc
     utils/NetUtils.cc
     utils/TextUtils.cc
     utils/Uploads.cc

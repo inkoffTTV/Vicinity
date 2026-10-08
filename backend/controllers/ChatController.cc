@@ -2,84 +2,29 @@
 #include "../managers/UserRateLimiter.h"
 #include "../utils/Access.h"
 #include "../utils/Broadcast.h"
+#include "../utils/HttpUtils.h"
 #include "../utils/JsonUtils.h"
+#include "../utils/Messages.h"
 #include "../utils/TextUtils.h"
 #include "../utils/Uploads.h"
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/drogon.h>
 #include <json/json.h>
-#include <sstream>
-#include <map>
+#include <algorithm>
+#include <optional>
 
 using namespace drogon;
+using HttpUtils::error;
+using HttpUtils::accessError;
+using HttpUtils::tooManyRequests;
 
-static HttpResponsePtr jsonResp(Json::Value body, HttpStatusCode code = k200OK) {
-    auto resp = HttpResponse::newHttpJsonResponse(std::move(body));
-    resp->setStatusCode(code);
-    return resp;
-}
-
-static HttpResponsePtr error(const std::string& msg, HttpStatusCode code) {
-    Json::Value v;
-    v["error"] = msg;
-    return jsonResp(std::move(v), code);
-}
-
-// Нет доступа к каналу (docs/API.md §1): канала нет — 404, чужой канал — 403
-static HttpResponsePtr accessError(Access::Result r) {
-    return r == Access::Result::NotFound ? error("Канал не найден", k404NotFound)
-                                         : error("Нет доступа к каналу", k403Forbidden);
-}
-
-static HttpResponsePtr tooManyRequests() {
-    return error("Слишком часто, попробуйте позже", k429TooManyRequests);
-}
+// История канала: страница по умолчанию и максимум (docs/API.md §2)
+static constexpr int64_t kPageDefault = 50;
+static constexpr int64_t kPageMax     = 100;
 
 // Текст сообщения: корректная UTF-8 и не длиннее MAX_MESSAGE_LEN символов (не байт)
 static bool validText(const std::string& text) {
     return TextUtils::isValidUtf8(text) && TextUtils::utf8Length(text) <= Vicinity::MAX_MESSAGE_LEN;
-}
-
-// Одна строка агрегата реакций: {emoji, count, users:[ids]}
-static Json::Value reactionEntry(const drogon::orm::Row& row) {
-    Json::Value r;
-    r["emoji"] = row["emoji"].as<std::string>();
-    r["count"] = row["cnt"].as<int>();
-    Json::Value users(Json::arrayValue);
-    std::stringstream ss(row["uids"].as<std::string>());
-    std::string tok;
-    while (std::getline(ss, tok, ','))
-        if (!tok.empty()) users.append(static_cast<Json::Int64>(std::stoll(tok)));
-    r["users"] = users;
-    return r;
-}
-
-// Агрегат реакций одного сообщения: [{emoji, count, users:[ids]}]
-static Json::Value reactionsJson(const drogon::orm::DbClientPtr& db, int64_t msgId) {
-    Json::Value arr(Json::arrayValue);
-    auto rows = db->execSqlSync(
-        "SELECT emoji, COUNT(*) AS cnt, GROUP_CONCAT(user_id) AS uids "
-        "FROM reactions WHERE message_id = ? GROUP BY emoji ORDER BY MIN(rowid)", msgId);
-    for (const auto& row : rows) arr.append(reactionEntry(row));
-    return arr;
-}
-
-// Реакции сообщений канала с id в [minId, maxId] — одним запросом: message_id -> массив
-static std::map<int64_t, Json::Value> reactionsInRange(const drogon::orm::DbClientPtr& db,
-                                                       int64_t channelId, int64_t minId, int64_t maxId) {
-    std::map<int64_t, Json::Value> out;
-    auto rows = db->execSqlSync(
-        "SELECT r.message_id, r.emoji, COUNT(*) AS cnt, GROUP_CONCAT(r.user_id) AS uids "
-        "FROM reactions r JOIN messages m ON m.id = r.message_id "
-        "WHERE m.channel_id = ? AND m.id BETWEEN ? AND ? "
-        "GROUP BY r.message_id, r.emoji ORDER BY MIN(r.rowid)",
-        channelId, minId, maxId);
-    for (const auto& row : rows) {
-        auto& arr = out[row["message_id"].as<int64_t>()];
-        if (arr.isNull()) arr = Json::Value(Json::arrayValue);
-        arr.append(reactionEntry(row));
-    }
-    return out;
 }
 
 void ChatController::listChannels(const HttpRequestPtr& req,
@@ -87,22 +32,24 @@ void ChatController::listChannels(const HttpRequestPtr& req,
     int64_t userId = req->attributes()->get<int64_t>("user_id");
     auto db = app().getDbClient();
     db->execSqlAsync(
-        "SELECT c.id, c.type, c.name, c.created_at FROM channels c "
-        "JOIN channel_members m ON c.id = m.channel_id "
+        "SELECT c.id, c.type, c.name, c.created_at, c.owner_id, " + Messages::kLastColumns + " "
+        "FROM channels c JOIN channel_members m ON c.id = m.channel_id " + Messages::kLastJoin + " "
         "WHERE m.user_id = ? AND c.type != 'dm' AND c.server_id IS NULL",
         [cb](const drogon::orm::Result& r) {
             Json::Value arr(Json::arrayValue);
             for (const auto& row : r) {
                 Json::Value item;
-                item["id"]         = static_cast<Json::Int64>(row["id"].as<int64_t>());
-                item["type"]       = row["type"].as<std::string>();
-                item["name"]       = row["name"].isNull() ? "" : row["name"].as<std::string>();
-                item["created_at"] = row["created_at"].as<std::string>();
+                item["id"]           = static_cast<Json::Int64>(row["id"].as<int64_t>());
+                item["type"]         = row["type"].as<std::string>();
+                item["name"]         = row["name"].isNull() ? "" : row["name"].as<std::string>();
+                item["created_at"]   = row["created_at"].as<std::string>();
+                item["owner_id"]     = static_cast<Json::Int64>(row["owner_id"].isNull() ? 0 : row["owner_id"].as<int64_t>());
+                item["last_message"] = Messages::lastFromRow(row);
                 arr.append(item);
             }
             Json::Value resp;
             resp["channels"] = arr;
-            cb(jsonResp(std::move(resp)));
+            cb(HttpUtils::json(std::move(resp)));
         },
         [cb](const drogon::orm::DrogonDbException& e) {
             cb(error(e.base().what(), k500InternalServerError));
@@ -140,51 +87,57 @@ void ChatController::createChannel(const HttpRequestPtr& req,
         Json::Value resp;
         resp["channel_id"] = static_cast<Json::Int64>(channelId);
         resp["status"] = "created";
-        cb(jsonResp(std::move(resp), k201Created));
+        cb(HttpUtils::json(std::move(resp), k201Created));
     } catch (const std::exception& e) {
         cb(error(e.what(), k500InternalServerError));
     }
 }
 
+// GET /api/v1/channels/{id}/messages?limit=&before=|around= — страница истории, новые первыми
 void ChatController::getMessages(const HttpRequestPtr& req,
                                  std::function<void(const HttpResponsePtr&)>&& cb,
                                  int64_t channelId) {
     int64_t userId = req->attributes()->get<int64_t>("user_id");
+    const int64_t limit  = std::clamp(HttpUtils::intParam(req, "limit", kPageDefault), int64_t{1}, kPageMax);
+    const int64_t before = HttpUtils::intParam(req, "before");
+    const int64_t around = HttpUtils::intParam(req, "around");
     auto db = app().getDbClient();
     try {
         auto acc = Access::channel(db, channelId, userId);
         if (acc != Access::Result::Ok) { cb(accessError(acc)); return; }
 
-        // Порядок — по id (он монотонный); created_at с точностью до секунды путает соседние сообщения
-        auto r = db->execSqlSync(
-            "SELECT m.id, m.author_id, u.display_name, u.avatar_path, m.text, m.created_at, "
-            "m.edited, m.attachment "
-            "FROM messages m JOIN users u ON m.author_id = u.id "
-            "WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT 50", channelId);
-        std::map<int64_t, Json::Value> reactions;
-        if (!r.empty())
-            reactions = reactionsInRange(db, channelId, r[r.size() - 1]["id"].as<int64_t>(),
-                                         r[0]["id"].as<int64_t>());
+        // Порядок — по id (он монотонный); created_at с точностью до секунды путает соседние сообщения.
+        // Каждой части берём на одно сообщение больше: так видно, есть ли за ней ещё.
+        const std::string select =
+            "SELECT " + Messages::kColumns + " FROM " + Messages::kFrom + " WHERE m.channel_id = ? ";
         Json::Value arr(Json::arrayValue);
-        for (const auto& row : r) {
-            const int64_t id = row["id"].as<int64_t>();
-            Json::Value msg;
-            msg["id"]            = static_cast<Json::Int64>(id);
-            msg["channel_id"]    = static_cast<Json::Int64>(channelId);
-            msg["author_id"]     = static_cast<Json::Int64>(row["author_id"].as<int64_t>());
-            msg["author_name"]   = row["display_name"].as<std::string>();
-            msg["author_avatar"] = row["avatar_path"].isNull() ? "" : row["avatar_path"].as<std::string>();
-            msg["text"]          = row["text"].as<std::string>();
-            msg["created_at"]    = row["created_at"].as<std::string>();
-            msg["edited"]        = row["edited"].as<int>() != 0;
-            msg["attachment"]    = row["attachment"].isNull() ? "" : row["attachment"].as<std::string>();
-            auto rx = reactions.find(id);
-            msg["reactions"]     = rx != reactions.end() ? rx->second : Json::Value(Json::arrayValue);
-            arr.append(msg);
-        }
         Json::Value resp;
+        if (around > 0) {
+            // Окно вокруг сообщения: до limit/2 новее, само сообщение, до limit/2 старше
+            const int64_t half = limit / 2;
+            auto newer  = db->execSqlSync(select + "AND m.id > ? ORDER BY m.id ASC LIMIT ?",
+                                          channelId, around, half + 1);
+            auto target = db->execSqlSync(select + "AND m.id = ?", channelId, around);
+            auto older  = db->execSqlSync(select + "AND m.id < ? ORDER BY m.id DESC LIMIT ?",
+                                          channelId, around, half + 1);
+            const auto newerCount = std::min(newer.size(), static_cast<size_t>(half));
+            for (size_t i = newerCount; i-- > 0;) arr.append(Messages::fromRow(newer[i]));
+            for (const auto& row : target) arr.append(Messages::fromRow(row));
+            for (size_t i = 0; i < older.size() && i < static_cast<size_t>(half); ++i)
+                arr.append(Messages::fromRow(older[i]));
+            resp["has_more"]  = older.size() > static_cast<size_t>(half);
+            resp["has_newer"] = newer.size() > static_cast<size_t>(half);
+        } else {
+            auto rows = before > 0
+                ? db->execSqlSync(select + "AND m.id < ? ORDER BY m.id DESC LIMIT ?", channelId, before, limit + 1)
+                : db->execSqlSync(select + "ORDER BY m.id DESC LIMIT ?", channelId, limit + 1);
+            for (size_t i = 0; i < rows.size() && i < static_cast<size_t>(limit); ++i)
+                arr.append(Messages::fromRow(rows[i]));
+            resp["has_more"] = rows.size() > static_cast<size_t>(limit);
+        }
+        Messages::attachReactions(db, arr);
         resp["messages"] = arr;
-        cb(jsonResp(std::move(resp)));
+        cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
         cb(error(e.what(), k500InternalServerError));
     }
@@ -201,8 +154,10 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
     std::string attachment = JsonUtils::getStr(*json, "attachment");
     // nonce — метка клиента для сопоставления своего сообщения с WS-событием, возвращается как есть
     std::string nonce      = JsonUtils::getStr(*json, "nonce");
+    int64_t     replyTo    = JsonUtils::getInt(*json, "reply_to");
     // Вложение — только файл, загруженный через /attachments, никакие внешние пути
-    if (!attachment.empty() && !Uploads::isUploadUrl(attachment, "attachments")) {
+    const std::string attachmentType = Uploads::attachmentType(attachment);
+    if (!attachment.empty() && attachmentType.empty()) {
         cb(error("Invalid attachment", k400BadRequest)); return;
     }
     if ((text.empty() && attachment.empty()) || !validText(text)) {
@@ -211,6 +166,7 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
     if (!TextUtils::isValidUtf8(nonce) || TextUtils::utf8Length(nonce) > Vicinity::MAX_NONCE_LEN) {
         cb(error("Invalid nonce", k400BadRequest)); return;
     }
+    if (replyTo < 0) { cb(error("Invalid reply_to", k400BadRequest)); return; }
 
     auto db = app().getDbClient();
     try {
@@ -219,42 +175,43 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
         if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Message, userId)) {
             cb(tooManyRequests()); return;
         }
-
-        auto ins = db->execSqlSync(
-            "INSERT INTO messages(channel_id, author_id, text, attachment) VALUES(?, ?, ?, ?) "
-            "RETURNING id, created_at",
-            channelId, userId, text, attachment);
-        int64_t     msgId     = ins[0]["id"].as<int64_t>();
-        std::string createdAt = ins[0]["created_at"].as<std::string>();
-
-        // Имя + аватар автора для отображения у получателей
-        std::string authorName, authorAvatar;
-        auto urow = db->execSqlSync("SELECT display_name, avatar_path FROM users WHERE id = ?", userId);
-        if (!urow.empty()) {
-            authorName = urow[0]["display_name"].as<std::string>();
-            if (!urow[0]["avatar_path"].isNull()) authorAvatar = urow[0]["avatar_path"].as<std::string>();
+        // Отвечать можно только на сообщение этого же канала
+        if (replyTo > 0 &&
+            db->execSqlSync("SELECT 1 FROM messages WHERE id = ? AND channel_id = ?", replyTo, channelId).empty()) {
+            cb(error("Сообщение, на которое вы отвечаете, не найдено в этом канале", k400BadRequest)); return;
         }
 
-        // Рассылаем по WebSocket только участникам канала
-        Json::Value ws;
-        ws["type"]          = "new_message";
-        ws["id"]            = static_cast<Json::Int64>(msgId);
-        ws["channel_id"]    = static_cast<Json::Int64>(channelId);
-        ws["author_id"]     = static_cast<Json::Int64>(userId);
-        ws["author_name"]   = authorName;
-        ws["author_avatar"] = authorAvatar;
-        ws["text"]          = text;
-        ws["attachment"]    = attachment;
-        ws["created_at"]    = createdAt;
-        ws["nonce"]         = nonce;
+        // Метаданные вложения: имя — от клиента, размер и тип — по самому загруженному файлу
+        std::optional<std::string> attName, attType;
+        std::optional<int64_t>     attSize, reply;
+        if (!attachment.empty()) {
+            attName = Uploads::cleanFileName(JsonUtils::getStr(*json, "attachment_name"));
+            attSize = Uploads::fileSize(attachment);
+            attType = attachmentType;
+        }
+        if (replyTo > 0) reply = replyTo;
+
+        auto ins = db->execSqlSync(
+            "INSERT INTO messages(channel_id, author_id, text, attachment, "
+            "attachment_name, attachment_size, attachment_type, reply_to) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            channelId, userId, text, attachment, attName, attSize, attType, reply);
+        Json::Value msg = Messages::load(db, ins[0]["id"].as<int64_t>());
+        msg["nonce"] = nonce;
+
+        // Рассылаем по WebSocket только тем, кто видит канал
+        Json::Value ws = msg;
+        ws["type"] = "new_message";
         Broadcast::toChannel(channelId, ws);
 
         Json::Value resp;
-        resp["id"]         = static_cast<Json::Int64>(msgId);
-        resp["created_at"] = createdAt;
+        resp["id"]         = msg["id"];
+        resp["created_at"] = msg["created_at"];
         resp["status"]     = "sent";
         resp["nonce"]      = nonce;
-        cb(jsonResp(std::move(resp), k201Created));
+        for (const char* key : {"reply_to", "reply", "attachment_name", "attachment_size", "attachment_type"})
+            resp[key] = msg[key];
+        cb(HttpUtils::json(std::move(resp), k201Created));
     } catch (const std::exception& e) {
         cb(error(e.what(), k500InternalServerError));
     }
@@ -289,8 +246,17 @@ void ChatController::addMember(const HttpRequestPtr& req,
         auto u = db->execSqlSync("SELECT id FROM users WHERE id = ?", target);
         if (u.empty()) { cb(error("Пользователь не найден", k404NotFound)); return; }
 
-        db->execSqlSync("INSERT OR IGNORE INTO channel_members(channel_id, user_id) VALUES(?, ?)",
-                        channelId, target);
+        auto ins = db->execSqlSync(
+            "INSERT OR IGNORE INTO channel_members(channel_id, user_id) VALUES(?, ?) RETURNING user_id",
+            channelId, target);
+        // Остальным участникам — новый состав; самому добавленному — беседа в списке
+        if (!ins.empty()) {
+            Json::Value joined;
+            joined["type"]       = "channel_member_joined";
+            joined["channel_id"] = static_cast<Json::Int64>(channelId);
+            joined["user_id"]    = static_cast<Json::Int64>(target);
+            Broadcast::toChannel(channelId, joined, target);
+        }
 
         Json::Value ev;
         ev["type"]       = "channel_added";
@@ -299,7 +265,7 @@ void ChatController::addMember(const HttpRequestPtr& req,
         Broadcast::toUser(target, ev);
 
         Json::Value resp; resp["status"] = "added"; resp["channel_id"] = static_cast<Json::Int64>(channelId);
-        cb(jsonResp(std::move(resp)));
+        cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
         cb(error(e.what(), k500InternalServerError));
     }
@@ -335,35 +301,47 @@ void ChatController::editMessage(const HttpRequestPtr& req,
         Broadcast::toChannel(channelId, ws);
 
         Json::Value resp; resp["status"] = "edited";
-        cb(jsonResp(std::move(resp)));
+        cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
         cb(error(e.what(), k500InternalServerError));
     }
 }
 
-// DELETE /api/v1/channels/{id}/messages/{mid} — удалить СВОЁ сообщение
+// DELETE /api/v1/channels/{id}/messages/{mid} — удалить своё сообщение
+// (владелец сервера — любое сообщение в каналах своего сервера)
 void ChatController::deleteMessage(const HttpRequestPtr& req,
                                    std::function<void(const HttpResponsePtr&)>&& cb,
                                    int64_t channelId, int64_t msgId) {
     int64_t userId = req->attributes()->get<int64_t>("user_id");
     auto db = app().getDbClient();
     try {
-        auto acc = Access::channel(db, channelId, userId);
+        Access::ChannelInfo info;
+        auto acc = Access::channel(db, channelId, userId, &info);
         if (acc != Access::Result::Ok) { cb(accessError(acc)); return; }
+        const bool serverOwner = info.serverId != 0 && Access::serverOwner(db, info.serverId) == userId;
+        const bool pinned = !db->execSqlSync("SELECT 1 FROM pins WHERE message_id = ? AND channel_id = ?",
+                                             msgId, channelId).empty();
         auto r = db->execSqlSync(
-            "DELETE FROM messages WHERE id = ? AND channel_id = ? AND author_id = ? RETURNING id",
-            msgId, channelId, userId);
+            "DELETE FROM messages WHERE id = ? AND channel_id = ? AND (author_id = ? OR ?) RETURNING id",
+            msgId, channelId, userId, serverOwner ? 1 : 0);
         if (r.empty()) { cb(error("Можно удалять только свои сообщения", k403Forbidden)); return; }
         db->execSqlSync("DELETE FROM reactions WHERE message_id = ?", msgId);
+        db->execSqlSync("DELETE FROM pins WHERE message_id = ?", msgId);
 
         Json::Value ws;
         ws["type"]       = "message_deleted";
         ws["channel_id"] = static_cast<Json::Int64>(channelId);
         ws["id"]         = static_cast<Json::Int64>(msgId);
         Broadcast::toChannel(channelId, ws);
+        if (pinned) {
+            Json::Value pins;
+            pins["type"]       = "pins_updated";
+            pins["channel_id"] = static_cast<Json::Int64>(channelId);
+            Broadcast::toChannel(channelId, pins);
+        }
 
         Json::Value resp; resp["status"] = "deleted";
-        cb(jsonResp(std::move(resp)));
+        cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
         cb(error(e.what(), k500InternalServerError));
     }
@@ -403,19 +381,19 @@ void ChatController::toggleReaction(const HttpRequestPtr& req,
         ws["type"]       = "reaction_update";
         ws["channel_id"] = static_cast<Json::Int64>(channelId);
         ws["message_id"] = static_cast<Json::Int64>(msgId);
-        ws["reactions"]  = reactionsJson(db, msgId);
+        ws["reactions"]  = Messages::reactions(db, msgId);
         Broadcast::toChannel(channelId, ws);
 
         Json::Value resp;
         resp["status"]    = "ok";
         resp["reactions"] = ws["reactions"];
-        cb(jsonResp(std::move(resp)));
+        cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
         cb(error(e.what(), k500InternalServerError));
     }
 }
 
-// POST /api/v1/channels/{id}/attachments (multipart, поле file) — картинка-вложение
+// POST /api/v1/channels/{id}/attachments (multipart, поле file) — картинка или файл
 void ChatController::uploadAttachment(const HttpRequestPtr& req,
                                       std::function<void(const HttpResponsePtr&)>&& cb,
                                       int64_t channelId) {
@@ -431,12 +409,15 @@ void ChatController::uploadAttachment(const HttpRequestPtr& req,
         if (fileUpload.parse(req) != 0 || fileUpload.getFiles().empty()) {
             cb(error("Invalid file upload", k400BadRequest)); return;
         }
-        auto saved = Uploads::saveImage(fileUpload.getFiles()[0], "attachments");
+        auto saved = Uploads::saveAttachment(fileUpload.getFiles()[0]);
         if (!saved.error.empty()) { cb(error(saved.error, saved.code)); return; }
 
         Json::Value resp;
-        resp["url"] = saved.url;
-        cb(jsonResp(std::move(resp), k201Created));
+        resp["url"]  = saved.url;
+        resp["name"] = saved.name;
+        resp["size"] = static_cast<Json::Int64>(saved.size);
+        resp["type"] = saved.type;
+        cb(HttpUtils::json(std::move(resp), k201Created));
     } catch (const std::exception& e) {
         LOG_ERROR << "uploadAttachment exception: " << e.what();
         cb(error("Не удалось загрузить файл", k500InternalServerError));

@@ -20,6 +20,14 @@ int main() {
             }
             accb();
         })
+        // Загрузки отдаются как есть, без угадывания типа браузером; произвольные файлы-вложения
+        // только скачиваются, а не открываются как страница (docs/API.md §2; те же заголовки ставит nginx)
+        .registerPreSendingAdvice([](const drogon::HttpRequestPtr& req, const drogon::HttpResponsePtr& resp) {
+            const std::string& path = req->path();
+            if (path.rfind("/uploads/", 0) != 0) return;
+            resp->addHeader("X-Content-Type-Options", "nosniff");
+            if (path.rfind("/uploads/files/", 0) == 0) resp->addHeader("Content-Disposition", "attachment");
+        })
         .registerBeginningAdvice([]() {
             Database::initialize();
             // Токен проверяется только при подключении к /ws: раз в 5 минут закрываем

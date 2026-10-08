@@ -2,15 +2,19 @@
 #include "../managers/WSManager.h"
 #include "../managers/VoiceManager.h"
 #include "../managers/UserRateLimiter.h"
+#include "../models/Cascade.h"
 #include "../utils/Access.h"
 #include "../utils/Broadcast.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/TextUtils.h"
+#include "../utils/Uploads.h"
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/HttpResponse.h>
+#include <drogon/drogon.h>
 #include <random>
 #include <cctype>
 #include <map>
+#include <vector>
 
 using namespace drogon;
 using namespace drogon::orm;
@@ -39,12 +43,69 @@ static HttpResponsePtr tooManyRequests() {
 }
 
 // Состав сервера изменился: {type: server_member_joined|server_member_left, server_id, user_id}
-static void memberEvent(const char* type, int64_t serverId, int64_t userId) {
+static Json::Value memberEventJson(const char* type, int64_t serverId, int64_t userId) {
     Json::Value ev;
     ev["type"]      = type;
     ev["server_id"] = static_cast<Json::Int64>(serverId);
     ev["user_id"]   = static_cast<Json::Int64>(userId);
-    Broadcast::toServer(serverId, ev);
+    return ev;
+}
+
+static void memberEvent(const char* type, int64_t serverId, int64_t userId) {
+    Broadcast::toServer(serverId, memberEventJson(type, serverId, userId));
+}
+
+static std::vector<int64_t> serverChannels(const DbClientPtr& db, int64_t serverId) {
+    std::vector<int64_t> out;
+    for (const auto& row : db->execSqlSync("SELECT id FROM channels WHERE server_id = ?", serverId))
+        out.push_back(row["id"].as<int64_t>());
+    return out;
+}
+
+// Убрать пользователя с сервера: членство и голос в каналах сервера; оставшимся — server_member_left.
+// true — он был участником.
+static bool dropMember(const DbClientPtr& db, int64_t serverId, int64_t userId) {
+    auto del = db->execSqlSync(
+        "DELETE FROM server_members WHERE server_id = ? AND user_id = ? RETURNING user_id",
+        serverId, userId);
+    // Без членства нет и голоса
+    Broadcast::evictFromVoice(userId, serverChannels(db, serverId));
+    if (del.empty()) return false;
+    memberEvent("server_member_left", serverId, userId);
+    return true;
+}
+
+// {type:"server_removed"} — клиент уберёт сервер из списка (кик, бан, удаление сервера)
+static void serverRemoved(int64_t userId, int64_t serverId, const std::string& name) {
+    Json::Value ev;
+    ev["type"]      = "server_removed";
+    ev["server_id"] = static_cast<Json::Int64>(serverId);
+    ev["name"]      = name;
+    Broadcast::toUser(userId, ev);
+}
+
+// Действие только для владельца: ошибка (сервера нет — 404, не владелец — 403) или nullptr
+static HttpResponsePtr ownerOnly(const DbClientPtr& db, int64_t serverId, int64_t userId) {
+    const int64_t owner = Access::serverOwner(db, serverId);
+    if (owner == 0)      return errResp("Сервер не найден", k404NotFound);
+    if (owner != userId) return errResp("Только владелец сервера может это сделать", k403Forbidden);
+    return nullptr;
+}
+
+// {server_id, name, icon} сервера; с type — событие server_updated участникам
+static Json::Value serverInfo(const DbClientPtr& db, int64_t serverId) {
+    auto r = db->execSqlSync("SELECT name, icon FROM servers WHERE id = ?", serverId);
+    Json::Value v;
+    v["server_id"] = static_cast<Json::Int64>(serverId);
+    v["name"]      = r.empty() ? "" : r[0]["name"].as<std::string>();
+    v["icon"]      = r.empty() || r[0]["icon"].isNull() ? "" : r[0]["icon"].as<std::string>();
+    return v;
+}
+
+static void serverUpdated(const Json::Value& info) {
+    Json::Value ev = info;
+    ev["type"] = "server_updated";
+    Broadcast::toServer(info["server_id"].asInt64(), ev);
 }
 
 // POST /api/v1/servers  {name}
@@ -157,6 +218,9 @@ void ServerController::joinByCode(const HttpRequestPtr& req,
             "SELECT id, name FROM servers WHERE invite_code = ? LIMIT 1", norm);
         if (s.empty()) { cb(errResp("Сервер с таким кодом не найден", k404NotFound)); return; }
         int64_t serverId = s[0]["id"].as<int64_t>();
+        if (Access::isBanned(db, serverId, userId)) {
+            cb(errResp("Вы заблокированы на этом сервере", k403Forbidden)); return;
+        }
         auto ins = db->execSqlSync(
             "INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?) RETURNING user_id",
             serverId, userId);
@@ -189,6 +253,9 @@ void ServerController::addMember(const HttpRequestPtr& req,
         }
         auto u = db->execSqlSync("SELECT id FROM users WHERE id = ?", target);
         if (u.empty()) { cb(errResp("Пользователь не найден", k404NotFound)); return; }
+        if (Access::isBanned(db, serverId, target)) {
+            cb(errResp("Пользователь заблокирован на этом сервере", k403Forbidden)); return;
+        }
 
         auto ins = db->execSqlSync(
             "INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?) RETURNING user_id",
@@ -354,31 +421,207 @@ void ServerController::removeMember(const HttpRequestPtr& req,
         if (self != ownerId)     { cb(errResp("Только владелец может удалять участников", k403Forbidden)); return; }
         if (targetId == ownerId) { cb(errResp("Нельзя удалить владельца сервера", k400BadRequest)); return; }
 
-        auto del = db->execSqlSync(
-            "DELETE FROM server_members WHERE server_id = ? AND user_id = ? RETURNING user_id",
-            serverId, targetId);
-
-        // Сидел в голосовом канале этого сервера — выкидываем: без членства нет и голоса
-        int64_t voiceCh = VoiceManager::instance().channelOf(targetId);
-        if (voiceCh != 0) {
-            auto vc = db->execSqlSync("SELECT 1 FROM channels WHERE id = ? AND server_id = ?",
-                                      voiceCh, serverId);
-            if (!vc.empty() && VoiceManager::instance().leave(targetId) == voiceCh) {
-                Broadcast::voiceState(voiceCh);
-                // Самому исключённому — тоже, чтобы его клиент перестал считать себя в канале
-                WSManager::instance().sendToUser(targetId, Broadcast::voiceStatePayload(voiceCh));
-            }
-        }
-
+        dropMember(db, serverId, targetId);
         // Уведомить кикнутого — его клиент уберёт сервер из списка
-        Json::Value ev;
-        ev["type"]      = "server_removed";
-        ev["server_id"] = static_cast<Json::Int64>(serverId);
-        ev["name"]      = s[0]["name"].as<std::string>();
-        Broadcast::toUser(targetId, ev);
-        if (!del.empty()) memberEvent("server_member_left", serverId, targetId);
+        serverRemoved(targetId, serverId, s[0]["name"].as<std::string>());
 
         Json::Value resp; resp["status"] = "removed";
+        cb(jsonResp(resp));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
+// POST /api/v1/servers/{id}/leave — выйти с сервера (владельцу нельзя)
+void ServerController::leaveServer(const HttpRequestPtr& req,
+                                   std::function<void(const HttpResponsePtr&)>&& cb,
+                                   int64_t serverId) {
+    int64_t self = req->attributes()->get<int64_t>("user_id");
+    auto db = app().getDbClient();
+    try {
+        const int64_t owner = Access::serverOwner(db, serverId);
+        if (owner == 0) { cb(errResp("Сервер не найден", k404NotFound)); return; }
+        if (owner == self) {
+            cb(errResp("Владелец не может выйти с сервера — его можно только удалить", k400BadRequest)); return;
+        }
+        if (!dropMember(db, serverId, self)) {
+            cb(errResp("Вы не участник этого сервера", k403Forbidden)); return;
+        }
+        // Другие вкладки и устройства ушедшего уберут сервер из списка
+        Broadcast::toUser(self, memberEventJson("server_member_left", serverId, self));
+        Json::Value resp; resp["status"] = "left";
+        cb(jsonResp(resp));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
+// DELETE /api/v1/servers/{id} — удалить сервер со всеми каналами и сообщениями (владелец)
+void ServerController::deleteServer(const HttpRequestPtr& req,
+                                    std::function<void(const HttpResponsePtr&)>&& cb,
+                                    int64_t serverId) {
+    int64_t self = req->attributes()->get<int64_t>("user_id");
+    auto db = app().getDbClient();
+    try {
+        if (auto err = ownerOnly(db, serverId, self)) { cb(err); return; }
+        const Json::Value info = serverInfo(db, serverId);
+        std::vector<int64_t> members;
+        for (const auto& row : db->execSqlSync("SELECT user_id FROM server_members WHERE server_id = ?", serverId))
+            members.push_back(row["user_id"].as<int64_t>());
+        // Голосовые каналы пустеют, пока участники сервера ещё видят их
+        for (int64_t ch : serverChannels(db, serverId))
+            for (int64_t uid : VoiceManager::instance().usersIn(ch)) Broadcast::evictFromVoice(uid, {ch});
+
+        Cascade::deleteServer(db, serverId);
+        Uploads::removeByUrl(info["icon"].asString());
+        for (int64_t uid : members) serverRemoved(uid, serverId, info["name"].asString());
+
+        Json::Value resp; resp["status"] = "deleted";
+        cb(jsonResp(resp));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
+// POST /api/v1/servers/{id}/update {name} — переименовать сервер (владелец)
+void ServerController::updateServer(const HttpRequestPtr& req,
+                                    std::function<void(const HttpResponsePtr&)>&& cb,
+                                    int64_t serverId) {
+    int64_t self = req->attributes()->get<int64_t>("user_id");
+    auto json = req->getJsonObject();
+    if (!json || !json->isObject()) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
+    auto name = TextUtils::cleanName(JsonUtils::getStr(*json, "name"), Vicinity::MAX_NAME_LEN);
+    if (!name) { cb(errResp("Server name must be 1-64 characters", k400BadRequest)); return; }
+
+    auto db = app().getDbClient();
+    try {
+        if (auto err = ownerOnly(db, serverId, self)) { cb(err); return; }
+        db->execSqlSync("UPDATE servers SET name = ? WHERE id = ?", *name, serverId);
+        const Json::Value info = serverInfo(db, serverId);
+        serverUpdated(info);
+        cb(jsonResp(info));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
+// POST /api/v1/servers/{id}/icon (multipart, поле file) — иконка сервера (владелец)
+void ServerController::uploadIcon(const HttpRequestPtr& req,
+                                  std::function<void(const HttpResponsePtr&)>&& cb,
+                                  int64_t serverId) {
+    int64_t self = req->attributes()->get<int64_t>("user_id");
+    try {   // защита от падения сервера на кривом файле/диске
+        auto db = app().getDbClient();
+        if (auto err = ownerOnly(db, serverId, self)) { cb(err); return; }
+        if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Upload, self)) {
+            cb(tooManyRequests()); return;
+        }
+        MultiPartParser fileUpload;
+        if (fileUpload.parse(req) != 0 || fileUpload.getFiles().empty()) {
+            cb(errResp("Invalid file upload", k400BadRequest)); return;
+        }
+        auto saved = Uploads::saveImage(fileUpload.getFiles()[0], "icons");
+        if (!saved.error.empty()) { cb(errResp(saved.error, saved.code)); return; }
+
+        const std::string prev = serverInfo(db, serverId)["icon"].asString();
+        db->execSqlSync("UPDATE servers SET icon = ? WHERE id = ?", saved.url, serverId);
+        // Старая иконка больше никому не нужна
+        Uploads::removeByUrl(prev);
+        const Json::Value info = serverInfo(db, serverId);
+        serverUpdated(info);
+        cb(jsonResp(info));
+    } catch (const std::exception& e) {
+        LOG_ERROR << "uploadIcon exception: " << e.what();
+        cb(errResp("Не удалось загрузить файл", k500InternalServerError));
+    } catch (...) {
+        LOG_ERROR << "uploadIcon unknown exception";
+        cb(errResp("Не удалось загрузить файл", k500InternalServerError));
+    }
+}
+
+// POST /api/v1/servers/{id}/invite — новый код приглашения, старый перестаёт работать (владелец)
+void ServerController::regenerateInvite(const HttpRequestPtr& req,
+                                        std::function<void(const HttpResponsePtr&)>&& cb,
+                                        int64_t serverId) {
+    int64_t self = req->attributes()->get<int64_t>("user_id");
+    auto db = app().getDbClient();
+    try {
+        if (auto err = ownerOnly(db, serverId, self)) { cb(err); return; }
+        const std::string code = genInviteCode();
+        db->execSqlSync("UPDATE servers SET invite_code = ? WHERE id = ?", code, serverId);
+        Json::Value resp; resp["invite_code"] = code;
+        cb(jsonResp(resp));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
+// GET /api/v1/servers/{id}/bans — забаненные пользователи (владелец)
+void ServerController::listBans(const HttpRequestPtr& req,
+                                std::function<void(const HttpResponsePtr&)>&& cb,
+                                int64_t serverId) {
+    int64_t self = req->attributes()->get<int64_t>("user_id");
+    auto db = app().getDbClient();
+    try {
+        if (auto err = ownerOnly(db, serverId, self)) { cb(err); return; }
+        auto rows = db->execSqlSync(
+            "SELECT u.id, u.username, u.display_name, u.avatar_path FROM server_bans b "
+            "JOIN users u ON u.id = b.user_id WHERE b.server_id = ? ORDER BY b.created_at DESC",
+            serverId);
+        Json::Value arr(Json::arrayValue);
+        for (const auto& r : rows) {
+            Json::Value u;
+            u["id"]           = static_cast<Json::Int64>(r["id"].as<int64_t>());
+            u["username"]     = r["username"].as<std::string>();
+            u["display_name"] = r["display_name"].as<std::string>();
+            u["avatar_path"]  = r["avatar_path"].isNull() ? "" : r["avatar_path"].as<std::string>();
+            arr.append(u);
+        }
+        Json::Value resp; resp["bans"] = arr;
+        cb(jsonResp(resp));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
+// POST /api/v1/servers/{id}/bans {user_id} — забанить (и исключить, если участник) — владелец
+void ServerController::banMember(const HttpRequestPtr& req,
+                                 std::function<void(const HttpResponsePtr&)>&& cb,
+                                 int64_t serverId) {
+    int64_t self = req->attributes()->get<int64_t>("user_id");
+    auto json = req->getJsonObject();
+    if (!json || !json->isObject()) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
+    int64_t target = JsonUtils::getInt(*json, "user_id");
+    if (target <= 0) { cb(errResp("Неверный пользователь", k400BadRequest)); return; }
+
+    auto db = app().getDbClient();
+    try {
+        if (auto err = ownerOnly(db, serverId, self)) { cb(err); return; }
+        if (target == self) { cb(errResp("Нельзя забанить владельца сервера", k400BadRequest)); return; }
+        if (db->execSqlSync("SELECT 1 FROM users WHERE id = ?", target).empty()) {
+            cb(errResp("Пользователь не найден", k404NotFound)); return;
+        }
+        db->execSqlSync("INSERT OR IGNORE INTO server_bans(server_id, user_id) VALUES(?, ?)", serverId, target);
+        if (dropMember(db, serverId, target))
+            serverRemoved(target, serverId, serverInfo(db, serverId)["name"].asString());
+
+        Json::Value resp; resp["status"] = "banned";
+        cb(jsonResp(resp));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
+// DELETE /api/v1/servers/{id}/bans/{uid} — снять бан (владелец)
+void ServerController::unbanMember(const HttpRequestPtr& req,
+                                   std::function<void(const HttpResponsePtr&)>&& cb,
+                                   int64_t serverId, int64_t targetId) {
+    int64_t self = req->attributes()->get<int64_t>("user_id");
+    auto db = app().getDbClient();
+    try {
+        if (auto err = ownerOnly(db, serverId, self)) { cb(err); return; }
+        db->execSqlSync("DELETE FROM server_bans WHERE server_id = ? AND user_id = ?", serverId, targetId);
+        Json::Value resp; resp["status"] = "unbanned";
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
         cb(errResp(e.what(), k500InternalServerError));

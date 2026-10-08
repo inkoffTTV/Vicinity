@@ -83,4 +83,14 @@ bool isHexColor(std::string_view s) {
     return true;
 }
 
+std::string escapeLike(std::string_view s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        if (c == '%' || c == '_' || c == '\\') out += '\\';
+        out += c;
+    }
+    return out;
+}
+
 } // namespace TextUtils

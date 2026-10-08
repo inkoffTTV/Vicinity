@@ -5,6 +5,7 @@
 #include "../managers/VoiceManager.h"
 #include <drogon/drogon.h>
 #include <trantor/utils/Logger.h>
+#include <algorithm>
 
 namespace Broadcast {
 
@@ -17,8 +18,7 @@ void toUser(int64_t userId, const Json::Value& ev) {
     WSManager::instance().sendToUser(userId, JsonUtils::write(ev));
 }
 
-// Кто видит канал: участники сервера (серверный канал) или участники беседы
-static std::set<int64_t> channelAudience(int64_t channelId) {
+std::set<int64_t> channelAudience(int64_t channelId) {
     auto db = drogon::app().getDbClient();
     std::set<int64_t> out;
     auto ch = db->execSqlSync("SELECT server_id FROM channels WHERE id = ?", channelId);
@@ -31,9 +31,11 @@ static std::set<int64_t> channelAudience(int64_t channelId) {
     return out;
 }
 
-void toChannel(int64_t channelId, const Json::Value& ev) {
+void toChannel(int64_t channelId, const Json::Value& ev, int64_t exceptUserId) {
     try {
-        toUsers(channelAudience(channelId), ev);
+        auto users = channelAudience(channelId);
+        users.erase(exceptUserId);
+        toUsers(users, ev);
     } catch (const std::exception& e) {
         LOG_WARN << "Broadcast::toChannel " << channelId << ": " << e.what();
     }
@@ -140,6 +142,15 @@ void voiceState(int64_t channelId) {
         for (int64_t uid : VoiceManager::instance().usersIn(channelId)) users.insert(uid);
     const std::string payload = voiceStatePayload(channelId);
     for (int64_t uid : users) WSManager::instance().sendToUser(uid, payload);
+}
+
+void evictFromVoice(int64_t userId, const std::vector<int64_t>& channelIds) {
+    auto& vm = VoiceManager::instance();
+    const int64_t ch = vm.channelOf(userId);
+    if (ch == 0 || std::find(channelIds.begin(), channelIds.end(), ch) == channelIds.end()) return;
+    if (vm.leave(userId) != ch) return;
+    voiceState(ch);
+    WSManager::instance().sendToUser(userId, voiceStatePayload(ch));
 }
 
 } // namespace Broadcast

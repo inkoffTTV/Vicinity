@@ -85,6 +85,23 @@ static void handleVoiceQuery(int64_t userId, const WebSocketConnectionPtr& conn,
         conn->send(Broadcast::voiceStatePayload(row["id"].as<int64_t>()));
 }
 
+// «Печатает…» (docs/API.md §3): всем, кто видит канал, кроме самого пользователя.
+// Чаще раза в 2 с не пересылаем; в недоступный канал — молча игнорируем.
+static void handleTyping(int64_t userId, const Json::Value& root) {
+    int64_t channelId = JsonUtils::getInt(root, "channel_id");
+    if (channelId <= 0) return;
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Typing, userId)) return;
+    auto db = app().getDbClient();
+    if (Access::channel(db, channelId, userId) != Access::Result::Ok) return;
+    auto r = db->execSqlSync("SELECT display_name FROM users WHERE id = ?", userId);
+    Json::Value ev;
+    ev["type"]       = "typing";
+    ev["channel_id"] = static_cast<Json::Int64>(channelId);
+    ev["user_id"]    = static_cast<Json::Int64>(userId);
+    ev["name"]       = r.empty() ? std::string() : r[0]["display_name"].as<std::string>();
+    Broadcast::toChannel(channelId, ev, userId);
+}
+
 static void handleSetPresence(int64_t userId, const Json::Value& root) {
     std::string p = JsonUtils::getStr(root, "presence");
     if (p != "online" && p != "idle" && p != "dnd" && p != "invisible") return;
@@ -161,6 +178,7 @@ void WSController::handleNewMessage(const WebSocketConnectionPtr& conn,
         }
         else if (t == "voice_speaking") handleVoiceSpeaking(userId, conn, root);
         else if (t == "voice_query")    handleVoiceQuery(userId, conn, root);
+        else if (t == "typing")         handleTyping(userId, root);
         else if (t == "set_presence")   handleSetPresence(userId, root);
         else if (kCallTypes.count(t))   handleCallSignal(userId, conn, t, root);
     } catch (const std::exception& e) {

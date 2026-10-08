@@ -15,6 +15,14 @@ public:
     ADD_METHOD_TO(ServerController::addMember,           "/api/v1/servers/{id}/members",    Post, Options, "AuthFilter");
     ADD_METHOD_TO(ServerController::listMembers,         "/api/v1/servers/{id}/members",    Get,  Options, "AuthFilter");
     ADD_METHOD_TO(ServerController::removeMember,        "/api/v1/servers/{id}/members/{uid}", Delete, Options, "AuthFilter");
+    ADD_METHOD_TO(ServerController::leaveServer,         "/api/v1/servers/{id}/leave",      Post,   Options, "AuthFilter");
+    ADD_METHOD_TO(ServerController::deleteServer,        "/api/v1/servers/{id}",            Delete, Options, "AuthFilter");
+    ADD_METHOD_TO(ServerController::updateServer,        "/api/v1/servers/{id}/update",     Post,   Options, "AuthFilter");
+    ADD_METHOD_TO(ServerController::uploadIcon,          "/api/v1/servers/{id}/icon",       Post,   Options, "AuthFilter");
+    ADD_METHOD_TO(ServerController::regenerateInvite,    "/api/v1/servers/{id}/invite",     Post,   Options, "AuthFilter");
+    ADD_METHOD_TO(ServerController::listBans,            "/api/v1/servers/{id}/bans",       Get,    Options, "AuthFilter");
+    ADD_METHOD_TO(ServerController::banMember,           "/api/v1/servers/{id}/bans",       Post,   Options, "AuthFilter");
+    ADD_METHOD_TO(ServerController::unbanMember,         "/api/v1/servers/{id}/bans/{uid}", Delete, Options, "AuthFilter");
     METHOD_LIST_END
 
     void createServer       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
@@ -26,4 +34,12 @@ public:
     void addMember          (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
     void listMembers        (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
     void removeMember       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id, int64_t uid);
+    void leaveServer        (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void deleteServer       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void updateServer       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void uploadIcon         (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void regenerateInvite   (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void listBans           (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void banMember          (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void unbanMember        (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id, int64_t uid);
 };

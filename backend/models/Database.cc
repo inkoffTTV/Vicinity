@@ -131,6 +131,12 @@ void initialize() {
     exec("ALTER TABLE messages ADD COLUMN edited INTEGER NOT NULL DEFAULT 0");
     exec("ALTER TABLE messages ADD COLUMN attachment TEXT DEFAULT NULL");
 
+    // Migration: метаданные вложения (у старых сообщений NULL — это картинки) и ответы
+    exec("ALTER TABLE messages ADD COLUMN attachment_name TEXT DEFAULT NULL");
+    exec("ALTER TABLE messages ADD COLUMN attachment_size INTEGER DEFAULT NULL");
+    exec("ALTER TABLE messages ADD COLUMN attachment_type TEXT DEFAULT NULL");
+    exec("ALTER TABLE messages ADD COLUMN reply_to INTEGER DEFAULT NULL");
+
     // Реакции на сообщения (эмодзи)
     exec("CREATE TABLE IF NOT EXISTS reactions ("
          "message_id INTEGER NOT NULL,"
@@ -139,6 +145,62 @@ void initialize() {
          "PRIMARY KEY(message_id, user_id, emoji),"
          "FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE,"
          "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
+
+    // Закреплённые сообщения: у сообщения не больше одного закрепа (оно живёт в одном канале)
+    exec("CREATE TABLE IF NOT EXISTS pins ("
+         "message_id INTEGER PRIMARY KEY,"
+         "channel_id INTEGER NOT NULL,"
+         "pinned_by INTEGER NOT NULL,"
+         "pinned_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE,"
+         "FOREIGN KEY(channel_id) REFERENCES channels(id) ON DELETE CASCADE,"
+         "FOREIGN KEY(pinned_by) REFERENCES users(id) ON DELETE CASCADE)");
+
+    // Баны на серверах: забаненный не вступит ни по коду, ни через добавление участником
+    exec("CREATE TABLE IF NOT EXISTS server_bans ("
+         "server_id INTEGER NOT NULL,"
+         "user_id INTEGER NOT NULL,"
+         "created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "PRIMARY KEY(server_id, user_id),"
+         "FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,"
+         "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
+
+    // Разовые миграции с данными: номер последней выполненной хранится в PRAGMA user_version,
+    // каждая выполняется в транзакции вместе с повышением номера — ровно один раз.
+    int version = 0;
+    try {
+        version = db->execSqlSync("PRAGMA user_version")[0]["user_version"].as<int>();
+    } catch (const std::exception& e) {
+        LOG_ERROR << "DB init error: " << e.what();
+    }
+    if (version < 1) {
+        // Прочитанное (docs/API.md §4). Существующим участникам — текущий максимум id,
+        // чтобы после обновления у всех не загорелась непрочитанной вся история.
+        auto tr = db->newTransaction();
+        try {
+            tr->execSqlSync("CREATE TABLE IF NOT EXISTS channel_reads ("
+                            "user_id INTEGER NOT NULL,"
+                            "channel_id INTEGER NOT NULL,"
+                            "last_read_id INTEGER NOT NULL DEFAULT 0,"
+                            "PRIMARY KEY(user_id, channel_id),"
+                            "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,"
+                            "FOREIGN KEY(channel_id) REFERENCES channels(id) ON DELETE CASCADE)");
+            tr->execSqlSync("INSERT OR IGNORE INTO channel_reads(user_id, channel_id, last_read_id) "
+                            "SELECT cm.user_id, cm.channel_id, MAX(m.id) FROM channel_members cm "
+                            "JOIN channels c ON c.id = cm.channel_id AND c.server_id IS NULL "
+                            "JOIN messages m ON m.channel_id = cm.channel_id "
+                            "GROUP BY cm.user_id, cm.channel_id");
+            tr->execSqlSync("INSERT OR IGNORE INTO channel_reads(user_id, channel_id, last_read_id) "
+                            "SELECT sm.user_id, c.id, MAX(m.id) FROM server_members sm "
+                            "JOIN channels c ON c.server_id = sm.server_id "
+                            "JOIN messages m ON m.channel_id = c.id "
+                            "GROUP BY sm.user_id, c.id");
+            tr->execSqlSync("PRAGMA user_version = 1");
+        } catch (const std::exception& e) {
+            tr->rollback();
+            LOG_ERROR << "DB migration 1 (channel_reads) failed: " << e.what();
+        }
+    }
 
     // Индексы под частые выборки: история канала, «мои» беседы/серверы/сессии,
     // реакции сообщения, входящие заявки в друзья
@@ -149,6 +211,7 @@ void initialize() {
     exec("CREATE INDEX IF NOT EXISTS idx_reactions_message ON reactions(message_id)");
     exec("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)");
     exec("CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships(addressee_id)");
+    exec("CREATE INDEX IF NOT EXISTS idx_pins_channel ON pins(channel_id)");
 
     LOG_INFO << "Database initialized";
 }

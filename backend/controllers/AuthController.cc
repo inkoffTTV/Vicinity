@@ -157,3 +157,91 @@ void AuthController::me(const HttpRequestPtr& req,
     resp["developer"]         = user->developer;
     cb(jsonResp(std::move(resp)));
 }
+
+// POST /api/v1/auth/password {old_password, new_password} — сменить пароль; остальные сессии завершаются
+void AuthController::changePassword(const HttpRequestPtr& req,
+                                    std::function<void(const HttpResponsePtr&)>&& cb) {
+    int64_t userId = req->attributes()->get<int64_t>("user_id");
+    const std::string token = req->attributes()->get<std::string>("token");
+    auto json = req->getJsonObject();
+    if (!json || !json->isObject()) { cb(error("Invalid JSON", k400BadRequest)); return; }
+
+    std::string oldPassword = JsonUtils::getStr(*json, "old_password");
+    std::string newPassword = JsonUtils::getStr(*json, "new_password");
+    if (newPassword.size() < Vicinity::MIN_PASSWORD_LEN) {
+        cb(error("Password must be at least 8 characters", k400BadRequest)); return;
+    }
+    auto user = UserModel::findById(userId);
+    if (!user) { cb(error("User not found", k404NotFound)); return; }
+    // Не 401: клиент воспринял бы его как конец сессии
+    if (!CryptoUtils::verifyPassword(oldPassword, user->passwordHash)) {
+        cb(error("Неверный текущий пароль", k403Forbidden)); return;
+    }
+    try {
+        drogon::app().getDbClient()->execSqlSync("UPDATE users SET password_hash = ? WHERE id = ?",
+                                                 CryptoUtils::hashPassword(newPassword), userId);
+        // Кто знал старый пароль, теряет доступ на всех остальных устройствах
+        const int revoked = AppSessionManager::instance().deleteOtherSessions(userId, token);
+        Json::Value resp;
+        resp["status"]  = "ok";
+        resp["revoked"] = revoked;
+        cb(jsonResp(std::move(resp)));
+    } catch (const std::exception& e) {
+        cb(error(e.what(), k500InternalServerError));
+    }
+}
+
+// GET /api/v1/auth/sessions — действующие сессии (устройства) пользователя
+void AuthController::sessions(const HttpRequestPtr& req,
+                              std::function<void(const HttpResponsePtr&)>&& cb) {
+    int64_t userId = req->attributes()->get<int64_t>("user_id");
+    const std::string token = req->attributes()->get<std::string>("token");
+    try {
+        Json::Value arr(Json::arrayValue);
+        for (const auto& s : AppSessionManager::instance().listSessions(userId, token)) {
+            Json::Value item;
+            item["id"]         = s.id;
+            item["created_at"] = s.createdAt;
+            item["expires_at"] = s.expiresAt;
+            item["current"]    = s.current;
+            arr.append(item);
+        }
+        Json::Value resp;
+        resp["sessions"] = arr;
+        cb(jsonResp(std::move(resp)));
+    } catch (const std::exception& e) {
+        cb(error(e.what(), k500InternalServerError));
+    }
+}
+
+// DELETE /api/v1/auth/sessions/others — выйти на всех остальных устройствах
+void AuthController::revokeOthers(const HttpRequestPtr& req,
+                                  std::function<void(const HttpResponsePtr&)>&& cb) {
+    int64_t userId = req->attributes()->get<int64_t>("user_id");
+    const std::string token = req->attributes()->get<std::string>("token");
+    try {
+        Json::Value resp;
+        resp["status"]  = "ok";
+        resp["revoked"] = AppSessionManager::instance().deleteOtherSessions(userId, token);
+        cb(jsonResp(std::move(resp)));
+    } catch (const std::exception& e) {
+        cb(error(e.what(), k500InternalServerError));
+    }
+}
+
+// DELETE /api/v1/auth/sessions/{id} — завершить одну сессию (в том числе текущую)
+void AuthController::revokeSession(const HttpRequestPtr& req,
+                                   std::function<void(const HttpResponsePtr&)>&& cb,
+                                   const std::string& id) {
+    int64_t userId = req->attributes()->get<int64_t>("user_id");
+    try {
+        if (!AppSessionManager::instance().deleteSessionById(userId, id)) {
+            cb(error("Сессия не найдена", k404NotFound)); return;
+        }
+        Json::Value resp;
+        resp["status"] = "ok";
+        cb(jsonResp(std::move(resp)));
+    } catch (const std::exception& e) {
+        cb(error(e.what(), k500InternalServerError));
+    }
+}

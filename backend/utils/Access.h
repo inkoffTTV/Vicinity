@@ -24,6 +24,16 @@ Result channel(const drogon::orm::DbClientPtr& db, int64_t channelId, int64_t us
 
 bool isServerMember(const drogon::orm::DbClientPtr& db, int64_t serverId, int64_t userId);
 
+// Владелец сервера; 0 — сервера нет
+int64_t serverOwner(const drogon::orm::DbClientPtr& db, int64_t serverId);
+
+// Пользователь забанен на сервере
+bool isBanned(const drogon::orm::DbClientPtr& db, int64_t serverId, int64_t userId);
+
+// Подзапрос со всеми каналами, доступными пользователю (те же правила, что у channel()):
+// "... WHERE m.channel_id IN (" + kAccessibleChannels + ")" — два параметра, оба user_id
+extern const char* const kAccessibleChannels;
+
 // Друзья (accepted) или общая личка — условие для звонков 1:1
 bool canCall(const drogon::orm::DbClientPtr& db, int64_t userId, int64_t otherId);
 

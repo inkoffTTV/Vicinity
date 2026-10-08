@@ -37,7 +37,7 @@ WebSocket `/ws` принимает токен в заголовке или ка�
 | `attachment` | string | URL вложения или `""` |
 | `attachment_name` | string | **[new]** исходное имя файла (`""` если нет) |
 | `attachment_size` | int | **[new]** размер в байтах (0 если нет) |
-| `attachment_type` | string | **[new]** `"image"` \| `"file"` \| `""` |
+| `attachment_type` | string | **[new]** `"image"` \| `"file"` \| `""`; у сообщений до обновления с вложением — `"image"` |
 | `reactions` | array | `[{emoji, count, users:[ids]}]` |
 | `reply_to` | int | **[new]** id сообщения, на которое ответ, или 0 |
 | `reply` | object\|null | **[new]** `{id, author_id, author_name, text (≤200 симв.), attachment}`; `null` если ответа нет или исходное удалено |
@@ -47,87 +47,118 @@ WebSocket `/ws` принимает токен в заголовке или ка�
 Параметры (все необязательны):
 - `limit` — 1..100, по умолчанию 50;
 - `before=<message_id>` — сообщения с `id < before`;
-- `around=<message_id>` — до `limit/2` сообщений до и после указанного (для перехода к ответу/закрепу/результату поиска).
+- `around=<message_id>` — само сообщение (если оно есть в канале) и до `limit/2` сообщений до и после него
+  (для перехода к ответу/закрепу/результату поиска); при `around` параметр `before` не учитывается.
 
+`limit` вне 1..100 приводится к границам, нечисловой — по умолчанию.
 Ответ: `{"messages": [...], "has_more": bool}` — `messages` **отсортированы по `id` по убыванию**
-(как раньше: новые первыми). `has_more` — есть ли более старые сообщения. Для `around` дополнительно
-`"has_newer": bool`.
+(как раньше: новые первыми). `has_more` — есть ли более старые сообщения, чем вернувшиеся. Для `around` дополнительно
+`"has_newer": bool` — есть ли более новые.
 
 ### POST `/channels/{id}/messages`
 `{"text": "...", "attachment": "/uploads/...", "reply_to": 123, "nonce": "abc"}` — всё кроме `text`/`attachment`
 необязательно. `reply_to` должен принадлежать тому же каналу (иначе 400). `nonce` ≤ 64 символов.
-Ответ 201: `{id, created_at, status:"sent", nonce}`.
+Ответ 201: `{id, created_at, status:"sent", nonce}` + **[new]** `reply_to`, `reply`, `attachment_name`,
+`attachment_size`, `attachment_type` (как в объекте сообщения).
 Лимит частоты: не более 10 сообщений за 5 секунд на пользователя (429).
 
 ### POST `/channels/{id}/attachments` (multipart, поле `file`)
 Картинки: png, jpg/jpeg, gif, webp (проверка сигнатуры) → `/uploads/attachments/...`.
-**[new]** Прочие файлы до 15 МБ (кроме html/htm/svg/js/mjs/xhtml/xml и исполняемых) → `/uploads/files/...`;
-nginx отдаёт их с `Content-Disposition: attachment` и `X-Content-Type-Options: nosniff`.
-Ответ 201: `{url, name, size, type: "image"|"file"}`. При отправке сообщения клиент передаёт
-`attachment` = `url` и **[new]** необязательно `attachment_name`, `attachment_size`, `attachment_type`
-(сервер проверяет, что `attachment` начинается с `/uploads/attachments/` или `/uploads/files/`).
+**[new]** Прочие файлы до 15 МБ (кроме html/htm/shtml/xhtml/mht/svg/xml/xsl/js/mjs/cjs/php и исполняемых:
+exe/bat/cmd/com/scr/pif/cpl/msi/msp/dll/jar/app/lnk/reg/sh/bash/ps1/psm1/vbs/vbe/wsf/wsh/hta — 415) → `/uploads/files/...`
+(расширение — из имени файла). Больше 15 МБ — 413. nginx и сам бэкенд отдают `/uploads/files/` с
+`Content-Disposition: attachment`, все загрузки — с `X-Content-Type-Options: nosniff`.
+Ответ 201: `{url, name, size, type: "image"|"file"}` (`name` — имя файла клиента без пути, до 255 символов).
+При отправке сообщения клиент передаёт `attachment` = `url` и **[new]** необязательно `attachment_name`
+(сервер проверяет, что `attachment` — файл из `/uploads/attachments/` или `/uploads/files/`, иначе 400).
+`attachment_size` и `attachment_type` сервер определяет сам по загруженному файлу; присланные клиентом игнорируются.
 
 ### Редактирование / удаление / реакции
 Без изменений по форме. **[new]** Владелец сервера может удалять чужие сообщения в каналах своего сервера.
+Удаление закреплённого сообщения снимает закреп (`pins_updated`, §6).
 
 ## 3. Набор текста **[new]**
-WS клиент → сервер: `{"type":"typing","channel_id":N}` (не чаще раза в 3 с; сервер игнорирует чаще 1 раза в 2 с).
+WS клиент → сервер: `{"type":"typing","channel_id":N}` (не чаще раза в 3 с; сервер игнорирует чаще 1 раза в 2 с
+от одного пользователя).
 Сервер → получатели канала, кроме отправителя: `{"type":"typing","channel_id":N,"user_id":U,"name":"..."}`.
 Клиент показывает «X печатает…» 6 секунд или до сообщения от этого пользователя.
 
 ## 4. Прочитанное **[new]**
-- POST `/channels/{id}/read` `{"message_id": N}` — запомнить последнее прочитанное (только вперёд).
-  Другим подключениям того же пользователя уходит WS `{"type":"read_state","channel_id":N,"last_read_id":M}`.
+- POST `/channels/{id}/read` `{"message_id": N}` — запомнить последнее прочитанное (только вперёд; не дальше
+  последнего сообщения канала). Ответ: `{"channel_id":N,"last_read_id":M}` — текущее значение.
+  Если отметка сдвинулась, всем подключениям пользователя (REST-запрос нельзя сопоставить с WS-подключением,
+  поэтому и отправившему) уходит WS `{"type":"read_state","channel_id":N,"last_read_id":M}`.
 - GET `/unread` → `{"channels":[{"channel_id":N,"unread":K,"mentions":M,"last_message_id":L}]}` — по всем доступным
   каналам с непрочитанным (`unread` > 0). Считаются сообщения других пользователей с `id > last_read_id`
-  (не более 999). `mentions` — из них содержащие `@<username>` текущего пользователя (без учёта регистра).
+  (не более 999; канал без отметки, например после вступления на сервер, — с начала истории).
+  `mentions` — из них содержащие `@<username>` текущего пользователя (без учёта регистра; не часть e-mail
+  и не начало более длинного логина: `@bob` не упоминает `bob.smith`, а `@bob.` в конце фразы — упоминает).
 - Таблица `channel_reads(user_id, channel_id, last_read_id)`. При первом создании таблицы
   существующим участникам проставляется текущий максимум `id` — чтобы после обновления у всех не загорелась
-  вся история.
+  вся история (разовая миграция, номер в `PRAGMA user_version`).
 
 ## 5. Поиск **[new]**
 GET `/search?q=<строка ≥2 символов>&channel_id=N` или `&server_id=S` или без них (все доступные каналы).
 Ответ: `{"results":[ <сообщение> + "channel_name", "server_id" (0 для личек/бесед) ]}`, не более 50, новые первыми.
+Ищется подстрока в тексте; `%` и `_` — буквально; регистр не учитывается только для латиницы. `q` обрезается по краям,
+короче 2 символов — 400. `channel_name` у лички — имя собеседника. Если заданы оба, действует `channel_id`.
+Нет канала/сервера — 404, нет доступа — 403. Лимит: 30 запросов в минуту (429).
 
 ## 6. Закреплённые **[new]**
-- GET `/channels/{id}/pins` → `{"pins":[ <сообщение> + "pinned_by", "pinned_at" ]}`
-- POST `/channels/{id}/pins` `{"message_id":N}`; DELETE `/channels/{id}/pins/{mid}`.
-  В личках/беседах — любой участник, в серверных каналах — владелец сервера.
-- WS получателям канала: `{"type":"pins_updated","channel_id":N}`.
+- GET `/channels/{id}/pins` → `{"pins":[ <сообщение> + "pinned_by" (id), "pinned_at" ]}`, последние закреплённые первыми.
+- POST `/channels/{id}/pins` `{"message_id":N}` → `{"status":"pinned"}` (сообщения нет в канале — 404);
+  DELETE `/channels/{id}/pins/{mid}` → `{"status":"unpinned"}`. Оба идемпотентны.
+  В личках/беседах — любой участник, в серверных каналах — владелец сервера (иначе 403).
+- WS получателям канала, если закрепы изменились: `{"type":"pins_updated","channel_id":N}`.
 
 ## 7. Лички и беседы
-- GET `/dms` — как раньше + **[new]** `last_message` (`{id, author_id, author_name, text, attachment, created_at}` или `null`).
+- GET `/dms` — как раньше + **[new]** `last_message` (`{id, author_id, author_name, text (≤200 симв.), attachment, created_at}` или `null`).
 - GET `/channels` (беседы) — как раньше + **[new]** `owner_id`, `last_message`.
-- **[new]** GET `/channels/{id}/members` → `{"members":[{id, username, display_name, avatar_path, presence, is_owner}]}`.
-- **[new]** POST `/channels/{id}/leave` — выйти из беседы (не из лички). Остальным: WS
-  `{"type":"channel_member_left","channel_id":N,"user_id":U}`; ушедшему (во все его подключения):
-  `{"type":"channel_removed","channel_id":N}`.
-- **[new]** POST `/channels/{id}/update` `{"name": "..."}` — переименовать беседу (участник беседы) или
-  серверный канал (владелец сервера). WS получателям: `{"type":"channel_updated","channel_id":N,"name":"..."}`.
-- **[new]** DELETE `/channels/{id}` — удалить серверный канал (владелец сервера) или беседу (её владелец).
-  WS: для серверного — `server_channels_changed`, для беседы — `channel_removed` всем участникам.
-- **[new]** при добавлении в беседу остальным участникам: `{"type":"channel_member_joined","channel_id":N,"user_id":U}`.
+- **[new]** GET `/channels/{id}/members` → `{"members":[{id, username, display_name, avatar_path, presence, is_owner}]}`
+  (у беседы — в порядке вступления; у канала сервера — участники сервера по имени, `is_owner` — владелец сервера).
+- **[new]** POST `/channels/{id}/leave` → `{"status":"left"}` — выйти из беседы (из лички и канала сервера — 400).
+  Остальным: WS `{"type":"channel_member_left","channel_id":N,"user_id":U,"owner_id":O}`; ушедшему
+  (во все его подключения): `{"type":"channel_removed","channel_id":N}`. Ушёл владелец — владельцем становится
+  самый давний участник (`owner_id` в событии); ушёл последний — беседа удаляется.
+- **[new]** POST `/channels/{id}/update` `{"name": "..."}` → `{"channel_id":N,"name":"..."}` — переименовать беседу
+  (участник беседы) или серверный канал (владелец сервера); личку — 400. WS получателям:
+  `{"type":"channel_updated","channel_id":N,"name":"..."}`, для серверного канала ещё `server_channels_changed`.
+- **[new]** DELETE `/channels/{id}` → `{"status":"deleted"}` — удалить серверный канал (владелец сервера) или беседу
+  (её владелец); личку — 400. Сообщения, реакции, закрепы и отметки прочтения удаляются вместе с каналом,
+  сидящие в его голосе выходят из него. WS: для серверного — `server_channels_changed`, для беседы —
+  `channel_removed` всем участникам.
+- **[new]** при добавлении в беседу остальным участникам: `{"type":"channel_member_joined","channel_id":N,"user_id":U}`
+  (добавленному — как раньше `channel_added`).
 
 ## 8. Серверы
 - GET `/servers` — как раньше.
 - POST `/servers/join` `{code}` — как раньше; **[new]** забаненным — 403.
+- POST `/servers/{id}/members` `{user_id}` — как раньше; **[new]** забаненного — 403.
 - **[removed]** POST `/servers/{id}/join` (вступление без кода по id) — отвечает 403, если у пользователя нет приглашения.
-- **[new]** POST `/servers/{id}/leave` — выйти (владельцу нельзя — 400).
-- **[new]** DELETE `/servers/{id}` — удалить сервер (владелец). Всем участникам: `server_removed` (существующее событие).
-- **[new]** POST `/servers/{id}/update` `{"name": "..."}` — владелец. POST `/servers/{id}/icon` (multipart `file`, картинка) — владелец.
+- **[new]** POST `/servers/{id}/leave` → `{"status":"left"}` — выйти (владельцу нельзя — 400, не участнику — 403).
+  Ушедшему во все его подключения тоже уходит `server_member_left` про него самого.
+- **[new]** DELETE `/servers/{id}` → `{"status":"deleted"}` — удалить сервер (владелец) вместе с каналами, сообщениями,
+  реакциями, закрепами, отметками прочтения, участниками и банами. Всем участникам: `server_removed`
+  (существующее событие, `{server_id, name}`).
+- **[new]** POST `/servers/{id}/update` `{"name": "..."}` — владелец. POST `/servers/{id}/icon` (multipart `file`, картинка
+  png/jpg/gif/webp, иначе 415) — владелец. Ответ обоих: `{"server_id":S,"name":"...","icon":"..."}`.
   WS участникам: `{"type":"server_updated","server_id":S,"name":"...","icon":"/uploads/..."}`.
-- **[new]** POST `/servers/{id}/invite` — владелец, новый код: `{"invite_code":"..."}`.
-- **[new]** баны: POST `/servers/{id}/bans` `{user_id}` (владелец; заодно исключает), DELETE `/servers/{id}/bans/{uid}`,
-  GET `/servers/{id}/bans` → `{"bans":[{id, username, display_name, avatar_path}]}`.
+- **[new]** POST `/servers/{id}/invite` — владелец, новый код: `{"invite_code":"..."}`; старый перестаёт работать.
+- **[new]** баны (только владелец, иначе 403; сервера нет — 404): POST `/servers/{id}/bans` `{user_id}` → `{"status":"banned"}`
+  (заодно исключает: ему `server_removed`, остальным `server_member_left`; себя — 400), DELETE `/servers/{id}/bans/{uid}`
+  → `{"status":"unbanned"}`, GET `/servers/{id}/bans` → `{"bans":[{id, username, display_name, avatar_path}]}`.
 - **[new]** WS участникам при изменениях состава: `{"type":"server_member_joined","server_id":S,"user_id":U}`,
   `{"type":"server_member_left","server_id":S,"user_id":U}`; при создании/переименовании/удалении канала:
   `{"type":"server_channels_changed","server_id":S}`.
 
 ## 9. Аккаунт **[new]**
-- POST `/auth/password` `{"old_password","new_password"}` — новый ≥ 8 символов; остальные сессии завершаются.
-  Лимит частоты как у входа.
-- GET `/auth/sessions` → `{"sessions":[{id, created_at, expires_at, current}]}` (`id` — короткий непрозрачный идентификатор).
-- DELETE `/auth/sessions/others` — выйти на всех остальных устройствах. DELETE `/auth/sessions/{id}`.
+- POST `/auth/password` `{"old_password","new_password"}` → `{"status":"ok","revoked":N}` — новый ≥ 8 символов (иначе 400);
+  неверный старый пароль — 403 (не 401: текущая сессия жива). Остальные сессии завершаются, их WS-подключения
+  закрываются; текущая остаётся. Лимит частоты как у входа.
+- GET `/auth/sessions` → `{"sessions":[{id, created_at, expires_at, current}]}` — действующие, новые первыми
+  (`id` — короткий непрозрачный идентификатор, 16 hex).
+- DELETE `/auth/sessions/others` → `{"status":"ok","revoked":N}` — выйти на всех остальных устройствах.
+  DELETE `/auth/sessions/{id}` → `{"status":"ok"}` (можно и текущую; чужой/неизвестный id — 404).
 
 ## 10. Профили **[new]**
 При изменении имени/аватара/баннера/цвета/статуса друзьям и участникам общих серверов уходит
@@ -155,5 +186,5 @@ GET `/search?q=<строка ≥2 символов>&channel_id=N` или `&serve
 TURN с временными учётками coturn `use-auth-secret`, если в конфиге задан секрет; иначе только STUN.
 
 ## 13. Лимиты
-Помимо входа/регистрации — по пользователю: отправка сообщений (10/5 с), загрузки (20/мин),
-заявки в друзья (20/мин), поиск (30/мин); превышение — 429.
+Помимо входа/регистрации/смены пароля — по пользователю: отправка сообщений (10/5 с), загрузки (20/мин),
+заявки в друзья (20/мин), поиск (30/мин); превышение — 429. WS `typing` чаще раза в 2 с молча отбрасывается.

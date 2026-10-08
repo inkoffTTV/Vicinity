@@ -26,4 +26,7 @@ namespace TextUtils {
 
     // Цвет вида #RRGGBB
     bool isHexColor(std::string_view s);
+
+    // Экранирование для LIKE ... ESCAPE '\': символы % и _ (и сам \) ищутся буквально
+    std::string escapeLike(std::string_view s);
 }

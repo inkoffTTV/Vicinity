@@ -2,6 +2,7 @@
 #include "../models/User.h"
 #include "../utils/PresenceUtil.h"
 #include "../utils/JsonUtils.h"
+#include "../utils/Messages.h"
 #include <drogon/HttpResponse.h>
 
 using namespace drogon;
@@ -189,15 +190,16 @@ void UserController::listDms(const HttpRequestPtr& req,
     auto db = app().getDbClient();
     try {
         auto result = db->execSqlSync(
-            "SELECT c.id AS channel_id, u.id AS user_id, u.username, u.display_name, u.avatar_path, "
-            "       (SELECT MAX(id) FROM messages WHERE channel_id = c.id) AS last_msg "
+            "SELECT c.id AS channel_id, u.id AS user_id, u.username, u.display_name, u.avatar_path, " +
+            Messages::kLastColumns + " "
             "FROM channels c "
             "JOIN channel_members me    ON c.id = me.channel_id    AND me.user_id = ? "
             "JOIN channel_members other ON c.id = other.channel_id AND other.user_id != ? "
-            "JOIN users u ON u.id = other.user_id "
+            "JOIN users u ON u.id = other.user_id " +
+            Messages::kLastJoin + " "
             "WHERE c.type = 'dm' "
             "  AND (SELECT COUNT(*) FROM channel_members WHERE channel_id = c.id) = 2 "
-            "ORDER BY last_msg DESC, c.created_at DESC",   // самые свежие беседы — сверху
+            "ORDER BY lm.id DESC, c.created_at DESC",   // самые свежие беседы — сверху
             selfId, selfId);
         Json::Value arr(Json::arrayValue);
         for (const auto& row : result) {
@@ -207,6 +209,7 @@ void UserController::listDms(const HttpRequestPtr& req,
             d["username"]     = row["username"].as<std::string>();
             d["display_name"] = row["display_name"].as<std::string>();
             d["avatar_path"]  = row["avatar_path"].isNull() ? "" : row["avatar_path"].as<std::string>();
+            d["last_message"] = Messages::lastFromRow(row);
             arr.append(d);
         }
         Json::Value resp; resp["dms"] = arr;

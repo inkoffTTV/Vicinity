@@ -40,8 +40,11 @@ std::optional<SessionInfo> AppSessionManager::validate(const std::string& token)
 }
 
 void AppSessionManager::deleteSession(const std::string& token) {
+    deleteByHash(CryptoUtils::sha256Hex(token));
+}
+
+void AppSessionManager::deleteByHash(const std::string& tokenHash) {
     auto db = drogon::app().getDbClient();
-    const std::string tokenHash = CryptoUtils::sha256Hex(token);
     try {
         db->execSqlSync("DELETE FROM sessions WHERE token = ?", tokenHash);
     } catch (const std::exception& e) {
@@ -49,6 +52,46 @@ void AppSessionManager::deleteSession(const std::string& token) {
     }
     // Иначе уже открытый сокет продолжал бы получать события после выхода
     WSManager::instance().closeSession(tokenHash);
+}
+
+// id сессии для клиента: производный от хэша токена, по нему нельзя ни войти, ни найти строку в БД
+static std::string publicId(const std::string& tokenHash) {
+    return CryptoUtils::sha256Hex("session-id:" + tokenHash).substr(0, 16);
+}
+
+std::vector<SessionRecord> AppSessionManager::listSessions(int64_t userId, const std::string& currentToken) {
+    const std::string currentHash = CryptoUtils::sha256Hex(currentToken);
+    auto rows = drogon::app().getDbClient()->execSqlSync(
+        "SELECT token, created_at, expires_at FROM sessions "
+        "WHERE user_id = ? AND expires_at > datetime('now') ORDER BY created_at DESC, rowid DESC",
+        userId);
+    std::vector<SessionRecord> out;
+    for (const auto& r : rows) {
+        const std::string hash = r["token"].as<std::string>();
+        out.push_back(SessionRecord{publicId(hash), r["created_at"].as<std::string>(),
+                                    r["expires_at"].as<std::string>(), hash == currentHash});
+    }
+    return out;
+}
+
+int AppSessionManager::deleteOtherSessions(int64_t userId, const std::string& currentToken) {
+    const std::string currentHash = CryptoUtils::sha256Hex(currentToken);
+    auto rows = drogon::app().getDbClient()->execSqlSync(
+        "DELETE FROM sessions WHERE user_id = ? AND token != ? RETURNING token", userId, currentHash);
+    for (const auto& r : rows) WSManager::instance().closeSession(r["token"].as<std::string>());
+    return static_cast<int>(rows.size());
+}
+
+bool AppSessionManager::deleteSessionById(int64_t userId, const std::string& id) {
+    auto rows = drogon::app().getDbClient()->execSqlSync(
+        "SELECT token FROM sessions WHERE user_id = ?", userId);
+    for (const auto& r : rows) {
+        const std::string hash = r["token"].as<std::string>();
+        if (publicId(hash) != id) continue;
+        deleteByHash(hash);
+        return true;
+    }
+    return false;
 }
 
 void AppSessionManager::closeExpiredSessions() {
