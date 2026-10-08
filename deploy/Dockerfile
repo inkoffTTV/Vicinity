@@ -7,7 +7,7 @@ FROM ubuntu:22.04 AS build
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake git ca-certificates \
-        libjsoncpp-dev uuid-dev zlib1g-dev libssl-dev libsqlite3-dev libcurl4-openssl-dev \
+        libjsoncpp-dev uuid-dev zlib1g-dev libssl-dev libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Drogon (с trantor-сабмодулем): та же версия и те же опции, что в CI (.github/workflows)
@@ -19,6 +19,11 @@ RUN git clone --recurse-submodules --depth 1 --branch "$DROGON_VERSION" \
         -DBUILD_CTL=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF \
     && cmake --build /tmp/drogon/build -j"$(nproc)" --target install \
     && rm -rf /tmp/drogon
+
+# libcurl — письма с кодом подтверждения (SMTP). Отдельным слоем после Drogon, чтобы его долгая
+# сборка оставалась в кэше Docker у тех, кто уже собирал образ
+RUN apt-get update && apt-get install -y --no-install-recommends libcurl4-openssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Сам сервер
 COPY backend/ /app/backend/
