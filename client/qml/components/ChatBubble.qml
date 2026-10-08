@@ -22,6 +22,8 @@ Item {
     property bool   edited:       false
     property string rxJson:       "[]"     // реакции: [{emoji,count,me}]
     property string attachment:   ""       // URL картинки-вложения ("" = нет)
+    property string fileUrl:      ""       // URL файла-вложения, не картинки ("" = нет)
+    property string fileName:     ""       // его имя для показа
 
     signal openProfile(int userId)
     signal react(string emoji)
@@ -167,6 +169,25 @@ Item {
             }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                 onClicked: Qt.openUrlExternally(root.attachment) }
+        }
+
+        // Файл-вложение: имя ссылкой, открывается/скачивается браузером
+        Rectangle {
+            visible: root.fileUrl.length > 0
+            width: Math.min(fileRow.implicitWidth + 20, 320, parent.width)
+            height: 34
+            radius: 8; color: themeManager.railColor
+            Text {
+                id: fileRow
+                anchors.verticalCenter: parent.verticalCenter
+                x: 10; width: parent.width - 20
+                textFormat: Text.PlainText
+                elide: Text.ElideMiddle
+                text: "📎 " + (root.fileName.length > 0 ? root.fileName : "Файл")
+                color: themeManager.textColor; font.pixelSize: 13
+            }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                onClicked: Qt.openUrlExternally(root.fileUrl) }
         }
 
         // Реакции-чипы

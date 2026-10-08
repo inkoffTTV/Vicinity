@@ -54,9 +54,12 @@ export interface Message {
   text: string;
   created_at: string;
   edited: boolean;
+  /** URL вложения любого типа ("" — нет). Сервер кладёт в своё `attachment` только картинки
+   *  (для старых десктопов), URL файла — в `attachment_url`; withAttachmentUrl сводит их сюда. */
   attachment: string;
   reactions: Reaction[];
   // Поля нового сервера; старый их не присылает
+  attachment_url?: string;
   attachment_name?: string;
   attachment_size?: number;
   attachment_type?: AttachmentType;
@@ -71,6 +74,11 @@ export interface Message {
   nonce?: string;
   /** Только у своих ещё не подтверждённых сервером сообщений */
   local?: 'sending' | 'failed';
+}
+
+/** Сообщение с сервера: URL вложения любого типа — в `attachment` (docs/API.md §2) */
+export function withAttachmentUrl<T extends { attachment?: string; attachment_url?: string }>(m: T): T {
+  return m.attachment_url ? { ...m, attachment: m.attachment_url } : m;
 }
 
 export interface MessagePage {
@@ -345,7 +353,7 @@ export const api = {
         // Старый сервер сортирует по времени и игнорирует before — порядок и границу задаём сами
         messages: r.messages
           .filter((m) => !opts.before || m.id < opts.before)
-          .map((m) => ({ ...m, channel_id: channelId }))
+          .map((m) => withAttachmentUrl({ ...m, channel_id: channelId }))
           .sort((a, b) => a.id - b.id),
         hasMore: typeof r.has_more === 'boolean' ? r.has_more : null,
       }),
@@ -422,7 +430,7 @@ export const api = {
       `/channels/${channelId}/messages?around=${around}&limit=${limit}`,
     ).then(
       (r): AroundPage => ({
-        messages: r.messages.map((m) => ({ ...m, channel_id: channelId })).sort((a, b) => a.id - b.id),
+        messages: r.messages.map((m) => withAttachmentUrl({ ...m, channel_id: channelId })).sort((a, b) => a.id - b.id),
         hasMore: r.has_more === true,
         hasNewer: r.has_newer === true,
       }),
@@ -434,9 +442,9 @@ export const api = {
     const p = new URLSearchParams({ q });
     if (scope.channel_id) p.set('channel_id', String(scope.channel_id));
     else if (scope.server_id) p.set('server_id', String(scope.server_id));
-    return get<{ results: SearchResult[] }>(`/search?${p}`).then((r) => r.results);
+    return get<{ results: SearchResult[] }>(`/search?${p}`).then((r) => r.results.map(withAttachmentUrl));
   },
-  pins: (channelId: number) => get<{ pins: PinnedMessage[] }>(`/channels/${channelId}/pins`).then((r) => r.pins),
+  pins: (channelId: number) => get<{ pins: PinnedMessage[] }>(`/channels/${channelId}/pins`).then((r) => r.pins.map(withAttachmentUrl)),
   pin: (channelId: number, message_id: number) => post(`/channels/${channelId}/pins`, { message_id }),
   unpin: (channelId: number, mid: number) => del(`/channels/${channelId}/pins/${mid}`),
   channelMembers: (channelId: number) =>

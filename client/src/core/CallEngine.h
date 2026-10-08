@@ -172,8 +172,13 @@ private:
     std::atomic<int>  m_videoPt{-1}, m_screenPt{-1};
     QElapsedTimer     m_vClock;               // RTP-таймстемпы видео (90 кГц)
     QElapsedTimer     m_pliTimer, m_sPliTimer;// рейт-лимит своих PLI
-    bool              m_remoteVideo  = false;
-    bool              m_remoteScreen = false;
+    // Показывать ли плитки камеры/экрана собеседника (GUI-поток пишет, поток сети читает)
+    std::atomic<bool> m_remoteVideo{false};
+    std::atomic<bool> m_remoteScreen{false};
+    // Что собеседник сообщил по ctrl в этом звонке: -1 — ещё ничего, 0 — выключил, 1 — включил.
+    // Пишет поток сети (коллбек ctrl) — в том же потоке, что и кадры, без очереди GUI.
+    std::atomic<int>  m_ctrlVideo{-1};
+    std::atomic<int>  m_ctrlScreen{-1};
 
     QString    m_state   = "idle";
     qlonglong  m_peerId  = 0;

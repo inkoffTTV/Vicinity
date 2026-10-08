@@ -145,12 +145,15 @@ void CallEngine::setPeer(qlonglong id, const QString& name) {
 void CallEngine::setRemoteVideo(bool on) {
     if (m_remoteVideo != on) {
         m_remoteVideo = on;
+        // Последний кадр выключенной камеры не должен всплыть, когда плитка появится снова
+        if (!on && m_video) m_video->clearRemoteVideo();
         emit videoStateChanged();
     }
 }
 void CallEngine::setRemoteScreen(bool on) {
     if (m_remoteScreen != on) {
         m_remoteScreen = on;
+        if (!on && m_video) m_video->clearRemoteScreen();
         emit videoStateChanged();
     }
 }
@@ -425,9 +428,13 @@ void CallEngine::setupCtrl(std::shared_ptr<rtc::DataChannel> ch) {
     ch->onMessage([this, gen](rtc::message_variant msg) {
         if (!std::holds_alternative<rtc::string>(msg)) return;
         const QByteArray raw = QByteArray::fromStdString(std::get<rtc::string>(msg));
-        QMetaObject::invokeMethod(this, [this, gen, raw]() {
+        const QJsonObject o = QJsonDocument::fromJson(raw).object();
+        // Состояние из ctrl — сразу, в потоке сети: кадры, отправленные до «выключил», но
+        // пришедшие после него (SRTP и SCTP — разные пути), уже не включат плитку обратно
+        if (o.contains("video"))  m_ctrlVideo  = o["video"].toBool()  ? 1 : 0;
+        if (o.contains("screen")) m_ctrlScreen = o["screen"].toBool() ? 1 : 0;
+        QMetaObject::invokeMethod(this, [this, gen, o]() {
             if (gen != m_gen) return;
-            const QJsonObject o = QJsonDocument::fromJson(raw).object();
             if (o.contains("video"))  setRemoteVideo(o["video"].toBool());
             if (o.contains("screen")) setRemoteScreen(o["screen"].toBool());
         }, Qt::QueuedConnection);
@@ -851,10 +858,14 @@ void CallEngine::onIncomingH264(const QByteArray& au) {
         for (int y = 0; y < h;     y++) memcpy(dy + y * w,       dst[0] + y * sy, w);
         for (int y = 0; y < h / 2; y++) memcpy(du + y * (w / 2), dst[1] + y * sc, w / 2);
         for (int y = 0; y < h / 2; y++) memcpy(dv + y * (w / 2), dst[2] + y * sc, w / 2);
+        // Собеседник сообщил, что камера выключена: запоздавший кадр не показываем (декодер
+        // его всё равно съел — референсы целы). Включит плитку снова только ctrl {"video":true}.
+        const int ctrl = m_ctrlVideo;
+        if (ctrl == 0) return;
         m_video->displayRemoteFrame(i420, w, h);
-        // Страховка: кадры идут, а ctrl-сообщение могло потеряться
-        if (!m_remoteVideo)
-            QMetaObject::invokeMethod(this, [this]() { if (m_live) setRemoteVideo(true); },
+        // Страховка для собеседника без ctrl (канал не открылся): кадры идут — показываем
+        if (ctrl < 0 && !m_remoteVideo)
+            QMetaObject::invokeMethod(this, [this]() { if (m_live && m_ctrlVideo < 0) setRemoteVideo(true); },
                                       Qt::QueuedConnection);
     }
 }
@@ -903,9 +914,11 @@ void CallEngine::onIncomingScreenH264(const QByteArray& au) {
         for (int y = 0; y < h;     y++) memcpy(dy + y * w,       dst[0] + y * sy, w);
         for (int y = 0; y < h / 2; y++) memcpy(du + y * (w / 2), dst[1] + y * sc, w / 2);
         for (int y = 0; y < h / 2; y++) memcpy(dv + y * (w / 2), dst[2] + y * sc, w / 2);
+        const int ctrl = m_ctrlScreen;
+        if (ctrl == 0) return;   // показ экрана выключен — запоздавший кадр не показываем
         m_video->displayRemoteScreen(i420, w, h);
-        if (!m_remoteScreen)
-            QMetaObject::invokeMethod(this, [this]() { if (m_live) setRemoteScreen(true); },
+        if (ctrl < 0 && !m_remoteScreen)
+            QMetaObject::invokeMethod(this, [this]() { if (m_live && m_ctrlScreen < 0) setRemoteScreen(true); },
                                       Qt::QueuedConnection);
     }
 }
@@ -956,6 +969,8 @@ void CallEngine::teardown() {
     if (m_video && m_video->active()) m_video->stop();
     setRemoteVideo(false);
     setRemoteScreen(false);
+    m_ctrlVideo  = -1;   // следующий звонок — заново
+    m_ctrlScreen = -1;
     if (m_video) m_video->clearRemote();
     setPeer(0, QString());
     setState("idle");

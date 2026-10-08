@@ -186,6 +186,7 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
         std::optional<int64_t>     attSize, reply;
         if (!attachment.empty()) {
             attName = Uploads::cleanFileName(JsonUtils::getStr(*json, "attachment_name"));
+            if (attName->empty()) attName = Uploads::downloadName(attachment);   // имя, запомненное при загрузке
             attSize = Uploads::fileSize(attachment);
             attType = attachmentType;
         }
@@ -209,7 +210,7 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
         resp["created_at"] = msg["created_at"];
         resp["status"]     = "sent";
         resp["nonce"]      = nonce;
-        for (const char* key : {"reply_to", "reply", "attachment_name", "attachment_size", "attachment_type"})
+        for (const char* key : {"reply_to", "reply", "attachment_url", "attachment_name", "attachment_size", "attachment_type"})
             resp[key] = msg[key];
         cb(HttpUtils::json(std::move(resp), k201Created));
     } catch (const std::exception& e) {

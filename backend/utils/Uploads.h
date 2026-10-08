@@ -42,6 +42,15 @@ std::string attachmentType(const std::string& url);
 // Размер вложения по его URL; 0 — это не вложение или файла нет
 int64_t fileSize(const std::string& url);
 
+// Исходное имя загруженного файла-вложения (/uploads/files/...) — для Content-Disposition при скачивании.
+// rememberName запоминает его при загрузке, downloadName возвращает ("" — неизвестно).
+void rememberName(const std::string& url, const std::string& name);
+std::string downloadName(const std::string& url);
+
+// Content-Disposition для скачивания: attachment; filename="<ASCII-замена>"; filename*=UTF-8''<имя в %-кодировке>
+// (RFC 6266/5987); без имени — просто attachment
+std::string contentDisposition(const std::string& name);
+
 // Имя файла от клиента для показа: последний компонент пути, корректная UTF-8 без управляющих
 // символов, до 255 символов; "" — имени нет или оно негодное
 std::string cleanFileName(std::string_view raw);

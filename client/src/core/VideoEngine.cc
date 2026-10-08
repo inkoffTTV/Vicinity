@@ -307,6 +307,14 @@ void VideoEngine::displayRemoteScreen(const QByteArray& i420, int w, int h) {
 }
 
 void VideoEngine::clearRemote() {
-    if (QVideoSink* s = m_remote)       s->setVideoFrame(QVideoFrame());
+    clearRemoteVideo();
+    clearRemoteScreen();
+}
+
+void VideoEngine::clearRemoteVideo() {
+    if (QVideoSink* s = m_remote) s->setVideoFrame(QVideoFrame());
+}
+
+void VideoEngine::clearRemoteScreen() {
     if (QVideoSink* s = m_remoteScreen) s->setVideoFrame(QVideoFrame());
 }

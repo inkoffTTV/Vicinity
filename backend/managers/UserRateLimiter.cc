@@ -15,6 +15,12 @@ Limit limitFor(UserRateLimiter::Action a) {
         case A::CallInvite:    return {10, 60};
         case A::Typing:        return {1, 2};
         case A::Search:        return {30, 60};
+        case A::Presence:      return {10, 60};
+        case A::VoiceJoin:     return {20, 60};
+        case A::VoiceQuery:    return {30, 60};
+        case A::VoiceSpeaking: return {50, 10};
+        case A::CallSignal:    return {100, 20};
+        case A::VoiceBytes:    return {64000, 64000.0 / 48000.0};
     }
     return {10, 60};
 }
@@ -25,7 +31,7 @@ UserRateLimiter& UserRateLimiter::instance() {
     return inst;
 }
 
-bool UserRateLimiter::allow(Action action, int64_t userId) {
+bool UserRateLimiter::allow(Action action, int64_t userId, double cost) {
     const auto now = std::chrono::steady_clock::now();
     const Limit lim = limitFor(action);
     std::lock_guard<std::mutex> lock(m_);
@@ -37,8 +43,8 @@ bool UserRateLimiter::allow(Action action, int64_t userId) {
     const double elapsed = std::chrono::duration<double>(now - b.last).count();
     b.tokens = std::min(lim.capacity, b.tokens + elapsed * lim.capacity / lim.periodSec);
     b.last   = now;
-    if (b.tokens < 1.0) return false;
-    b.tokens -= 1.0;
+    if (b.tokens < cost) return false;
+    b.tokens -= cost;
     return true;
 }
 

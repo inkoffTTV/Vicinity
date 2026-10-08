@@ -48,6 +48,8 @@ public:
     void displayRemoteFrame(const QByteArray& i420, int w, int h);    // камера
     void displayRemoteScreen(const QByteArray& i420, int w, int h);   // экран
     void clearRemote();   // убрать последние кадры (конец видео/звонка)
+    void clearRemoteVideo();    // только камера собеседника (он её выключил)
+    void clearRemoteScreen();   // только экран собеседника
 
 signals:
     void activeChanged();

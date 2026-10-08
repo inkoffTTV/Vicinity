@@ -6,6 +6,7 @@
 #include "../utils/Uploads.h"
 #include "../../shared/crypto/common_consts.h"
 #include <trantor/utils/Logger.h>
+#include <cctype>
 #include <optional>
 
 using namespace drogon::orm;
@@ -30,9 +31,16 @@ static bool validBio(const std::string& bio) {
            TextUtils::utf8Length(bio) <= Vicinity::MAX_BIO_LEN;
 }
 
-// Цвет профиля: #RRGGBB или пусто (без цвета)
-static bool validAccent(const std::string& color) {
-    return color.empty() || TextUtils::isHexColor(color);
+// Цвет профиля: #RRGGBB или пусто (без цвета). Десктоп (ThemeManager::colorToHex) присылает
+// #AARRGGBB, если у цвета есть прозрачность, — принимаем и храним без альфы.
+// false — цвет негодный; иначе color приведён к #RRGGBB или пуст.
+static bool normalizeAccent(std::string& color) {
+    if (color.empty() || TextUtils::isHexColor(color)) return true;
+    const auto hex = [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; };
+    if (color.size() != 9 || !hex(color[1]) || !hex(color[2]) || !TextUtils::isHexColor("#" + color.substr(3)))
+        return false;
+    color = "#" + color.substr(3);
+    return true;
 }
 
 void ProfileController::updateProfile(const HttpRequestPtr& req,
@@ -170,8 +178,8 @@ void ProfileController::customize(const HttpRequestPtr& req,
     std::string bio         = JsonUtils::getStr(*json, "bio");
     std::string accent      = JsonUtils::getStr(*json, "accent_color");
     if (!validBio(bio)) { callback(errResp("Bio must be 190 characters or less", k400BadRequest)); return; }
-    // Цвет профиля доступен всем (платных тарифов нет), но только в формате #RRGGBB
-    if (!validAccent(accent)) { callback(errResp("Цвет — в формате #RRGGBB", k400BadRequest)); return; }
+    // Цвет профиля доступен всем (платных тарифов нет), но только в формате #RRGGBB (#AARRGGBB — без альфы)
+    if (!normalizeAccent(accent)) { callback(errResp("Цвет — в формате #RRGGBB", k400BadRequest)); return; }
     if (!TextUtils::trim(displayName).empty()) {
         auto clean = cleanDisplayName(displayName);
         if (!clean) { callback(errResp("Имя — от 1 до 32 символов", k400BadRequest)); return; }
@@ -212,7 +220,7 @@ void ProfileController::updateAccent(const HttpRequestPtr& req,
     if (!json || !json->isObject()) { callback(errResp("Invalid JSON", k400BadRequest)); return; }
     // Раньше требовалась подписка Standard, но оплаты нет — цвет доступен всем
     std::string color = JsonUtils::getStr(*json, "color");
-    if (!validAccent(color)) { callback(errResp("Цвет — в формате #RRGGBB", k400BadRequest)); return; }
+    if (!normalizeAccent(color)) { callback(errResp("Цвет — в формате #RRGGBB", k400BadRequest)); return; }
 
     try {
         app().getDbClient()->execSqlSync("UPDATE users SET accent_color = ? WHERE id = ?", color, user_id);

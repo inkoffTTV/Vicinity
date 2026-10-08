@@ -87,6 +87,10 @@ public:
     Q_INVOKABLE void toggleReaction(int channelId, qlonglong msgId, const QString& emoji);
     Q_INVOKABLE void sendAttachment(int channelId, const QString& localFileUrl);
     Q_INVOKABLE void clearUser();
+    // Сессию завершили на сервере (401): на экран входа с пояснением
+    void sessionEnded();
+    // Проверить, жива ли сессия (GET /auth/me; 401 → sessionEnded через ApiClient::unauthorized)
+    void checkSession();
     Q_INVOKABLE void logout();   // закрыть сессию на сервере и забыть пользователя
 
     Q_INVOKABLE void uploadAvatar(const QString& localPath);

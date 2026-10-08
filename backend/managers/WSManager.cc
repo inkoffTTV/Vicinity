@@ -1,8 +1,17 @@
 // WSManager.cc
 #include "WSManager.h"
+#include "VoiceManager.h"
+#include "../utils/Broadcast.h"
+#include <drogon/drogon.h>
 #include <trantor/utils/Logger.h>
 #include <algorithm>
 #include <set>
+
+bool wsUsable(const drogon::WebSocketConnectionPtr& conn) {
+    if (!conn || !conn->connected()) return false;
+    auto s = conn->getContext<WSSession>();
+    return !s || !s->closing;
+}
 
 WSManager& WSManager::instance() {
     static WSManager instance;
@@ -41,26 +50,39 @@ std::vector<drogon::WebSocketConnectionPtr> WSManager::connectionsOf(int64_t use
 
 bool WSManager::isOnline(int64_t user_id) {
     for (const auto& c : connectionsOf(user_id))
-        if (c->connected()) return true;
+        if (wsUsable(c)) return true;
     return false;
 }
 
 void WSManager::sendToUser(int64_t user_id, const std::string& json_payload) {
     for (const auto& c : connectionsOf(user_id))
-        if (c->connected()) c->send(json_payload);
+        if (wsUsable(c)) c->send(json_payload);
 }
 
 void WSManager::closeSession(const std::string& tokenHash) {
-    std::vector<drogon::WebSocketConnectionPtr> toClose;
+    std::vector<std::pair<drogon::WebSocketConnectionPtr, std::shared_ptr<WSSession>>> toClose;
     {
         std::shared_lock<std::shared_mutex> lock(mutex_);
         for (const auto& [uid, list] : connections_)
             for (const auto& c : list) {
                 auto s = c->getContext<WSSession>();
-                if (s && s->tokenHash == tokenHash) toClose.push_back(c);
+                if (s && s->tokenHash == tokenHash) toClose.emplace_back(c, s);
             }
     }
-    for (const auto& c : toClose) c->shutdown(drogon::CloseCode::kViolation, "session ended");
+    for (const auto& [c, s] : toClose) {
+        // С этого момента сообщения подключения не обрабатываются (WSController::handleNewMessage)
+        if (s->closing.exchange(true)) continue;
+        // Голос освобождаем сразу, не дожидаясь, пока закроется сокет
+        const int64_t ch = VoiceManager::instance().leaveIfOwner(s->userId, c);
+        if (ch != 0) Broadcast::voiceState(ch);
+        // shutdown() шлёт Close и закрывает только запись: клиент, который игнорирует Close,
+        // мог бы и дальше слать кадры. Через секунду (Close успеет уйти) рвём сокет целиком.
+        c->shutdown(drogon::CloseCode::kViolation, "session ended");
+        std::weak_ptr<drogon::WebSocketConnection> weak = c;
+        drogon::app().getLoop()->runAfter(1.0, [weak] {
+            if (auto conn = weak.lock()) conn->forceClose();
+        });
+    }
 }
 
 std::vector<std::string> WSManager::sessionHashes() {

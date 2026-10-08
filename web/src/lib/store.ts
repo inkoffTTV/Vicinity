@@ -217,7 +217,7 @@ function messageFromEvent(ev: WsEvent): Message {
     text: ev.text ?? '',
     created_at: ev.created_at,
     edited: false,
-    attachment: ev.attachment ?? '',
+    attachment: ev.attachment_url || ev.attachment || '',
     reactions: [],
     nonce: ev.nonce,
     attachment_name: ev.attachment_name,
@@ -557,7 +557,7 @@ export const useStore = create<State>((set, get) => {
               author_id: ev.author_id,
               author_name: ev.author_name,
               text: [...String(ev.text ?? '')].slice(0, REPLY_PREVIEW).join(''),
-              attachment: ev.attachment ?? '',
+              attachment: ev.attachment_url || ev.attachment || '',
               created_at: ev.created_at,
             };
       if (!lm || lm.id !== ev.id) return lm;

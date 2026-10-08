@@ -125,8 +125,15 @@ int main(int argc, char* argv[]) {
         o["tx_frames"] = txFrames;
         emitLine(o);
         exitCode = code;
+        // Выходим, когда сервер подтвердит закрытие: иначе последние сигналы (call_end) могли
+        // остаться в буфере сокета и не дойти до собеседника. Сервер не ответил — через 5 с всё равно.
+        if (ws.state() == QAbstractSocket::UnconnectedState) {
+            QCoreApplication::exit(code);
+            return;
+        }
+        QObject::connect(&ws, &QWebSocket::disconnected, &ws, [code] { QCoreApplication::exit(code); });
+        QTimer::singleShot(5000, &ws, [code] { QCoreApplication::exit(code); });
         ws.close();
-        QCoreApplication::exit(code);
     };
 
     QObject::connect(&ws, &QWebSocket::connected, &call, [&] {

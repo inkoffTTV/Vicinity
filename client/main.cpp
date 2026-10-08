@@ -46,11 +46,21 @@ int main(int argc, char *argv[]) {
     QObject::connect(&callEngine,  &CallEngine::audioActiveChanged,
                      &voiceEngine, &VoiceEngine::setCallActive);
 
-    // Выход из аккаунта (кнопка или отозванная сессия): звонок и голосовой канал не живут без него
+    // Сессию завершили на сервере (выход/смена пароля на другом устройстве, отзыв, истечение):
+    // 401 на любой REST-запрос или WS, закрытый с «session ended» / не пускающий при подключении
+    // (тогда проверяем GET /auth/me) — выходим на экран входа
+    QObject::connect(&ApiClient::instance(), &ApiClient::unauthorized,
+                     &AppState::instance(), &AppState::sessionEnded);
+    QObject::connect(&networkManager, &NetworkManager::sessionCheckRequested,
+                     &AppState::instance(), &AppState::checkSession);
+
+    // Выход из аккаунта (кнопка или отозванная сессия): звонок, голосовой канал и переподключение
+    // WebSocket не живут без него
     QObject::connect(&AppState::instance(), &AppState::authChanged, &callEngine, [&] {
         if (AppState::instance().authenticated()) return;
         callEngine.hangup();
         voiceEngine.setChannelActive(false);
+        networkManager.disconnectFromServer();
     });
 
     QQmlApplicationEngine engine;

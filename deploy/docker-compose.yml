@@ -46,6 +46,8 @@ services:
   # Веб-версия: отдаёт сайт и проксирует /api, /ws, /uploads на сервис vicinity.
   # Адрес публикации — WEB_BIND:WEB_PORT (по умолчанию 0.0.0.0:80, т. е. http://IP_VPS).
   # За Caddy из профиля "https" или nginx/Caddy хоста — 127.0.0.1:8081 (см. env.example).
+  # WEB_BIND — только IPv4-адрес: nginx доверяет X-Forwarded-For с адреса шлюза Docker (так приходит
+  # прокси хоста), а IPv6-клиентов docker-proxy привёл бы с того же адреса (deploy/nginx.conf).
   web:
     build:
       context: ..
@@ -66,19 +68,27 @@ services:
 
   # TURN/STUN для звонков: UDP/TCP 3478 и relay-порты UDP 49160-49200 (открыть в файерволе).
   # Сеть хоста — coturn нужен реальный IP и диапазон UDP-портов без NAT Docker.
-  # Публичный IP и секрет — флагами из .env, turnserver.conf править не нужно.
+  # Публичный IP и секрет — из .env, turnserver.conf править не нужно.
   coturn:
     image: coturn/coturn:4.7.0
     container_name: vicinity-coturn
     network_mode: host
-    # turnserver напрямую, без docker-entrypoint.sh образа: тот вычисляет аргументы через eval
-    entrypoint: ["turnserver"]
+    environment:
+      PUBLIC_IP: ${PUBLIC_IP:?впиши PUBLIC_IP (публичный IP VPS) в deploy/.env}
+      VICINITY_TURN_SECRET: ${VICINITY_TURN_SECRET:?впиши VICINITY_TURN_SECRET в deploy/.env (openssl rand -hex 32)}
+    # Секрет не попадает в командную строку turnserver (её видит любой пользователь хоста в ps):
+    # при старте он дописывается в копию turnserver.conf внутри контейнера (права 600) и убирается
+    # из окружения процесса. Свой скрипт вместо docker-entrypoint.sh образа: тот вычисляет аргументы через eval.
+    entrypoint: ["sh", "-c"]
     command:
-      - "-c"
-      - "/etc/coturn/turnserver.conf"
-      - "--log-file=stdout"
-      - "--external-ip=${PUBLIC_IP:?впиши PUBLIC_IP (публичный IP VPS) в deploy/.env}"
-      - "--static-auth-secret=${VICINITY_TURN_SECRET:?впиши VICINITY_TURN_SECRET в deploy/.env (openssl rand -hex 32)}"
+      - |
+        set -eu
+        umask 077
+        conf=$$(mktemp)
+        cat /etc/coturn/turnserver.conf > "$$conf"
+        printf 'static-auth-secret=%s\n' "$$VICINITY_TURN_SECRET" >> "$$conf"
+        unset VICINITY_TURN_SECRET
+        exec turnserver -c "$$conf" --log-file=stdout --external-ip="$$PUBLIC_IP"
     volumes:
       - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
     restart: unless-stopped
@@ -86,23 +96,25 @@ services:
 
   # HTTPS с автоматическим сертификатом Let's Encrypt для DOMAIN — только если порты 80/443 свободны.
   # Включается профилем: COMPOSE_PROFILES=https в .env (или docker compose --profile https up -d).
+  # Сеть хоста: Caddy сам слушает 80/443 (TCP и UDP для HTTP/3) на всех адресах VPS, IPv4 и IPv6, и видит
+  # настоящий адрес клиента — без docker-proxy, который привёл бы всех IPv6-клиентов с одного адреса шлюза
+  # (общий лимит попыток входа на всех). На сайт ходит по 127.0.0.1:WEB_PORT.
   caddy:
     image: caddy:2.10.2-alpine
     container_name: vicinity-caddy
     profiles: ["https"]
+    network_mode: host
     depends_on:
       - web
     environment:
       DOMAIN: ${DOMAIN:-}
-    # Без DOMAIN Caddyfile читался бы иначе — останавливаемся с понятной ошибкой в логах
+      WEB_PORT: ${WEB_PORT:-80}
+    # Без DOMAIN Caddyfile читался бы иначе, а на WEB_PORT=80 уже сидит веб-контейнер —
+    # останавливаемся с понятной ошибкой в логах
     command:
       - "sh"
       - "-c"
-      - 'test -n "$$DOMAIN" || { echo "DOMAIN не задан в deploy/.env" >&2; exit 1; }; exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - 'test -n "$$DOMAIN" || { echo "DOMAIN не задан в deploy/.env" >&2; exit 1; }; test "$$WEB_PORT" != 80 && test "$$WEB_PORT" != 443 || { echo "Для HTTPS через Caddy в deploy/.env нужны WEB_BIND=127.0.0.1 и WEB_PORT=8081 (порты 80/443 занимает Caddy)" >&2; exit 1; }; exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

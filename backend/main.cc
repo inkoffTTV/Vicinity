@@ -5,6 +5,7 @@
 #include <sstream>
 #include "models/Database.h"
 #include "managers/SessionManager.h"
+#include "utils/Uploads.h"
 
 // Переменные окружения поверх custom_config из config.json (Docker: deploy/env.example → .env).
 // Незаданная или пустая переменная оставляет значение из файла; списки — через запятую.
@@ -67,12 +68,18 @@ int main() {
             accb();
         })
         // Загрузки отдаются как есть, без угадывания типа браузером; произвольные файлы-вложения
-        // только скачиваются, а не открываются как страница (docs/API.md §2; те же заголовки ставит nginx)
+        // только скачиваются, а не открываются как страница, и под исходным именем (docs/API.md §2;
+        // nginx пропускает этот Content-Disposition как есть)
         .registerPreSendingAdvice([](const drogon::HttpRequestPtr& req, const drogon::HttpResponsePtr& resp) {
             const std::string& path = req->path();
             if (path.rfind("/uploads/", 0) != 0) return;
             resp->addHeader("X-Content-Type-Options", "nosniff");
-            if (path.rfind("/uploads/files/", 0) == 0) resp->addHeader("Content-Disposition", "attachment");
+            if (path.rfind("/uploads/files/", 0) != 0) return;
+            const auto code = resp->statusCode();
+            const bool found = code == drogon::k200OK || code == drogon::k206PartialContent ||
+                               code == drogon::k304NotModified;
+            resp->addHeader("Content-Disposition",
+                            Uploads::contentDisposition(found ? Uploads::downloadName(path) : std::string()));
         })
         .registerBeginningAdvice([]() {
             Database::initialize();

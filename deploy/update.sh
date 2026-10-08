@@ -31,6 +31,19 @@ if git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fi
 fi
 
+# Копия без git (раньше инструкция копировала через scp только backend, shared и deploy):
+# без web/ сборка веб-контейнера упадёт посреди обновления — останавливаемся сразу
+if [ -z "$in_git" ]; then
+    for dir in backend shared web; do
+        if [ ! -d "$repo/$dir" ]; then
+            echo "В $repo нет папки $dir/ — веб-версия и сервер собираются из backend/, shared/ и web/." >&2
+            echo "Перейди на git (DEPLOY-VPS.md, «Обновление со старой версии» → «Копия через scp»)" >&2
+            echo "или скопируй недостающие папки: scp -r backend shared web deploy root@IP_VPS:$repo/" >&2
+            exit 1
+        fi
+    done
+fi
+
 # 2. Резервная копия, если сервер уже работает
 if [ "${BACKUP:-1}" != 0 ] && [ "$(docker inspect -f '{{.State.Running}}' vicinity-server 2>/dev/null)" = true ]; then
     sh "$here/backup.sh"

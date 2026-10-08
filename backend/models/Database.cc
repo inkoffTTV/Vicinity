@@ -165,6 +165,11 @@ void initialize() {
          "FOREIGN KEY(server_id) REFERENCES servers(id) ON DELETE CASCADE,"
          "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
 
+    // Исходные имена загруженных файлов-вложений — для Content-Disposition при скачивании /uploads/files/
+    exec("CREATE TABLE IF NOT EXISTS upload_names ("
+         "url TEXT PRIMARY KEY,"
+         "name TEXT NOT NULL)");
+
     // Разовые миграции с данными: номер последней выполненной хранится в PRAGMA user_version,
     // каждая выполняется в транзакции вместе с повышением номера — ровно один раз.
     int version = 0;
@@ -201,6 +206,26 @@ void initialize() {
             LOG_ERROR << "DB migration 1 (channel_reads) failed: " << e.what();
         }
     }
+
+    if (version < 2) {
+        // Файлы, загруженные до появления upload_names: имя берём из первого сообщения с этим файлом
+        auto tr = db->newTransaction();
+        try {
+            tr->execSqlSync("INSERT OR IGNORE INTO upload_names(url, name) "
+                            "SELECT attachment, attachment_name FROM messages "
+                            "WHERE attachment LIKE '/uploads/files/%' AND attachment_name IS NOT NULL "
+                            "AND attachment_name != '' ORDER BY id");
+            tr->execSqlSync("PRAGMA user_version = 2");
+        } catch (const std::exception& e) {
+            tr->rollback();
+            LOG_ERROR << "DB migration 2 (upload_names) failed: " << e.what();
+        }
+    }
+
+    // Цвет профиля #AARRGGBB (старый сервер сохранял цвет десктопа как есть) — без альфы, как принимает API
+    exec("UPDATE users SET accent_color = '#' || substr(accent_color, 4) "
+         "WHERE length(accent_color) = 9 AND substr(accent_color, 1, 1) = '#' "
+         "AND substr(accent_color, 2) NOT GLOB '*[^0-9A-Fa-f]*'");
 
     // Индексы под частые выборки: история канала, «мои» беседы/серверы/сессии,
     // реакции сообщения, входящие заявки в друзья

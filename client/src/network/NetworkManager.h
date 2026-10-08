@@ -22,6 +22,9 @@ signals:
     void disconnected();
     void messageReceived(const QJsonObject& message);
     void binaryReceived(const QByteArray& data);
+    // Сессия, похоже, закончилась: сервер закрыл сокет с «session ended» или не пускает при подключении
+    // (401 в рукопожатии). Проверку (GET /auth/me) делает AppState — 401 там выводит на экран входа.
+    void sessionCheckRequested();
 
 private slots:
     void onConnected();
@@ -30,10 +33,15 @@ private slots:
     void attemptReconnect();
 
 private:
+    void openSocket();
+    void handleClosed();
+
     QWebSocket m_webSocket;
     QTimer m_reconnectTimer;
     QString m_serverUrl;
     QString m_token;
     bool m_wantConnected = false;
+    bool m_wasOpen = false;        // текущая попытка дошла до открытого соединения
+    bool m_closeHandled = true;    // закрытие текущей попытки уже обработано
     int m_reconnectDelay = 1000;
 };

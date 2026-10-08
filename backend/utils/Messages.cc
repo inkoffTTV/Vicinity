@@ -47,13 +47,17 @@ Json::Value fromRow(const drogon::orm::Row& row) {
     msg["created_at"]    = str(row, "created_at");
     msg["edited"]        = row["edited"].as<int>() != 0;
     const std::string attachment = str(row, "attachment");
-    msg["attachment"]      = attachment;
-    msg["attachment_name"] = str(row, "attachment_name");
-    msg["attachment_size"] = int64(row, "attachment_size");
     // Сообщения до появления метаданных: вложением могла быть только картинка
-    msg["attachment_type"] = attachment.empty() ? std::string()
+    const std::string type = attachment.empty() ? std::string()
                              : row["attachment_type"].isNull() ? std::string("image")
                                                                : row["attachment_type"].as<std::string>();
+    // Старые десктопы показывают `attachment` как картинку — там только картинки;
+    // URL вложения любого типа (и файла) — в attachment_url
+    msg["attachment"]      = type == "image" ? attachment : std::string();
+    msg["attachment_url"]  = attachment;
+    msg["attachment_name"] = str(row, "attachment_name");
+    msg["attachment_size"] = int64(row, "attachment_size");
+    msg["attachment_type"] = type;
     msg["reactions"] = Json::Value(Json::arrayValue);
     msg["reply_to"]  = int64(row, "reply_to");
     if (row["reply_id"].isNull()) {

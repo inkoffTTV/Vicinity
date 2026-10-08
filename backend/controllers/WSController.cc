@@ -7,14 +7,44 @@
 #include "../utils/CryptoUtils.h"
 #include "../utils/JsonUtils.h"
 #include <drogon/drogon.h>
+#include <trantor/net/TcpConnection.h>
 #include <trantor/utils/Logger.h>
+#include <chrono>
 #include <cstring>
+#include <map>
 #include <set>
 
 using namespace drogon;
 
-// Кадр голоса — 640 байт (20 мс PCM). Всё, что заметно больше, — не голос: не ретранслируем.
-static constexpr size_t kMaxVoiceFrame = 8192;
+// Кадр голоса — PCM s16le, 320 сэмплов = 640 байт (20 мс); десктоп на Linux может прислать
+// кадр короче, но всегда чётной длины. Остальное — не голос: не ретранслируем.
+static constexpr size_t kMaxVoiceFrame = 640;
+// Короткие кадры учитываем в лимите как кадры этого размера — поток мелких кадров не обойдёт лимит
+static constexpr size_t kMinVoiceFrameCost = 160;
+
+// Исходящая очередь подключения (байты, которые клиент ещё не забрал из сокета):
+// больше kCongestedBytes — голос ему не шлём, больше kMaxPendingBytes — закрываем подключение.
+static constexpr size_t kCongestedBytes  = 256 * 1024;
+static constexpr size_t kMaxPendingBytes = 4 * 1024 * 1024;
+static constexpr int64_t kCongestedHoldMs = 500;
+
+// Пересылаемые поля сигналинга звонка (docs/CALLS.md §3.2) и их максимальная длина.
+// Всё остальное от клиента отбрасывается: адресату не уходит чужой мусор на сотню килобайт.
+static const std::map<std::string, size_t> kCallFields = {
+    {"sdp", 32 * 1024}, {"sdpType", 16}, {"candidate", 1024}, {"mid", 64},
+};
+
+static int64_t steadyMs() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
+// Получателю голоса можно отправить кадр: подключение живо и его очередь не переполнена
+static bool voiceReceiverReady(const WebSocketConnectionPtr& conn) {
+    if (!wsUsable(conn)) return false;
+    auto s = conn->getContext<WSSession>();
+    return !s || s->congestedUntilMs.load() <= steadyMs();
+}
 
 // Сигналинг звонков 1:1 (docs/CALLS.md)
 static const std::set<std::string> kCallTypes = {
@@ -24,15 +54,19 @@ static const std::set<std::string> kCallTypes = {
 
 // Голос: кадр от подключения, которое владеет голосом, — голосовым подключениям остальных участников.
 // v2-получатели видят перед кадром 8 байт id отправителя (int64 LE), v1 — кадр как есть.
+// Отправитель ограничен по байтам (UserRateLimiter::VoiceBytes): реальный клиент шлёт 50 кадров
+// по 640 байт в секунду, лишнее молча отбрасывается.
 static void relayVoice(int64_t selfId, const WebSocketConnectionPtr& conn, const std::string& frame) {
-    if (frame.empty() || frame.size() > kMaxVoiceFrame) return;
+    if (frame.empty() || frame.size() > kMaxVoiceFrame || frame.size() % 2 != 0) return;
     auto& vm = VoiceManager::instance();
     int64_t ch = vm.channelOfConnection(selfId, conn);
     if (ch == 0) return;   // не в голосе или голосом владеет другое подключение
+    const double cost = static_cast<double>(std::max(frame.size(), kMinVoiceFrameCost));
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::VoiceBytes, selfId, cost)) return;
 
     std::string framed;   // кадр с префиксом — собираем один раз и только если есть v2-получатели
     for (const auto& m : vm.membersIn(ch)) {
-        if (m.userId == selfId || !m.conn || !m.conn->connected()) continue;
+        if (m.userId == selfId || !voiceReceiverReady(m.conn)) continue;
         if (m.proto == 2) {
             if (framed.empty()) {
                 framed.resize(8 + frame.size());
@@ -50,6 +84,7 @@ static void relayVoice(int64_t selfId, const WebSocketConnectionPtr& conn, const
 static void handleVoiceJoin(int64_t userId, const WebSocketConnectionPtr& conn, const Json::Value& root) {
     int64_t channelId = JsonUtils::getInt(root, "channel_id");
     if (channelId <= 0) return;
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::VoiceJoin, userId)) return;
     // Голос: голосовой канал сервера, где пользователь состоит, или личка/беседа, где он участник
     Access::ChannelInfo info;
     if (Access::channel(app().getDbClient(), channelId, userId, &info) != Access::Result::Ok) return;
@@ -64,6 +99,7 @@ static void handleVoiceJoin(int64_t userId, const WebSocketConnectionPtr& conn, 
 static void handleVoiceSpeaking(int64_t userId, const WebSocketConnectionPtr& conn, const Json::Value& root) {
     int64_t ch = VoiceManager::instance().channelOfConnection(userId, conn);
     if (ch == 0) return;
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::VoiceSpeaking, userId)) return;
     Json::Value p;
     p["type"]     = "voice_speaking";
     p["user_id"]  = static_cast<Json::Int64>(userId);
@@ -77,6 +113,7 @@ static void handleVoiceSpeaking(int64_t userId, const WebSocketConnectionPtr& co
 static void handleVoiceQuery(int64_t userId, const WebSocketConnectionPtr& conn, const Json::Value& root) {
     int64_t serverId = JsonUtils::getInt(root, "server_id");
     if (serverId <= 0) return;
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::VoiceQuery, userId)) return;
     auto db = app().getDbClient();
     if (!Access::isServerMember(db, serverId, userId)) return;
     auto chans = db->execSqlSync(
@@ -105,18 +142,30 @@ static void handleTyping(int64_t userId, const Json::Value& root) {
 static void handleSetPresence(int64_t userId, const Json::Value& root) {
     std::string p = JsonUtils::getStr(root, "presence");
     if (p != "online" && p != "idle" && p != "dnd" && p != "invisible") return;
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Presence, userId)) return;
     app().getDbClient()->execSqlSync("UPDATE users SET presence=? WHERE id=?", p, userId);
     Broadcast::presence(userId);
 }
 
 // Релей адресату {to} со штампом {from} — только между друзьями или собеседниками по личке.
 // Имя звонящего в call_invite ставит сервер: подделать «кто звонит» нельзя.
+// Пересылаются только поля из kCallFields (строки не длиннее лимита); слишком длинное — не пересылается вовсе.
 static void handleCallSignal(int64_t userId, const WebSocketConnectionPtr& conn,
-                             const std::string& type, Json::Value& root) {
+                             const std::string& type, const Json::Value& root) {
     int64_t to = JsonUtils::getInt(root, "to");
     if (to <= 0 || to == userId) return;
-    if (type == "call_invite" &&
-        !UserRateLimiter::instance().allow(UserRateLimiter::Action::CallInvite, userId)) return;
+    const auto action = type == "call_invite" ? UserRateLimiter::Action::CallInvite
+                                              : UserRateLimiter::Action::CallSignal;
+    if (!UserRateLimiter::instance().allow(action, userId)) return;
+    Json::Value out;
+    out["type"] = type;
+    out["to"]   = static_cast<Json::Int64>(to);
+    for (const auto& [field, maxLen] : kCallFields) {
+        if (!root.isMember(field) || !root[field].isString()) continue;
+        const std::string v = root[field].asString();
+        if (v.size() > maxLen) return;
+        out[field] = v;
+    }
     auto db = app().getDbClient();
     if (!Access::canCall(db, userId, to)) return;
     if (!WSManager::instance().isOnline(to)) {
@@ -126,12 +175,12 @@ static void handleCallSignal(int64_t userId, const WebSocketConnectionPtr& conn,
         conn->send(JsonUtils::write(ev));
         return;
     }
-    root["from"] = static_cast<Json::Int64>(userId);
+    out["from"] = static_cast<Json::Int64>(userId);
     if (type == "call_invite") {
         auto r = db->execSqlSync("SELECT display_name FROM users WHERE id = ?", userId);
-        if (!r.empty()) root["name"] = r[0]["display_name"].as<std::string>();
+        out["name"] = r.empty() ? std::string() : r[0]["display_name"].as<std::string>();
     }
-    WSManager::instance().sendToUser(to, JsonUtils::write(root));
+    WSManager::instance().sendToUser(to, JsonUtils::write(out));
 }
 
 void WSController::handleNewConnection(const HttpRequestPtr& req, const WebSocketConnectionPtr& conn) {
@@ -140,6 +189,26 @@ void WSController::handleNewConnection(const HttpRequestPtr& req, const WebSocke
         s->userId    = req->attributes()->get<int64_t>("user_id");
         s->tokenHash = CryptoUtils::sha256Hex(req->attributes()->get<std::string>("token"));
         conn->setContext(s);
+        // Клиент, который не забирает данные из сокета, копил бы исходящие кадры в памяти сервера
+        // без предела: при переполненной очереди не шлём ему голос, при сильно переполненной — закрываем
+        if (auto tcp = req->getConnectionPtr().lock()) {
+            std::weak_ptr<WSSession> weakSession = s;
+            tcp->setHighWaterMarkCallback(
+                [weakSession](const trantor::TcpConnectionPtr& t, size_t pending) {
+                    auto ws = weakSession.lock();
+                    if (!ws) return;
+                    ws->congestedUntilMs = steadyMs() + kCongestedHoldMs;
+                    if (pending <= kMaxPendingBytes || ws->closing.exchange(true)) return;
+                    LOG_WARN << "WS: user " << ws->userId << " does not read (" << pending
+                             << " bytes queued), closing";
+                    // Не внутри send(): закрываем следующим шагом цикла событий
+                    std::weak_ptr<trantor::TcpConnection> weakTcp = t;
+                    t->getLoop()->queueInLoop([weakTcp] {
+                        if (auto c = weakTcp.lock()) c->forceClose();
+                    });
+                },
+                kCongestedBytes);
+        }
         // Друзья увидят, что я в сети, — только при первом подключении
         if (WSManager::instance().addConnection(s->userId, conn)) Broadcast::presence(s->userId);
         LOG_INFO << "WS connected: user " << s->userId;
@@ -155,7 +224,8 @@ void WSController::handleNewMessage(const WebSocketConnectionPtr& conn,
     // Исключение из обработчика WS роняет весь процесс (Drogon их не ловит) — ловим всё здесь
     try {
         auto s = conn->getContext<WSSession>();
-        if (!s) return;
+        // Сессия отозвана (выход, смена пароля, истечение) — подключение уже закрывается
+        if (!s || s->closing) return;
         const int64_t userId = s->userId;
 
         if (type == WebSocketMessageType::Binary) {

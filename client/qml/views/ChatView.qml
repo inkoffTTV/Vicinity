@@ -86,7 +86,7 @@ Item {
                 author: appState.displayName, authorId: appState.userId, txt: "",
                 ts: Qt.formatTime(new Date(), "hh:mm"),
                 own: true, av: appState.avatarPath, rc: appState.roleColor,
-                msgId: parseInt(msgId), edited: false, attach: attachUrl, rx: "[]", nonce: "",
+                msgId: parseInt(msgId), edited: false, attach: attachUrl, file: "", fileName: "", rx: "[]", nonce: "",
                 grp: (messageModel.count > 0 && messageModel.get(messageModel.count - 1).authorId === appState.userId)
             })
             msgList.toBottom()
@@ -336,6 +336,9 @@ Item {
                 own: mine, av: appState.mediaUrl(m.author_avatar ? m.author_avatar : ""), rc: mine ? appState.roleColor : "",
                 msgId: parseInt(m.id), edited: false,
                 attach: m.attachment && m.attachment.length ? appState.mediaUrl(m.attachment) : "",
+                // Файл (не картинка): URL — в attachment_url, показываем ссылкой с именем
+                file: m.attachment_type === "file" && m.attachment_url ? appState.mediaUrl(m.attachment_url) : "",
+                fileName: m.attachment_type === "file" && m.attachment_name ? m.attachment_name : "",
                 rx: "[]", nonce: "",
                 grp: (messageModel.count > 0 && messageModel.get(messageModel.count - 1).authorId === aid)
             })
@@ -1279,6 +1282,8 @@ Item {
                         edited:       model.edited === true
                         rxJson:       model.rx ? model.rx : "[]"
                         attachment:   model.attach ? model.attach : ""
+                        fileUrl:      model.file ? model.file : ""
+                        fileName:     model.fileName ? model.fileName : ""
                         // подряд от того же автора → сгруппировать (без аватара/шапки)
                         grouped: grp === true
                         onOpenProfile: function(uid){ profileCard.openFor(uid) }
@@ -1891,7 +1896,7 @@ Item {
             author: appState.displayName, authorId: appState.userId, txt: t,
             ts: Qt.formatTime(new Date(), "hh:mm"),
             own: true, av: appState.avatarPath, rc: appState.roleColor,
-            msgId: 0, edited: false, attach: "", rx: "[]", nonce: nonce,   // id допишет onMessageSent
+            msgId: 0, edited: false, attach: "", file: "", fileName: "", rx: "[]", nonce: nonce,   // id допишет onMessageSent
             grp: (messageModel.count > 0 && messageModel.get(messageModel.count - 1).authorId === appState.userId)
         })
         msgList.toBottom()

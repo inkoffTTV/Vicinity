@@ -57,7 +57,7 @@ test('files: queue of several files, card with size and download, media players,
   await expect(link).toHaveAttribute('href', /^\/uploads\/files\/[0-9a-f]+\.pdf$/);
   await expect(link).toHaveAttribute('download', 'отчёт.pdf');
   const file = await request.get((await link.getAttribute('href'))!);
-  expect(file.headers()['content-disposition']).toBe('attachment');
+  expect(file.headers()['content-disposition']).toBe(`attachment; filename="_____.pdf"; filename*=UTF-8''${encodeURIComponent('отчёт.pdf')}`);
   expect((await file.body()).equals(report)).toBe(true);
   const notesCard = b.page.locator('.file-card', { hasText: 'notes.txt' });
   await expect(notesCard.locator('.file-icon')).toHaveText('📝');

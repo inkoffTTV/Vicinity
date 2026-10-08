@@ -268,6 +268,18 @@ void AppState::clearUser() {
     emit authChanged();
 }
 
+void AppState::sessionEnded() {
+    if (!m_authenticated) return;
+    clearUser();
+    m_loginError = QStringLiteral("Сессия завершена (выход на другом устройстве или смена пароля) — войдите снова");
+    emit authChanged();
+}
+
+void AppState::checkSession() {
+    if (!m_authenticated) return;
+    ApiClient::instance().get("/auth/me", [](bool, const QJsonObject&) {});
+}
+
 void AppState::logout() {
     // Сессию закрываем и на сервере (запрос уходит с ещё действующим токеном), ответ не ждём
     if (!m_sessionToken.isEmpty())
@@ -398,8 +410,13 @@ QVariantMap AppState::messageToVariant(const QJsonObject& msg) const {
     m["rc"]  = QString{};
     m["msgId"]  = static_cast<qlonglong>(msg["id"].toInteger());
     m["edited"] = msg["edited"].toBool();
-    QString att = msg["attachment"].toString();
+    QString att = msg["attachment"].toString();   // только картинки (docs/API.md §2)
     m["attach"] = att.isEmpty() ? QString() : mediaUrl(att);
+    // Файл (не картинка) — ссылкой с именем; URL файла сервер кладёт в attachment_url
+    const bool isFile = msg["attachment_type"].toString() == QLatin1String("file");
+    const QString fileUrl = isFile ? msg["attachment_url"].toString() : QString();
+    m["file"]     = fileUrl.isEmpty() ? QString() : mediaUrl(fileUrl);
+    m["fileName"] = fileUrl.isEmpty() ? QString() : msg["attachment_name"].toString();
     m["nonce"]  = QString{};
     // Реакции: [{emoji,count,users[]}] → JSON-строка [{emoji,count,me}] для модели
     QJsonArray rx;

@@ -24,6 +24,10 @@ public:
     void postMultipart(const QString& path, const QString& localFilePath,
                        const QString& fieldName, Callback cb);
 
+signals:
+    // Запрос с текущим токеном получил 401: сессию завершили (выход, смена пароля, отзыв, истечение)
+    void unauthorized();
+
 private:
     explicit ApiClient(QObject* parent = nullptr);
 

@@ -28,13 +28,20 @@ QNetworkRequest ApiClient::makeRequest(const QString& path, int timeoutMs) const
 }
 
 void ApiClient::handleReply(QNetworkReply* reply, Callback cb) {
-    connect(reply, &QNetworkReply::finished, this, [reply, cb]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, cb]() {
         bool ok = (reply->error() == QNetworkReply::NoError);
         QJsonObject data;
         auto doc = QJsonDocument::fromJson(reply->readAll());
         if (doc.isObject()) data = doc.object();
+        // 401 на запрос с токеном — сессия больше не действует. Неверный пароль при входе (запрос
+        // без токена) и ответ на запрос со старым токеном (уже вошли заново) сюда не относятся.
+        const QByteArray sentAuth = reply->request().rawHeader("Authorization");
+        const bool sessionGone =
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 401 &&
+            !sentAuth.isEmpty() && !m_token.isEmpty() && sentAuth == ("Bearer " + m_token).toUtf8();
         cb(ok, data);
         reply->deleteLater();
+        if (sessionGone) emit unauthorized();
     });
 }
 

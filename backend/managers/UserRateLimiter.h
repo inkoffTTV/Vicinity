@@ -18,12 +18,20 @@ public:
         CallInvite,     // 10 входящих звонков в минуту (спам звонками)
         Typing,         // «печатает…» — не чаще раза в 2 с
         Search,         // 30 поисковых запросов в минуту
+        // WS-сообщения, которые сервер рассылает многим или которые стоят запросов к БД
+        Presence,       // set_presence — 10 в минуту
+        VoiceJoin,      // voice_join — 20 в минуту (voice_leave без канала ничего не рассылает)
+        VoiceQuery,     // voice_query — 30 в минуту
+        VoiceSpeaking,  // voice_speaking — 5 в секунду, до 50 подряд
+        CallSignal,     // call_accept/reject/end/busy, rtc_* — 5 в секунду, до 100 подряд (пачка ICE)
+        VoiceBytes,     // байты голоса: 48 КБ/с (полтора реального потока 32 КБ/с), запас 64 КБ
     };
 
     static UserRateLimiter& instance();
 
-    // true — действие разрешено (и учтено), false — лимит исчерпан
-    bool allow(Action action, int64_t userId);
+    // true — действие разрешено (и учтено), false — лимит исчерпан.
+    // cost — сколько «жетонов» стоит действие (для VoiceBytes — байты кадра)
+    bool allow(Action action, int64_t userId, double cost = 1.0);
 
 private:
     UserRateLimiter() = default;

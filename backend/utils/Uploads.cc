@@ -5,6 +5,7 @@
 #include <drogon/drogon.h>
 #include <trantor/utils/Logger.h>
 #include <cctype>
+#include <cstring>
 #include <filesystem>
 #include <set>
 
@@ -100,6 +101,7 @@ Attachment saveAttachment(const drogon::HttpFile& file) {
     }
     out.type = "file";
     store(file, "files", ext, out);
+    if (out.error.empty()) rememberName(out.url, out.name);   // для Content-Disposition при скачивании
     return out;
 }
 
@@ -129,6 +131,51 @@ int64_t fileSize(const std::string& url) {
     return ec ? 0 : static_cast<int64_t>(size);
 }
 
+void rememberName(const std::string& url, const std::string& name) {
+    if (name.empty() || !isUploadUrl(url, "files")) return;
+    try {
+        drogon::app().getDbClient()->execSqlSync(
+            "INSERT OR REPLACE INTO upload_names(url, name) VALUES(?, ?)", url, name);
+    } catch (const std::exception& e) {
+        LOG_WARN << "Upload: cannot remember name of " << url << ": " << e.what();
+    }
+}
+
+std::string downloadName(const std::string& url) {
+    if (!isUploadUrl(url, "files")) return "";
+    try {
+        auto r = drogon::app().getDbClient()->execSqlSync("SELECT name FROM upload_names WHERE url = ?", url);
+        if (!r.empty() && !r[0]["name"].isNull()) return r[0]["name"].as<std::string>();
+    } catch (const std::exception& e) {
+        LOG_WARN << "Upload: cannot read name of " << url << ": " << e.what();
+    }
+    return "";
+}
+
+std::string contentDisposition(const std::string& name) {
+    if (name.empty()) return "attachment";
+    // Запасное имя для старых браузеров: печатный ASCII без кавычек и обратной косой черты,
+    // каждый прочий символ (а не каждый его байт UTF-8) — «_»
+    std::string ascii;
+    for (unsigned char c : name) {
+        if ((c & 0xC0) == 0x80) continue;   // продолжение многобайтового символа
+        ascii += (c >= 0x20 && c < 0x7F && c != '"' && c != '\\') ? static_cast<char>(c) : '_';
+    }
+    // attr-char из RFC 5987 оставляем как есть, остальные байты UTF-8 — %XX
+    static const char* kHex = "0123456789ABCDEF";
+    std::string encoded;
+    for (unsigned char c : name) {
+        if ((c < 0x80 && std::isalnum(c)) || std::strchr("!#$&+-.^_`|~", c) != nullptr) {
+            encoded += static_cast<char>(c);
+        } else {
+            encoded += '%';
+            encoded += kHex[c >> 4];
+            encoded += kHex[c & 0x0F];
+        }
+    }
+    return "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded;
+}
+
 std::string cleanFileName(std::string_view raw) {
     const auto slash = raw.find_last_of("/\\");
     if (slash != std::string_view::npos) raw = raw.substr(slash + 1);
@@ -144,6 +191,11 @@ void removeByUrl(const std::string& url) {
     std::error_code ec;
     fs::remove(fs::path(drogon::app().getUploadPath()) / url.substr(kPrefix.size()), ec);
     if (ec) LOG_WARN << "Upload: cannot remove " << url << ": " << ec.message();
+    if (subDir == "files") {
+        try {
+            drogon::app().getDbClient()->execSqlSync("DELETE FROM upload_names WHERE url = ?", url);
+        } catch (...) {}
+    }
 }
 
 } // namespace Uploads

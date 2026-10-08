@@ -2,10 +2,13 @@
 # Сертификат Let's Encrypt выпускается и продлевается сам (нужны свободные порты 80 и 443
 # и A-запись домена на IP VPS); http:// перенаправляется на https://.
 # WebSocket (/ws) и X-Forwarded-For reverse_proxy передаёт сам, таймаутов для WebSocket нет.
+# Caddy работает в сети хоста: видит настоящий адрес каждого клиента, в том числе по IPv6
+# (через docker-proxy все IPv6-клиенты пришли бы с одного адреса шлюза и делили бы лимит входа),
+# и ходит на веб-контейнер по 127.0.0.1:WEB_PORT.
 
 {$DOMAIN} {
 	# Браузер ходит на этот домен только по HTTPS (без includeSubDomains — соседние поддомены не затрагиваются)
 	header Strict-Transport-Security "max-age=31536000"
 
-	reverse_proxy web:80
+	reverse_proxy 127.0.0.1:{$WEB_PORT}
 }

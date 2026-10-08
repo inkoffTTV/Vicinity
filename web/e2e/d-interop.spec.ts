@@ -115,6 +115,7 @@ async function installPeer(page: Page, token: string, peer: number) {
         offerSdp: '',
         answerSdp: '',
         ended: '',
+        ends: [] as string[],
         ctrl: [] as string[],
         pendingRemote: [] as RTCIceCandidateInit[],
         localIce: [] as any[],
@@ -176,6 +177,7 @@ async function installPeer(page: Page, token: string, peer: number) {
         } else if (['call_end', 'call_reject', 'call_busy', 'call_unavailable'].includes(m.type)) {
           // Первое завершение — главное: дальше на запоздалые rtc_ice сервер ответит call_unavailable
           st.ended ||= m.type;
+          st.ends.push(m.type);
           st.pc?.close();
         }
       };
@@ -263,7 +265,13 @@ const stats = (page: Page) => page.evaluate(() => (window as any).__peer && (win
 const peerState = (page: Page) =>
   page.evaluate(() => {
     const p = (window as any).__peer;
-    return { invited: !!p.invite, offer: p.offerSdp as string, answer: p.answerSdp as string, ended: p.ended as string };
+    return {
+      invited: !!p.invite,
+      offer: p.offerSdp as string,
+      answer: p.answerSdp as string,
+      ended: p.ended as string,
+      ends: [...p.ends] as string[],
+    };
   });
 
 /** Звук в обе стороны: браузер принимает и отправляет RTP, десктоп декодирует тон. */
@@ -411,9 +419,11 @@ test.describe('звонки десктоп ↔ браузер', () => {
     try {
       await expect.poll(async () => (await peerState(page)).invited, { timeout: 20_000 }).toBe(true);
       await page.evaluate(() => (window as any).__accept(true));
-      await expect.poll(async () => (await peerState(page)).ended).toBe('call_end');
-      await desk.waitFor('уведомление о сбое', (e) => e.event === 'notice' && /Не удалось/.test(e.text));
+      // Ждём условия, а не времени: под нагрузкой десктоп может отвечать долго. Его call_end должен дойти,
+      // даже если раньше пришёл call_unavailable в ответ на запоздалые rtc_ice браузера
+      await desk.waitFor('уведомление о сбое', (e) => e.event === 'notice' && /Не удалось/.test(e.text), 30_000);
       expect(await desk.exitCode()).toBe(1); // штатный выход: звонок не состоялся, процесс не упал
+      await expect.poll(async () => (await peerState(page)).ends, { timeout: 20_000 }).toContain('call_end');
     } finally {
       desk.kill();
       await test.info().attach('desktop.log', { body: desk.log() });

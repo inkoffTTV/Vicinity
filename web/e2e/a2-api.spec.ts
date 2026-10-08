@@ -169,7 +169,7 @@ test.describe.serial('backend feature API', () => {
     expect(first.body.has_more).toBe(true);
     expect(first.body.messages[0]).toMatchObject({
       channel_id: ch, author_id: a.id, author_name: a.name, text: 'сообщение 6', edited: false,
-      attachment: '', attachment_name: '', attachment_size: 0, attachment_type: '', reply_to: 0, reply: null, reactions: [],
+      attachment: '', attachment_url: '', attachment_name: '', attachment_size: 0, attachment_type: '', reply_to: 0, reply: null, reactions: [],
     });
 
     const second = await api(request, b, 'GET', `/channels/${ch}/messages?limit=3&before=${ids[4]}`);
@@ -231,7 +231,10 @@ test.describe.serial('backend feature API', () => {
     expect(up.body.url).toMatch(/^\/uploads\/files\/[0-9a-f]{32}\.pdf$/);
     const served = await request.get(`${ORIGIN}${up.body.url}`);
     expect(served.status()).toBe(200);
-    expect(served.headers()['content-disposition']).toBe('attachment');
+    // Скачивается под исходным именем: ASCII-замена для старых браузеров и UTF-8 по RFC 5987
+    expect(served.headers()['content-disposition']).toBe(
+      `attachment; filename="_____ __ ___.pdf"; filename*=UTF-8''${encodeURIComponent('Отчёт за май.pdf')}`,
+    );
     expect(served.headers()['x-content-type-options']).toBe('nosniff');
     expect(Buffer.from(await served.body())).toEqual(pdf);
 
@@ -259,13 +262,15 @@ test.describe.serial('backend feature API', () => {
     expect(sent.status).toBe(201);
     expect(sent.body).toMatchObject({ attachment_name: 'Отчёт за май.pdf', attachment_size: pdf.length, attachment_type: 'file' });
     const ev = await sa.next((e) => e.type === 'new_message' && e.id === sent.body.id);
-    expect(ev).toMatchObject({ attachment: up.body.url, attachment_name: 'Отчёт за май.pdf', attachment_type: 'file' });
+    // Файл — в attachment_url; attachment у старых десктопов показывается картинкой, поэтому в нём только картинки
+    expect(ev).toMatchObject({ attachment: '', attachment_url: up.body.url, attachment_name: 'Отчёт за май.pdf', attachment_type: 'file' });
+    expect(sent.body.attachment_url).toBe(up.body.url);
     // Как старый десктоп: только attachment — тип и размер всё равно известны
     await post(request, a, dm, 'картинка', { attachment: png.body.url });
     const hist = await api(request, d, 'GET', `/channels/${dm}/messages?limit=2`);
-    expect(hist.body.messages[0]).toMatchObject({ attachment: png.body.url, attachment_name: '', attachment_type: 'image' });
+    expect(hist.body.messages[0]).toMatchObject({ attachment: png.body.url, attachment_url: png.body.url, attachment_name: '', attachment_type: 'image' });
     expect(hist.body.messages[0].attachment_size).toBeGreaterThan(0);
-    expect(hist.body.messages[1]).toMatchObject({ attachment_type: 'file', attachment_size: pdf.length });
+    expect(hist.body.messages[1]).toMatchObject({ attachment: '', attachment_url: up.body.url, attachment_type: 'file', attachment_size: pdf.length });
 
     expect((await api(request, a, 'POST', `/channels/${dm}/messages`, { text: '', attachment: '/uploads/avatars/x.png' })).status).toBe(400);
     expect((await upload(request, c, `/channels/${dm}/attachments`, 'x.pdf', 'application/pdf', pdf)).status).toBe(403);
