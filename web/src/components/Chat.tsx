@@ -11,9 +11,12 @@ import {
   useState,
 } from 'react';
 import { api, ApiError, Message, parseTs, UserSummary } from '../lib/api';
+import { useCall } from '../lib/call';
 import { activeChannelId, drafts, useStore } from '../lib/store';
+import { useVoice } from '../lib/voice';
 import { Avatar } from './Avatar';
 import { Modal } from './Modal';
+import { VoiceRoom } from './VoiceRoom';
 
 const QUICK_EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'];
 const MAX_UPLOAD = 15 * 1024 * 1024;
@@ -34,6 +37,11 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
   );
   const presence = useStore((s) => (dm ? s.presence[dm.user_id] : undefined));
   const showProfile = useStore((s) => s.showProfile);
+  const callIdle = useCall((s) => s.phase === 'idle');
+  const startCall = useCall((s) => s.start);
+  const inGroupRoom = useVoice((s) => group !== undefined && s.channelId === group.id);
+  const joinVoice = useVoice((s) => s.join);
+  const leaveVoice = useVoice((s) => s.leave);
   const [adding, setAdding] = useState(false);
 
   let title = '';
@@ -67,6 +75,28 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
           </div>
         )}
         <div className="grow" />
+        {dm && (
+          <button
+            className="icon-btn"
+            title="Позвонить"
+            aria-label="Позвонить"
+            disabled={!callIdle}
+            onClick={() => void startCall(dm.user_id, dm.display_name)}
+          >
+            📞
+          </button>
+        )}
+        {group && (
+          <button
+            className={`icon-btn${inGroupRoom ? ' on' : ''}`}
+            title={inGroupRoom ? 'Выйти из голосовой комнаты' : 'Голосовая комната'}
+            aria-label={inGroupRoom ? 'Выйти из голосовой комнаты' : 'Голосовая комната'}
+            aria-pressed={inGroupRoom}
+            onClick={() => (inGroupRoom ? leaveVoice() : void joinVoice(group.id))}
+          >
+            🎙
+          </button>
+        )}
         {(view.kind === 'group' || view.kind === 'server') && (
           <button className="icon-btn" title="Добавить участника" aria-label="Добавить участника" onClick={() => setAdding(true)}>
             ➕
@@ -84,6 +114,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
           </button>
         )}
       </header>
+      {(dm || group) && channelId && <VoiceRoom channelId={channelId} />}
       {channelId ? (
         <>
           <MessageList key={channelId} channelId={channelId} />

@@ -4,6 +4,7 @@
 export type WsEvent = { type: string; [k: string]: any };
 
 type Listener = (ev: WsEvent) => void;
+type BinaryListener = (data: ArrayBuffer) => void;
 type StatusListener = (connected: boolean) => void;
 
 const PING_EVERY = 25_000;
@@ -12,6 +13,8 @@ const PONG_TIMEOUT = 10_000;
 const MAX_DELAY = 30_000;
 // Столько неудачных рукопожатий подряд — повод проверить токен через REST (истёкший даёт 401)
 const AUTH_CHECK_AFTER = 3;
+// Голос не копим: если в сокете уже столько неотправленного, кадр выбрасывается
+const MAX_BINARY_BACKLOG = 64 * 1024;
 
 export class Socket {
   private ws: WebSocket | null = null;
@@ -24,6 +27,7 @@ export class Socket {
   private pingTimer: number | undefined;
   private pongTimer: number | undefined;
   private listeners = new Set<Listener>();
+  private binaryListeners = new Set<BinaryListener>();
   private statusListeners = new Set<StatusListener>();
   private authCheck: (() => void) | null = null;
 
@@ -52,9 +56,22 @@ export class Socket {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj));
   }
 
+  /** Бинарный кадр (голос). false — не отправлен: нет связи или сокет не успевает. */
+  sendBinary(data: ArrayBuffer): boolean {
+    const ws = this.ws;
+    if (ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > MAX_BINARY_BACKLOG) return false;
+    ws.send(data);
+    return true;
+  }
+
   on(fn: Listener) {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
+  }
+
+  onBinary(fn: BinaryListener) {
+    this.binaryListeners.add(fn);
+    return () => this.binaryListeners.delete(fn);
   }
 
   onStatus(fn: StatusListener) {
@@ -71,6 +88,7 @@ export class Socket {
     this.drop();
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(this.token)}`);
+    ws.binaryType = 'arraybuffer';
     this.ws = ws;
     let opened = false;
 
@@ -85,7 +103,11 @@ export class Socket {
       // Любой входящий кадр подтверждает, что соединение живо
       window.clearTimeout(this.pongTimer);
       this.pongTimer = undefined;
-      if (typeof e.data !== 'string') return; // бинарные кадры — голос десктоп-клиента
+      if (e.data instanceof ArrayBuffer) {
+        this.binaryListeners.forEach((f) => f(e.data));
+        return;
+      }
+      if (typeof e.data !== 'string') return;
       let ev: WsEvent;
       try {
         ev = JSON.parse(e.data);

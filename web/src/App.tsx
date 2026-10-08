@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from './lib/store';
+import { useVoice } from './lib/voice';
 import { Login } from './components/Login';
 import { ServerRail } from './components/ServerRail';
 import { Sidebar } from './components/Sidebar';
@@ -10,6 +11,7 @@ import { ProfileModal } from './components/ProfileModal';
 import { Settings } from './components/Settings';
 import { Toasts } from './components/Toasts';
 import { IncomingCall } from './components/IncomingCall';
+import { CallOverlay } from './components/CallOverlay';
 
 export default function App() {
   const booting = useStore((s) => s.booting);
@@ -19,6 +21,7 @@ export default function App() {
   const view = useStore((s) => s.view);
   const profileUserId = useStore((s) => s.profileUserId);
   const settingsOpen = useStore((s) => s.settingsOpen);
+  const inVoice = useVoice((s) => s.channelId !== null);
   const [navOpen, setNavOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(() => window.innerWidth > 1100);
 
@@ -46,7 +49,7 @@ export default function App() {
     );
 
   return (
-    <div className={`app${navOpen ? ' nav-open' : ''}`}>
+    <div className={`app${navOpen ? ' nav-open' : ''}${inVoice ? ' in-voice' : ''}`}>
       <div className="nav">
         <ServerRail />
         <Sidebar />
@@ -66,6 +69,7 @@ export default function App() {
       {view.kind === 'server' && membersOpen && <MemberList serverId={view.serverId} />}
       {profileUserId !== null && <ProfileModal userId={profileUserId} />}
       {settingsOpen && <Settings />}
+      <CallOverlay />
       <IncomingCall />
       <Toasts />
     </div>

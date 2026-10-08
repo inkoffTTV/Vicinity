@@ -295,6 +295,11 @@ export const api = {
     return request<{ file_url: string }>('POST', '/profile/upload', fd);
   },
   clearMedia: (field: 'avatar' | 'banner') => post('/profile/clear_media', { field }),
+
+  // ── Звонки ──
+  /** STUN/TURN для RTCPeerConnection (TURN — временные учётки, docs/API.md §12) */
+  rtcIce: () =>
+    get<{ ice_servers?: RTCIceServer[] }>('/rtc/ice').then((r) => (Array.isArray(r.ice_servers) ? r.ice_servers : [])),
 };
 
 // SQLite CURRENT_TIMESTAMP — "YYYY-MM-DD HH:MM:SS" в UTC

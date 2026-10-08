@@ -1,14 +1,18 @@
 import { FormEvent, useState } from 'react';
 import { api, ApiError, Presence } from '../lib/api';
-import { useStore, VOICE_UNSUPPORTED } from '../lib/store';
+import { useStore } from '../lib/store';
+import { useVoice } from '../lib/voice';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { Modal } from './Modal';
+import { VoiceBar } from './VoiceBar';
+import { VoiceUsers } from './VoiceRoom';
 
 export function Sidebar() {
   const view = useStore((s) => s.view);
   return (
     <aside className="sidebar">
       {view.kind === 'server' ? <ServerSide serverId={view.serverId} /> : <HomeSide />}
+      <VoiceBar />
       <UserPanel />
     </aside>
   );
@@ -42,15 +46,17 @@ function HomeSide() {
         <div className="side-section">Личные сообщения</div>
         {dms.length === 0 && <div className="side-empty">Найдите друга и напишите ему</div>}
         {dms.map((d) => (
-          <button
-            key={d.channel_id}
-            className={`side-item${view.kind === 'dm' && view.channelId === d.channel_id ? ' active' : ''}`}
-            onClick={() => open({ kind: 'dm', channelId: d.channel_id })}
-          >
-            <Avatar name={d.display_name} src={d.avatar_path} id={d.user_id} size={32} presence={presence[d.user_id] ?? 'offline'} />
-            <span className="grow ellipsis">{d.display_name}</span>
-            {unread[d.channel_id] > 0 && <span className="badge inline">{unread[d.channel_id]}</span>}
-          </button>
+          <div key={d.channel_id}>
+            <button
+              className={`side-item${view.kind === 'dm' && view.channelId === d.channel_id ? ' active' : ''}`}
+              onClick={() => open({ kind: 'dm', channelId: d.channel_id })}
+            >
+              <Avatar name={d.display_name} src={d.avatar_path} id={d.user_id} size={32} presence={presence[d.user_id] ?? 'offline'} />
+              <span className="grow ellipsis">{d.display_name}</span>
+              {unread[d.channel_id] > 0 && <span className="badge inline">{unread[d.channel_id]}</span>}
+            </button>
+            <VoiceUsers channelId={d.channel_id} />
+          </div>
         ))}
 
         <div className="side-section">
@@ -60,15 +66,17 @@ function HomeSide() {
           </button>
         </div>
         {groups.map((g) => (
-          <button
-            key={g.id}
-            className={`side-item${view.kind === 'group' && view.channelId === g.id ? ' active' : ''}`}
-            onClick={() => open({ kind: 'group', channelId: g.id })}
-          >
-            <span className="side-icon">#</span>
-            <span className="grow ellipsis">{g.name}</span>
-            {unread[g.id] > 0 && <span className="badge inline">{unread[g.id]}</span>}
-          </button>
+          <div key={g.id}>
+            <button
+              className={`side-item${view.kind === 'group' && view.channelId === g.id ? ' active' : ''}`}
+              onClick={() => open({ kind: 'group', channelId: g.id })}
+            >
+              <span className="side-icon">#</span>
+              <span className="grow ellipsis">{g.name}</span>
+              {unread[g.id] > 0 && <span className="badge inline">{unread[g.id]}</span>}
+            </button>
+            <VoiceUsers channelId={g.id} />
+          </div>
         ))}
       </div>
       {creating && <CreateGroupDialog onClose={() => setCreating(false)} />}
@@ -117,10 +125,10 @@ function ServerSide({ serverId }: { serverId: number }) {
   const channels = useStore((s) => s.channelsByServer[serverId] ?? []);
   const view = useStore((s) => s.view);
   const unread = useStore((s) => s.unread);
-  const voice = useStore((s) => s.voice);
-  const speaking = useStore((s) => s.speaking);
   const open = useStore((s) => s.open);
   const toast = useStore((s) => s.toast);
+  const myVoice = useVoice((s) => s.channelId);
+  const joinVoice = useVoice((s) => s.join);
   const [adding, setAdding] = useState<null | 'text' | 'voice'>(null);
   const [menu, setMenu] = useState(false);
 
@@ -168,16 +176,15 @@ function ServerSide({ serverId }: { serverId: number }) {
         {voiceChs.length > 0 && <div className="side-section">Голосовые каналы</div>}
         {voiceChs.map((c) => (
           <div key={c.id}>
-            <button className="side-item channel" onClick={() => toast(VOICE_UNSUPPORTED)}>
+            <button
+              className={`side-item channel voice${myVoice === c.id ? ' active' : ''}`}
+              title={myVoice === c.id ? 'Вы в этом канале' : 'Подключиться к голосовому каналу'}
+              onClick={() => void joinVoice(c.id)}
+            >
               <span className="side-icon">🔊</span>
               <span className="grow ellipsis">{c.name}</span>
             </button>
-            {(voice[c.id] ?? []).map((u) => (
-              <div key={u.user_id} className="voice-user">
-                <Avatar name={u.name} id={u.user_id} size={22} speaking={speaking[u.user_id]} />
-                <span className="ellipsis">{u.name}</span>
-              </div>
-            ))}
+            <VoiceUsers channelId={c.id} />
           </div>
         ))}
       </div>

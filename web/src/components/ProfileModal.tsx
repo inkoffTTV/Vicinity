@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError, parseTs, Profile } from '../lib/api';
+import { useCall } from '../lib/call';
 import { useStore } from '../lib/store';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { Modal } from './Modal';
@@ -11,6 +12,8 @@ export function ProfileModal({ userId }: { userId: number }) {
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
   const livePresence = useStore((s) => s.presence[userId]);
   const toast = useStore((s) => s.toast);
+  const callIdle = useCall((s) => s.phase === 'idle');
+  const startCall = useCall((s) => s.start);
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState('');
 
@@ -124,6 +127,18 @@ export function ProfileModal({ userId }: { userId: number }) {
                 {p.friendship_status === 'pending_in' && (
                   <button className="btn" onClick={() => friendAction(() => api.friendRespond(p.id, true))}>
                     Принять заявку
+                  </button>
+                )}
+                {p.friendship_status === 'friends' && (
+                  <button
+                    className="btn ok"
+                    disabled={!callIdle}
+                    onClick={() => {
+                      close();
+                      void startCall(p.id, p.display_name);
+                    }}
+                  >
+                    📞 Позвонить
                   </button>
                 )}
                 {p.friendship_status === 'friends' && (

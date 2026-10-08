@@ -35,11 +35,6 @@ interface Toast {
   kind: 'info' | 'error';
 }
 
-interface IncomingCall {
-  from: number;
-  name: string;
-}
-
 interface State {
   me: Me | null;
   booting: boolean;
@@ -70,7 +65,6 @@ interface State {
   profileUserId: number | null;
   settingsOpen: boolean;
   toasts: Toast[];
-  incomingCall: IncomingCall | null;
   editing: number | null;
 
   boot: () => Promise<void>;
@@ -98,7 +92,6 @@ interface State {
   showProfile: (id: number | null) => void;
   setSettingsOpen: (v: boolean) => void;
   toast: (text: string, kind?: 'info' | 'error') => void;
-  rejectCall: () => void;
   setEditing: (id: number | null) => void;
 }
 
@@ -289,14 +282,6 @@ export const useStore = create<State>((set, get) => {
     return null;
   };
 
-  const userName = (s: State, id: number) =>
-    s.dms.find((d) => d.user_id === id)?.display_name ??
-    s.friends.find((f) => f.id === id)?.display_name ??
-    Object.values(s.membersByServer)
-      .flat()
-      .find((m) => m.id === id)?.display_name ??
-    'Пользователь';
-
   const dropChannelState = (ids: number[]) => {
     if (!ids.length) return;
     const s = get();
@@ -453,7 +438,6 @@ export const useStore = create<State>((set, get) => {
       membersByServer,
       messages,
       voice,
-      incomingCall: s.incomingCall?.from === uid && name ? { ...s.incomingCall, name } : s.incomingCall,
       me:
         s.me && s.me.user_id === uid
           ? {
@@ -501,9 +485,16 @@ export const useStore = create<State>((set, get) => {
       case 'presence':
         set({ presence: { ...s.presence, [ev.user_id]: ev.presence } });
         break;
-      case 'voice_state':
-        set({ voice: { ...s.voice, [ev.channel_id]: ev.users ?? [] } });
+      case 'voice_state': {
+        const users: VoiceUser[] = ev.users ?? [];
+        // Вышедший из канала больше не говорит, даже если не успел сообщить
+        const speaking = { ...s.speaking };
+        (s.voice[ev.channel_id] ?? []).forEach((u) => {
+          if (!users.some((x) => x.user_id === u.user_id)) delete speaking[u.user_id];
+        });
+        set({ voice: { ...s.voice, [ev.channel_id]: users }, speaking });
         break;
+      }
       case 'voice_speaking':
         set({ speaking: { ...s.speaking, [ev.user_id]: !!ev.speaking } });
         break;
@@ -587,16 +578,6 @@ export const useStore = create<State>((set, get) => {
       case 'user_updated':
         applyUserUpdate(ev);
         break;
-      case 'call_invite':
-        set({ incomingCall: { from: ev.from, name: userName(s, ev.from) } });
-        break;
-      case 'call_end':
-      case 'call_reject':
-        if (s.incomingCall?.from === ev.from) set({ incomingCall: null });
-        break;
-      case 'call_unavailable':
-        s.toast(`${userName(s, ev.user_id)} сейчас не в сети`, 'error');
-        break;
     }
   };
 
@@ -676,7 +657,6 @@ export const useStore = create<State>((set, get) => {
     view: { kind: 'friends' } as View,
     profileUserId: null,
     settingsOpen: false,
-    incomingCall: null,
     editing: null,
   });
 
@@ -1052,12 +1032,6 @@ export const useStore = create<State>((set, get) => {
       window.setTimeout(() => set({ toasts: get().toasts.filter((t) => t.id !== id) }), 4000);
     },
 
-    rejectCall: () => {
-      const c = get().incomingCall;
-      if (c) socket.send({ type: 'call_reject', to: c.from });
-      set({ incomingCall: null });
-    },
-
     setEditing: (id) => set({ editing: id }),
   };
 });
@@ -1069,7 +1043,15 @@ function withExt(f: File): File {
   return new File([f], `image.${ext}`, { type: f.type });
 }
 
-// Голосовые каналы и звонки в браузере пока не поддерживаются —
-// на входящий звонок отвечаем «отклонено» по кнопке пользователя.
-export const VOICE_UNSUPPORTED =
-  'Голос и звонки пока доступны только в десктопном клиенте Vicinity';
+/** Имя пользователя из уже загруженных списков: личек, друзей, участников серверов */
+export function userName(id: number): string {
+  const s = useStore.getState();
+  return (
+    s.dms.find((d) => d.user_id === id)?.display_name ??
+    s.friends.find((f) => f.id === id)?.display_name ??
+    Object.values(s.membersByServer)
+      .flat()
+      .find((m) => m.id === id)?.display_name ??
+    'Пользователь'
+  );
+}
