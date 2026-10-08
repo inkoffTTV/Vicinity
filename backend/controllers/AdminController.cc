@@ -191,11 +191,11 @@ void AdminController::blockIp(const HttpRequestPtr& req, std::function<void(cons
         cb(error("Некорректный IP-адрес", k400BadRequest)); return;
     }
     if (ip == NetUtils::clientIp(req)) { cb(error("Это ваш собственный адрес", k400BadRequest)); return; }
-    const auto note = TextUtils::cleanName(JsonUtils::getStr(*json, "note"), 200, true);
+    // Обычная (не const) строка: SqlBinder Drogon не умеет привязывать const-временные строки
+    std::string note = TextUtils::cleanName(JsonUtils::getStr(*json, "note"), 200, true).value_or("");
     try {
         auto db = drogon::app().getDbClient();
-        db->execSqlSync("INSERT OR REPLACE INTO blocked_ips(ip, note) VALUES(?, NULLIF(?, ''))",
-                        ip, note ? *note : std::string());
+        db->execSqlSync("INSERT OR REPLACE INTO blocked_ips(ip, note) VALUES(?, NULLIF(?, ''))", ip, note);
         int bannedCount = 0;
         if (JsonUtils::getBool(*json, "ban_accounts")) {
             auto rows = db->execSqlSync(
