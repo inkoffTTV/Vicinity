@@ -3,6 +3,7 @@ import { api, ApiError, parseTs, Profile } from '../lib/api';
 import { useCall } from '../lib/call';
 import { useStore } from '../lib/store';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
+import { Markdown } from './Markdown';
 import { Modal } from './Modal';
 
 export function ProfileModal({ userId }: { userId: number }) {
@@ -79,7 +80,9 @@ export function ProfileModal({ userId }: { userId: number }) {
           {p.bio && (
             <section>
               <h4>О себе</h4>
-              <p className="bio">{p.bio}</p>
+              <div className="bio">
+                <Markdown text={p.bio} />
+              </div>
             </section>
           )}
           <section>

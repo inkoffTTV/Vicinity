@@ -1,21 +1,19 @@
 import { FormEvent, useState } from 'react';
 import { api, ApiError } from '../lib/api';
+import { useNotifySettings } from '../lib/notify';
 import { useStore } from '../lib/store';
+import { homeUnread, serverHasUnread, serverMentions, useUnreadSlice } from '../lib/unread';
 import { Modal } from './Modal';
 
 export function ServerRail() {
   const servers = useStore((s) => s.servers);
   const view = useStore((s) => s.view);
   const open = useStore((s) => s.open);
-  const unread = useStore((s) => s.unread);
-  const channelsByServer = useStore((s) => s.channelsByServer);
-  const dms = useStore((s) => s.dms);
-  const groups = useStore((s) => s.groups);
+  const state = useUnreadSlice();
+  const muted = useNotifySettings((s) => s.muted);
   const [adding, setAdding] = useState(false);
 
-  const homeUnread =
-    dms.reduce((a, d) => a + (unread[d.channel_id] ?? 0), 0) +
-    groups.reduce((a, g) => a + (unread[g.id] ?? 0), 0);
+  const home = homeUnread(state);
   const homeActive = view.kind !== 'server';
 
   return (
@@ -27,18 +25,20 @@ export function ServerRail() {
         onClick={() => open({ kind: 'friends' })}
       >
         <img src="/favicon.svg" alt="" width={28} height={28} />
-        {homeUnread > 0 && <span className="badge">{homeUnread}</span>}
+        {home > 0 && <span className="badge">{home}</span>}
       </button>
       <div className="rail-sep" />
       {servers.map((srv) => {
         const active = view.kind === 'server' && view.serverId === srv.id;
-        const n = (channelsByServer[srv.id] ?? []).reduce((a, c) => a + (unread[c.id] ?? 0), 0);
+        // Красный бейдж — упоминания меня, полоска слева — непрочитанные каналы
+        const n = serverMentions(state, srv.id);
+        const unread = serverHasUnread(state, srv.id, muted);
         return (
           <button
             key={srv.id}
-            className={`rail-item${active ? ' active' : ''}`}
+            className={`rail-item${active ? ' active' : ''}${unread ? ' has-unread' : ''}`}
             title={srv.name}
-            aria-label={srv.name}
+            aria-label={n > 0 ? `${srv.name}, упоминаний: ${n}` : unread ? `${srv.name}, есть непрочитанные` : srv.name}
             aria-current={active ? 'page' : undefined}
             onClick={() => open({ kind: 'server', serverId: srv.id, channelId: null })}
           >

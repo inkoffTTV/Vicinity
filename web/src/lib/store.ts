@@ -13,8 +13,11 @@ import {
   ServerChannel,
   setToken,
   setUnauthorizedHandler,
+  UploadedFile,
   UserSummary,
 } from './api';
+import { mentionsUser } from './markdown';
+import { notifyMessage } from './notify';
 import { socket, WsEvent } from './ws';
 
 // Что открыто в основной области
@@ -67,6 +70,29 @@ interface State {
   toasts: Toast[];
   editing: number | null;
 
+  // ── Чат: ответы, переходы к сообщениям, прочитанное (docs/API.md §2, §4) ──
+  /** Непрочитанные упоминания меня по каналам */
+  mentions: Record<number, number>;
+  /** Загружено окно истории, после которого на сервере есть более новые сообщения */
+  hasNewer: Record<number, boolean>;
+  loadingNewer: Record<number, boolean>;
+  /** Сообщение, к которому надо прокрутить ленту и подсветить; key — новый при каждом переходе */
+  focusMessage: { channelId: number; id: number; key: number } | null;
+  /** Ответ, который готовится в поле ввода канала */
+  replyingTo: Record<number, Message | undefined>;
+  /** Сколько было непрочитанного в канале, когда его открыли, — для черты «Новые сообщения» */
+  unreadAtOpen: { channelId: number; count: number } | null;
+  setReplyingTo: (channelId: number, msg: Message | null) => void;
+  /** Перейти к сообщению (в том числе в другом канале), подгрузив историю вокруг него */
+  jumpTo: (channelId: number, messageId: number) => Promise<void>;
+  /** Вернуться из старой истории к последним сообщениям */
+  jumpToPresent: (channelId: number) => Promise<void>;
+  loadNewer: (channelId: number) => Promise<void>;
+  /** Непрочитанное с сервера: при входе и после переподключения */
+  loadUnread: () => Promise<void>;
+  /** Канал прочитан до последнего загруженного сообщения (лента внизу, вкладка на экране) */
+  markRead: (channelId: number) => void;
+
   boot: () => Promise<void>;
   retryBoot: () => void;
   login: (u: string, p: string) => Promise<void>;
@@ -81,7 +107,7 @@ interface State {
   openDmWith: (userId: number) => Promise<void>;
   loadMessages: (channelId: number) => Promise<void>;
   loadOlder: (channelId: number) => Promise<void>;
-  sendMessage: (channelId: number, text: string, file: File | null) => void;
+  sendMessage: (channelId: number, text: string, file: File | null, replyTo?: Message | null) => void;
   retrySend: (nonce: string) => void;
   discardSend: (nonce: string) => void;
   editMessage: (channelId: number, id: number, text: string) => Promise<boolean>;
@@ -177,6 +203,11 @@ function messageFromEvent(ev: WsEvent): Message {
     attachment: ev.attachment ?? '',
     reactions: [],
     nonce: ev.nonce,
+    attachment_name: ev.attachment_name,
+    attachment_size: ev.attachment_size,
+    attachment_type: ev.attachment_type,
+    reply_to: ev.reply_to,
+    reply: ev.reply,
   };
 }
 
@@ -186,14 +217,30 @@ function applyMessageEvent(list: Message[], ev: WsEvent, meId: number | undefine
     case 'new_message':
       return insertIncoming(list, messageFromEvent(ev), meId);
     case 'message_edited':
-      return list.map((m) => (m.id === ev.id ? { ...m, text: ev.text, edited: true } : m));
+      return patchReplies(
+        list.map((m) => (m.id === ev.id ? { ...m, text: ev.text, edited: true, edited_at: Date.now() } : m)),
+        ev.id,
+        (r) => ({ ...r, text: [...String(ev.text)].slice(0, REPLY_PREVIEW).join('') }),
+      );
     case 'message_deleted':
-      return list.filter((m) => m.id !== ev.id);
+      // Цитаты удалённого сообщения в ответах на него пропадают — как у сервера (reply: null)
+      return patchReplies(
+        list.filter((m) => m.id !== ev.id),
+        ev.id,
+        () => null,
+      );
     case 'reaction_update':
       return list.map((m) => (m.id === ev.message_id ? { ...m, reactions: ev.reactions ?? [] } : m));
   }
   return list;
 }
+// Цитата в ответе — не длиннее этого (как у сервера)
+const REPLY_PREVIEW = 200;
+
+function patchReplies(list: Message[], id: number, fn: (r: NonNullable<Message['reply']>) => Message['reply']) {
+  return list.some((m) => m.reply?.id === id) ? list.map((m) => (m.reply?.id === id ? { ...m, reply: fn(m.reply) } : m)) : list;
+}
+
 const MESSAGE_EVENTS = new Set(['new_message', 'message_edited', 'message_deleted', 'reaction_update']);
 // События, которые рассылает только сервер новой версии (docs/API.md)
 const MODERN_EVENTS = new Set([
@@ -250,7 +297,7 @@ export const useStore = create<State>((set, get) => {
   const inflight = new Map<number, { seq: number; events: WsEvent[] }>();
   let loadSeq = 0;
   // Неотправленные сообщения по nonce; отправка идёт строго по очереди, чтобы не путать порядок
-  const outbox = new Map<string, { channelId: number; text: string; file: File | null; preview: string; url?: string }>();
+  const outbox = new Map<string, OutboxItem>();
   let sendQueue: Promise<void> = Promise.resolve();
   let localSeq = 0;
   // Незнакомые каналы, о которых уже запросили список (не дёргать REST на каждое сообщение)
@@ -261,6 +308,14 @@ export const useStore = create<State>((set, get) => {
   let sessionConnected = false;
   let bootTimer: number | undefined;
   let bootDelay = 2000;
+  // ── Прочитанное: что уже отправлено серверу и самые новые известные id по каналам ──
+  const readSent = new Map<number, number>();
+  const latestId = new Map<number, number>();
+  // Пока идёт GET /unread, новые сообщения считаются здесь и добавляются к ответу сервера
+  let unreadDuring: Map<number, { unread: number; mentions: number }> | null = null;
+  let unreadTimer: number | undefined;
+  let readUnsupported = false;
+  let focusSeq = 0;
 
   const updateList = (channelId: number, fn: (list: Message[]) => Message[], create = false) => {
     const list = get().messages[channelId];
@@ -287,12 +342,16 @@ export const useStore = create<State>((set, get) => {
     const s = get();
     const messages = { ...s.messages };
     const unread = { ...s.unread };
+    const mentions = { ...s.mentions };
+    const replyingTo = { ...s.replyingTo };
     ids.forEach((id) => {
       delete messages[id];
       delete unread[id];
+      delete mentions[id];
+      delete replyingTo[id];
       drafts.delete(id);
     });
-    set({ messages, unread });
+    set({ messages, unread, mentions, replyingTo });
   };
 
   // Каналы и участники серверов, из которых пользователь вышел или был удалён
@@ -318,19 +377,28 @@ export const useStore = create<State>((set, get) => {
       .filter((ch) => !knownChannel(s, ch));
     if (stale.length) {
       const unread = { ...s.unread };
-      stale.forEach((ch) => delete unread[ch]);
-      set({ unread });
+      const mentions = { ...s.mentions };
+      stale.forEach((ch) => {
+        delete unread[ch];
+        delete mentions[ch];
+      });
+      set({ unread, mentions });
     }
+  };
+
+  // Счётчики канала обнулить локально (на сервер прочтение отправляет markRead)
+  const clearUnread = (ch: number) => {
+    const s = get();
+    if (!s.unread[ch] && !s.mentions[ch]) return;
+    const { [ch]: _u, ...unread } = s.unread;
+    const { [ch]: _m, ...mentions } = s.mentions;
+    set({ unread, mentions });
   };
 
   const markActiveRead = () => {
     if (document.hidden) return;
-    const s = get();
-    const ch = activeChannelId(s.view);
-    if (ch && s.unread[ch]) {
-      const { [ch]: _, ...rest } = s.unread;
-      set({ unread: rest });
-    }
+    const ch = activeChannelId(get().view);
+    if (ch) clearUnread(ch);
   };
 
   // Открытый экран исчез (удалили с сервера, из беседы) — уйти на «Друзей»
@@ -386,24 +454,19 @@ export const useStore = create<State>((set, get) => {
     void refreshMembers(serverId);
   };
 
-  const notify = (msg: Message) => {
-    if (!document.hidden || get().me?.presence === 'dnd') return;
-    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-    try {
-      const n = new Notification(msg.author_name, {
-        body: msg.text || '📎 Изображение',
-        icon: msg.author_avatar || '/favicon.svg',
-        tag: `ch-${msg.channel_id}`,
-      });
-      n.onclick = () => {
-        window.focus();
-        const v = viewForChannel(get(), msg.channel_id);
-        if (v) get().open(v);
-        n.close();
-      };
-    } catch {
-      /* ignore */
-    }
+  const notify = (msg: Message, mentioned: boolean) => {
+    const s = get();
+    const v = viewForChannel(s, msg.channel_id);
+    notifyMessage(msg, {
+      serverId: v?.kind === 'server' ? v.serverId : null,
+      mentioned,
+      active: activeChannelId(s.view) === msg.channel_id,
+      dnd: s.me?.presence === 'dnd',
+      open: () => {
+        const target = viewForChannel(get(), msg.channel_id);
+        if (target) get().open(target);
+      },
+    });
   };
 
   // Имя/аватар пользователя поменялись — обновить везде, где они показаны
@@ -451,8 +514,10 @@ export const useStore = create<State>((set, get) => {
   const onMessageEvent = (ev: WsEvent) => {
     const ch: number = ev.channel_id;
     inflight.get(ch)?.events.push(ev);
-    updateList(ch, (list) => applyMessageEvent(list, ev, get().me?.user_id));
+    // В ленте открыто окно старой истории — новое сообщение встанет на место при возврате к последним
+    if (ev.type !== 'new_message' || !get().hasNewer[ch]) updateList(ch, (list) => applyMessageEvent(list, ev, get().me?.user_id));
     if (ev.type !== 'new_message') return;
+    latestId.set(ch, Math.max(latestId.get(ch) ?? 0, ev.id));
     if (typeof ev.nonce === 'string' && ev.nonce) {
       modernServer = true;
       // Своё сообщение, помеченное «не отправлено», на деле дошло — повторять нечего
@@ -462,8 +527,16 @@ export const useStore = create<State>((set, get) => {
     const s = get();
     const visible = activeChannelId(s.view) === ch && !document.hidden;
     if (!visible && ev.author_id !== s.me?.user_id) {
-      set({ unread: { ...s.unread, [ch]: (s.unread[ch] ?? 0) + 1 } });
-      notify(messageFromEvent(ev));
+      const mentioned = !!s.me && mentionsUser(ev.text ?? '', s.me.username);
+      set({
+        unread: { ...s.unread, [ch]: (s.unread[ch] ?? 0) + 1 },
+        mentions: mentioned ? { ...s.mentions, [ch]: (s.mentions[ch] ?? 0) + 1 } : s.mentions,
+      });
+      if (unreadDuring) {
+        const d = unreadDuring.get(ch) ?? { unread: 0, mentions: 0 };
+        unreadDuring.set(ch, { unread: d.unread + 1, mentions: d.mentions + (mentioned ? 1 : 0) });
+      }
+      notify(messageFromEvent(ev), mentioned);
     }
     if (!knownChannel(s, ch)) {
       // Новая личка, которой ещё нет в списке, — один запрос, а не на каждое сообщение
@@ -578,6 +651,64 @@ export const useStore = create<State>((set, get) => {
       case 'user_updated':
         applyUserUpdate(ev);
         break;
+      case 'read_state':
+        applyReadState(ev.channel_id, ev.last_read_id);
+        break;
+    }
+  };
+
+  // Канал прочитан на другом устройстве (или в другой вкладке) до last_read_id
+  const applyReadState = (ch: number, lastRead: number) => {
+    if (typeof ch !== 'number' || typeof lastRead !== 'number') return;
+    readSent.set(ch, Math.max(readSent.get(ch) ?? 0, lastRead));
+    const s = get();
+    const list = s.messages[ch];
+    if (lastRead >= Math.max(latestId.get(ch) ?? 0, maxSentId(list))) return clearUnread(ch);
+    // Вся история после отметки загружена — пересчитать на месте, иначе спросить сервер
+    const sent = (list ?? []).filter((m) => !m.local);
+    if (!s.hasNewer[ch] && sent.length && sent[0].id <= lastRead) {
+      const meId = s.me?.user_id;
+      const rest = sent.filter((m) => m.id > lastRead && m.author_id !== meId);
+      const mentions = rest.filter((m) => s.me && mentionsUser(m.text, s.me.username)).length;
+      set({
+        unread: { ...s.unread, [ch]: Math.min(s.unread[ch] ?? 0, rest.length) },
+        mentions: { ...s.mentions, [ch]: Math.min(s.mentions[ch] ?? 0, mentions) },
+      });
+      return;
+    }
+    window.clearTimeout(unreadTimer);
+    unreadTimer = window.setTimeout(() => void get().loadUnread(), 500);
+  };
+
+  // Окно истории вокруг сообщения; true — сообщение нашлось. Перебивает идущую загрузку канала.
+  const loadAround = async (channelId: number, messageId: number): Promise<boolean> => {
+    const seq = ++loadSeq;
+    inflight.set(channelId, { seq, events: [] });
+    set({ loadingChannel: { ...get().loadingChannel, [channelId]: true } });
+    const current = () => inflight.get(channelId)?.seq === seq;
+    try {
+      const page = await api.messagesAround(channelId, messageId, PAGE);
+      if (!current()) return false;
+      const meId = get().me?.user_id;
+      const local = (get().messages[channelId] ?? []).filter((m) => m.local);
+      const merged = inflight
+        .get(channelId)!
+        .events.filter((ev) => !(page.hasNewer && ev.type === 'new_message'))
+        .reduce((l, ev) => applyMessageEvent(l, ev, meId), [...page.messages, ...local]);
+      set({
+        messages: { ...get().messages, [channelId]: merged },
+        hasMore: { ...get().hasMore, [channelId]: page.hasMore },
+        hasNewer: { ...get().hasNewer, [channelId]: page.hasNewer },
+      });
+      return page.messages.some((m) => m.id === messageId);
+    } catch (e) {
+      if (current()) errorToast(e);
+      return false;
+    } finally {
+      if (current()) {
+        inflight.delete(channelId);
+        set({ loadingChannel: { ...get().loadingChannel, [channelId]: false } });
+      }
     }
   };
 
@@ -585,7 +716,8 @@ export const useStore = create<State>((set, get) => {
   const catchUp = async () => {
     const s = get();
     const ch = activeChannelId(s.view);
-    if (ch) void s.loadMessages(ch);
+    // Окно старой истории не трогаем — к последним сообщениям пользователь вернётся сам
+    if (ch && !s.hasNewer[ch]) void s.loadMessages(ch);
     const serverId = s.view.kind === 'server' ? s.view.serverId : null;
     if (serverId !== null) socket.send({ type: 'voice_query', server_id: serverId });
     const e = epoch;
@@ -595,6 +727,8 @@ export const useStore = create<State>((set, get) => {
       s.refreshFriends(),
       serverId !== null ? refreshMembers(serverId) : null,
     ]);
+    if (e !== epoch) return;
+    await s.loadUnread();
     if (e !== epoch) return;
     pruneUnread();
     leaveViewIfGone();
@@ -617,6 +751,7 @@ export const useStore = create<State>((set, get) => {
       (v.kind === 'group' && s.groups.some((g) => g.id === v.channelId)) ||
       (v.kind === 'server' && s.servers.some((x) => x.id === v.serverId));
     get().open(ok ? v : { kind: 'friends' });
+    void get().loadUnread();
   };
 
   // Вход при загрузке страницы. Нет сети или 5xx (перезапуск сервера за nginx) — не выходим,
@@ -658,6 +793,12 @@ export const useStore = create<State>((set, get) => {
     profileUserId: null,
     settingsOpen: false,
     editing: null,
+    mentions: {},
+    hasNewer: {},
+    loadingNewer: {},
+    focusMessage: null,
+    replyingTo: {},
+    unreadAtOpen: null,
   });
 
   // Полный сброс при выходе/401: следующему пользователю в этой вкладке не должно достаться ничего
@@ -669,11 +810,19 @@ export const useStore = create<State>((set, get) => {
     window.clearTimeout(bootTimer);
     bootDelay = 2000;
     inflight.clear();
-    outbox.forEach((o) => o.preview && URL.revokeObjectURL(o.preview));
+    outbox.forEach((o) => {
+      o.upload?.abort();
+      if (o.preview) URL.revokeObjectURL(o.preview);
+    });
     outbox.clear();
     drafts.clear();
     requestedChannels.clear();
     membersRefreshedAt.clear();
+    readSent.clear();
+    latestId.clear();
+    unreadDuring = null;
+    window.clearTimeout(unreadTimer);
+    readUnsupported = false;
     sessionConnected = false;
     set(initialSession());
   };
@@ -681,13 +830,17 @@ export const useStore = create<State>((set, get) => {
   const hasLocal = (channelId: number, nonce: string) =>
     !!get().messages[channelId]?.some((m) => m.local && m.nonce === nonce);
 
-  // Сообщение подтверждено (или отменено) — убрать из очереди и освободить превью
+  // Сообщение подтверждено (или отменено) — убрать из очереди, прервать загрузку и освободить превью
   const settle = (nonce: string) => {
     const item = outbox.get(nonce);
     if (!item) return;
     outbox.delete(nonce);
+    item.upload?.abort();
     if (item.preview) URL.revokeObjectURL(item.preview);
   };
+
+  const patchLocal = (channelId: number, nonce: string, patch: Partial<Message>) =>
+    updateList(channelId, (list) => list.map((m) => (m.local && m.nonce === nonce ? { ...m, ...patch } : m)));
 
   // Отправка одного сообщения из очереди; при ошибке оно остаётся с кнопкой «Повторить»
   const deliver = async (nonce: string) => {
@@ -697,8 +850,29 @@ export const useStore = create<State>((set, get) => {
     // Пока ждали очереди, его уже подтвердило эхо по WS
     if (!hasLocal(channelId, nonce)) return settle(nonce);
     try {
-      if (item.file && !item.url) item.url = (await api.uploadAttachment(channelId, withExt(item.file))).url;
-      const r = await api.send(channelId, item.text, item.url ?? '', nonce);
+      if (item.file && !item.uploaded) {
+        // Прогресс — в самом сообщении, не чаще раза в процент
+        item.upload = new AbortController();
+        let shown = -1;
+        item.uploaded = await api.uploadAttachment(
+          channelId,
+          withExt(item.file),
+          (f) => {
+            const pct = Math.floor(f * 100);
+            if (pct !== shown) patchLocal(channelId, nonce, { progress: (shown = pct) / 100 });
+          },
+          item.upload.signal,
+        );
+        item.upload = undefined;
+      }
+      const up = item.uploaded;
+      const r = await api.send(channelId, {
+        text: item.text,
+        attachment: up?.url ?? '',
+        nonce,
+        ...(up ? { attachment_name: up.name } : {}),
+        ...(item.replyTo ? { reply_to: item.replyTo } : {}),
+      });
       if (outbox.get(nonce) !== item) return;
       if (r.nonce) modernServer = true;
       updateList(channelId, (list) =>
@@ -706,17 +880,23 @@ export const useStore = create<State>((set, get) => {
           ...local,
           id: r.id,
           created_at: r.created_at || local.created_at,
-          attachment: item.url ?? '',
+          attachment: up?.url ?? '',
+          attachment_name: r.attachment_name ?? local.attachment_name,
+          attachment_size: r.attachment_size ?? local.attachment_size,
+          attachment_type: r.attachment_type ?? local.attachment_type,
+          reply: r.reply !== undefined ? r.reply : local.reply,
           nonce: undefined,
           local: undefined,
+          progress: undefined,
         })),
       );
       settle(nonce);
     } catch (e) {
       if (outbox.get(nonce) !== item) return;
+      item.upload = undefined;
       // Эхо уже пришло — сообщение на сервере, ошибка ответа не важна
       if (!hasLocal(channelId, nonce)) return settle(nonce);
-      updateList(channelId, (list) => list.map((m) => (m.local && m.nonce === nonce ? { ...m, local: 'failed' } : m)));
+      patchLocal(channelId, nonce, { local: 'failed', progress: undefined });
       errorToast(e);
     }
   };
@@ -860,12 +1040,16 @@ export const useStore = create<State>((set, get) => {
         v = { ...v, channelId: first?.id ?? null };
       }
       const prev = get().view;
-      set({ view: v, editing: null });
-      rememberView(v);
       const ch = activeChannelId(v);
+      set({ view: v, editing: null, unreadAtOpen: ch ? { channelId: ch, count: get().unread[ch] ?? 0 } : null });
+      rememberView(v);
       if (ch) {
-        const { [ch]: _, ...rest } = get().unread;
-        set({ unread: rest });
+        clearUnread(ch);
+        // Окно старой истории с прошлого раза не держим — канал открывается на последних сообщениях
+        if (get().hasNewer[ch]) {
+          const { [ch]: _, ...messages } = get().messages;
+          set({ messages, hasNewer: { ...get().hasNewer, [ch]: false } });
+        }
         void get().loadMessages(ch);
       }
       // Каналы, участники и голос сервера — при входе в сервер; внутри него их обновляют события
@@ -936,12 +1120,14 @@ export const useStore = create<State>((set, get) => {
 
     // Сообщение сразу появляется в ленте как «отправляется», подтверждается ответом REST
     // или эхом по WS (что придёт раньше) — без дублей
-    sendMessage: (channelId, text, file) => {
+    sendMessage: (channelId, text, file, replyTo) => {
       const me = get().me;
       if (!me) return;
+      // Открыто окно старой истории — своё сообщение показываем среди последних
+      if (get().hasNewer[channelId]) void get().jumpToPresent(channelId);
       const nonce = makeNonce();
       const preview = file ? URL.createObjectURL(file) : '';
-      outbox.set(nonce, { channelId, text, file, preview });
+      outbox.set(nonce, { channelId, text, file, preview, replyTo: replyTo?.id });
       const msg: Message = {
         id: -++localSeq,
         channel_id: channelId,
@@ -955,6 +1141,26 @@ export const useStore = create<State>((set, get) => {
         reactions: [],
         nonce,
         local: 'sending',
+        ...(file
+          ? {
+              attachment_name: file.name,
+              attachment_size: file.size,
+              attachment_type: isImageFile(file) ? 'image' : 'file',
+              progress: 0,
+            }
+          : {}),
+        ...(replyTo
+          ? {
+              reply_to: replyTo.id,
+              reply: {
+                id: replyTo.id,
+                author_id: replyTo.author_id,
+                author_name: replyTo.author_name,
+                text: [...replyTo.text].slice(0, REPLY_PREVIEW).join(''),
+                attachment: replyTo.attachment,
+              },
+            }
+          : {}),
       };
       updateList(channelId, (list) => [...list, msg], true);
       drafts.delete(channelId);
@@ -964,7 +1170,7 @@ export const useStore = create<State>((set, get) => {
     retrySend: (nonce) => {
       const item = outbox.get(nonce);
       if (!item) return;
-      updateList(item.channelId, (list) => list.map((m) => (m.local && m.nonce === nonce ? { ...m, local: 'sending' } : m)));
+      patchLocal(item.channelId, nonce, { local: 'sending', ...(item.file && !item.uploaded ? { progress: 0 } : {}) });
       enqueue(nonce);
     },
 
@@ -978,7 +1184,13 @@ export const useStore = create<State>((set, get) => {
     editMessage: async (channelId, id, text) => {
       try {
         await api.edit(channelId, id, text);
-        updateList(channelId, (list) => list.map((m) => (m.id === id ? { ...m, text, edited: true } : m)));
+        updateList(channelId, (list) =>
+          patchReplies(
+            list.map((m) => (m.id === id ? { ...m, text, edited: true, edited_at: Date.now() } : m)),
+            id,
+            (r) => ({ ...r, text: [...text].slice(0, REPLY_PREVIEW).join('') }),
+          ),
+        );
         return true;
       } catch (e) {
         errorToast(e);
@@ -989,7 +1201,13 @@ export const useStore = create<State>((set, get) => {
     deleteMessage: async (channelId, id) => {
       try {
         await api.remove(channelId, id);
-        updateList(channelId, (list) => list.filter((m) => m.id !== id));
+        updateList(channelId, (list) =>
+          patchReplies(
+            list.filter((m) => m.id !== id),
+            id,
+            () => null,
+          ),
+        );
       } catch (e) {
         errorToast(e);
       }
@@ -1033,13 +1251,132 @@ export const useStore = create<State>((set, get) => {
     },
 
     setEditing: (id) => set({ editing: id }),
+
+    // ── Ответы, переходы, прочитанное ──
+
+    setReplyingTo: (channelId, msg) => set({ replyingTo: { ...get().replyingTo, [channelId]: msg ?? undefined } }),
+
+    jumpTo: async (channelId, messageId) => {
+      const s = get();
+      const here = activeChannelId(s.view) === channelId;
+      if (!here) {
+        const v = viewForChannel(s, channelId);
+        if (!v) return s.toast('Канал недоступен', 'error');
+        s.open(v);
+      }
+      const focus = () => set({ focusMessage: { channelId, id: messageId, key: ++focusSeq } });
+      if (here && get().messages[channelId]?.some((m) => m.id === messageId)) return focus();
+      const e = epoch;
+      const found = await loadAround(channelId, messageId);
+      if (e !== epoch) return;
+      if (found) focus();
+      else get().toast('Сообщение не найдено — возможно, его удалили', 'error');
+    },
+
+    jumpToPresent: async (channelId) => {
+      if (!get().hasNewer[channelId]) return;
+      const local = (get().messages[channelId] ?? []).filter((m) => m.local);
+      const { [channelId]: _, ...rest } = get().messages;
+      set({
+        messages: local.length ? { ...rest, [channelId]: local } : rest,
+        hasNewer: { ...get().hasNewer, [channelId]: false },
+        focusMessage: null,
+      });
+      await get().loadMessages(channelId);
+    },
+
+    loadNewer: async (channelId) => {
+      const s = get();
+      const newest = maxSentId(s.messages[channelId]);
+      if (!newest || !s.hasNewer[channelId] || s.loadingNewer[channelId]) return;
+      const e = epoch;
+      set({ loadingNewer: { ...s.loadingNewer, [channelId]: true } });
+      try {
+        // around=последнее загруженное: до половины окна — более новые сообщения
+        const page = await api.messagesAround(channelId, newest, 100);
+        if (e !== epoch || !get().hasNewer[channelId]) return;
+        updateList(channelId, (list) => ordered([...list, ...page.messages.filter((m) => !list.some((x) => x.id === m.id))]));
+        set({ hasNewer: { ...get().hasNewer, [channelId]: page.hasNewer } });
+      } catch (err) {
+        errorToast(err);
+      } finally {
+        if (e === epoch) set({ loadingNewer: { ...get().loadingNewer, [channelId]: false } });
+      }
+    },
+
+    loadUnread: async () => {
+      const e = epoch;
+      unreadDuring = new Map();
+      try {
+        const list = await api.unread();
+        if (e !== epoch) return;
+        modernServer = true;
+        const s = get();
+        // Открытый на экране канал прочитан — его отметку отправит лента
+        const active = document.hidden ? null : activeChannelId(s.view);
+        const unread: Record<number, number> = {};
+        const mentions: Record<number, number> = {};
+        for (const u of list) {
+          latestId.set(u.channel_id, Math.max(latestId.get(u.channel_id) ?? 0, u.last_message_id));
+          if (u.channel_id === active) continue;
+          unread[u.channel_id] = u.unread;
+          if (u.mentions) mentions[u.channel_id] = u.mentions;
+        }
+        unreadDuring.forEach((d, ch) => {
+          if (ch === active) return;
+          unread[ch] = (unread[ch] ?? 0) + d.unread;
+          if (d.mentions) mentions[ch] = (mentions[ch] ?? 0) + d.mentions;
+        });
+        set({ unread, mentions });
+      } catch {
+        /* старый сервер без /unread — счётчики ведутся только на клиенте */
+      } finally {
+        if (e === epoch) unreadDuring = null;
+      }
+    },
+
+    markRead: (channelId) => {
+      clearUnread(channelId);
+      const newest = maxSentId(get().messages[channelId]);
+      const prev = readSent.get(channelId) ?? 0;
+      if (!newest || readUnsupported || newest <= prev) return;
+      readSent.set(channelId, newest);
+      const e = epoch;
+      api.markRead(channelId, newest).then(
+        (r) => {
+          if (e === epoch) readSent.set(channelId, Math.max(readSent.get(channelId) ?? 0, r.last_read_id));
+        },
+        (err) => {
+          if (e !== epoch) return;
+          // Старый сервер не знает /read — больше не пытаемся; иначе повторим при следующем случае
+          if (err instanceof ApiError && err.status === 404 && !modernServer) readUnsupported = true;
+          else if (readSent.get(channelId) === newest) readSent.set(channelId, prev);
+        },
+      );
+    },
   };
 });
 
-// Сервер определяет тип по расширению — у вставленных из буфера картинок его может не быть
+interface OutboxItem {
+  channelId: number;
+  text: string;
+  file: File | null;
+  preview: string;
+  replyTo?: number;
+  /** Файл уже на сервере — при повторе не загружаем заново */
+  uploaded?: UploadedFile;
+  upload?: AbortController;
+}
+
+/** Картинки сервер показывает в ленте, остальное — файлом (docs/API.md §2) */
+export function isImageFile(f: File): boolean {
+  return /^image\/(png|jpeg|gif|webp)$/.test(f.type);
+}
+
+// У вставленных из буфера картинок может не быть имени с расширением
 function withExt(f: File): File {
-  if (/\.(png|jpe?g|gif)$/i.test(f.name)) return f;
-  const ext = f.type === 'image/jpeg' ? 'jpg' : f.type.split('/')[1] || 'png';
+  if (!isImageFile(f) || /\.(png|jpe?g|gif|webp)$/i.test(f.name)) return f;
+  const ext = f.type === 'image/jpeg' ? 'jpg' : f.type.split('/')[1];
   return new File([f], `image.${ext}`, { type: f.type });
 }
 

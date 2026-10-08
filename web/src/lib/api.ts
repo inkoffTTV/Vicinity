@@ -33,6 +33,18 @@ export interface Reaction {
   users: number[];
 }
 
+/** Цитата сообщения, на которое ответили (docs/API.md §2) */
+export interface ReplyPreview {
+  id: number;
+  author_id: number;
+  author_name: string;
+  /** Не длиннее 200 символов */
+  text: string;
+  attachment: string;
+}
+
+export type AttachmentType = 'image' | 'file' | '';
+
 export interface Message {
   id: number;
   channel_id: number;
@@ -44,6 +56,17 @@ export interface Message {
   edited: boolean;
   attachment: string;
   reactions: Reaction[];
+  // Поля нового сервера; старый их не присылает
+  attachment_name?: string;
+  attachment_size?: number;
+  attachment_type?: AttachmentType;
+  reply_to?: number;
+  /** null — ответа нет или исходное сообщение удалено */
+  reply?: ReplyPreview | null;
+  /** Когда правку увидел этот клиент (сервер время правки не хранит) */
+  edited_at?: number;
+  /** Доля загрузки вложения своего ещё не отправленного сообщения (0..1) */
+  progress?: number;
   /** Эхо клиентского nonce (новый сервер присылает его в new_message и ответе на отправку) */
   nonce?: string;
   /** Только у своих ещё не подтверждённых сервером сообщений */
@@ -55,6 +78,42 @@ export interface MessagePage {
   messages: Message[];
   /** Есть ли более старые; null — сервер не сообщает (старая версия без постраничной загрузки) */
   hasMore: boolean | null;
+}
+
+/** Окно истории вокруг сообщения (around=) */
+export interface AroundPage {
+  messages: Message[];
+  hasMore: boolean;
+  hasNewer: boolean;
+}
+
+export interface UnreadEntry {
+  channel_id: number;
+  unread: number;
+  mentions: number;
+  last_message_id: number;
+}
+
+export interface PinnedMessage extends Message {
+  pinned_by: number;
+  pinned_at: string;
+}
+
+export interface SearchResult extends Message {
+  channel_name: string;
+  /** 0 — личка или беседа */
+  server_id: number;
+}
+
+export interface ChannelMember extends UserSummary {
+  is_owner: boolean;
+}
+
+export interface UploadedFile {
+  url: string;
+  name: string;
+  size: number;
+  type: AttachmentType;
 }
 
 export interface Server {
@@ -170,7 +229,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new ApiError(0, 'Сервер недоступен');
   }
 
-  const text = await res.text();
+  return settle<T>(res.status, await res.text());
+}
+
+// Разобрать ответ сервера: данные или ApiError с понятным текстом
+function settle<T>(status: number, text: string): T {
   let data: any = {};
   if (text) {
     try {
@@ -179,16 +242,16 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       data = { error: text };
     }
   }
-  if (!res.ok) {
-    if (res.status === 401 && token && onUnauthorized) onUnauthorized();
+  if (status < 200 || status >= 300) {
+    if (status === 401 && token && onUnauthorized) onUnauthorized();
     const msg =
       data?.error ||
-      (res.status === 429
+      (status === 429
         ? 'Слишком много запросов, подождите минуту'
-        : res.status === 413
+        : status === 413
           ? 'Файл слишком большой'
-          : `Ошибка ${res.status}`);
-    throw new ApiError(res.status, msg);
+          : `Ошибка ${status}`);
+    throw new ApiError(status, msg);
   }
   // Часть эндпоинтов профиля сообщает об ошибке БД кодом 200 + {status:"error"}
   if (data && data.status === 'error') throw new ApiError(500, data.message || 'Ошибка сервера');
@@ -242,22 +305,21 @@ export const api = {
       }),
     );
   },
-  send: (channelId: number, text: string, attachment: string, nonce: string) =>
-    post<{ id: number; created_at: string; nonce?: string }>(`/channels/${channelId}/messages`, {
-      text,
-      attachment,
-      nonce,
-    }),
+  send: (
+    channelId: number,
+    body: { text: string; attachment: string; nonce: string; attachment_name?: string; reply_to?: number },
+  ) =>
+    post<
+      { id: number; created_at: string; nonce?: string } & Partial<
+        Pick<Message, 'reply_to' | 'reply' | 'attachment_name' | 'attachment_size' | 'attachment_type'>
+      >
+    >(`/channels/${channelId}/messages`, body),
   edit: (channelId: number, mid: number, text: string) =>
     post(`/channels/${channelId}/messages/${mid}/edit`, { text }),
   remove: (channelId: number, mid: number) => del(`/channels/${channelId}/messages/${mid}`),
   react: (channelId: number, mid: number, emoji: string) =>
     post<{ reactions: Reaction[] }>(`/channels/${channelId}/messages/${mid}/react`, { emoji }),
-  uploadAttachment: (channelId: number, file: File) => {
-    const fd = new FormData();
-    fd.append('file', file, file.name);
-    return request<{ url: string }>('POST', `/channels/${channelId}/attachments`, fd);
-  },
+  uploadAttachment,
 
   // ── Серверы ──
   listServers: () => get<{ servers: Server[] }>('/servers').then((r) => r.servers),
@@ -296,11 +358,76 @@ export const api = {
   },
   clearMedia: (field: 'avatar' | 'banner') => post('/profile/clear_media', { field }),
 
+  // ── Ответы, прочитанное, поиск, закрепы, участники бесед (docs/API.md §2–§7) ──
+  messagesAround: (channelId: number, around: number, limit = 50) =>
+    get<{ messages: Omit<Message, 'channel_id'>[]; has_more?: boolean; has_newer?: boolean }>(
+      `/channels/${channelId}/messages?around=${around}&limit=${limit}`,
+    ).then(
+      (r): AroundPage => ({
+        messages: r.messages.map((m) => ({ ...m, channel_id: channelId })).sort((a, b) => a.id - b.id),
+        hasMore: r.has_more === true,
+        hasNewer: r.has_newer === true,
+      }),
+    ),
+  unread: () => get<{ channels: UnreadEntry[] }>('/unread').then((r) => r.channels),
+  markRead: (channelId: number, message_id: number) =>
+    post<{ channel_id: number; last_read_id: number }>(`/channels/${channelId}/read`, { message_id }),
+  search: (q: string, scope: { channel_id?: number; server_id?: number }) => {
+    const p = new URLSearchParams({ q });
+    if (scope.channel_id) p.set('channel_id', String(scope.channel_id));
+    else if (scope.server_id) p.set('server_id', String(scope.server_id));
+    return get<{ results: SearchResult[] }>(`/search?${p}`).then((r) => r.results);
+  },
+  pins: (channelId: number) => get<{ pins: PinnedMessage[] }>(`/channels/${channelId}/pins`).then((r) => r.pins),
+  pin: (channelId: number, message_id: number) => post(`/channels/${channelId}/pins`, { message_id }),
+  unpin: (channelId: number, mid: number) => del(`/channels/${channelId}/pins/${mid}`),
+  channelMembers: (channelId: number) =>
+    get<{ members: ChannelMember[] }>(`/channels/${channelId}/members`).then((r) => r.members),
+
   // ── Звонки ──
   /** STUN/TURN для RTCPeerConnection (TURN — временные учётки, docs/API.md §12) */
   rtcIce: () =>
     get<{ ice_servers?: RTCIceServer[] }>('/rtc/ice').then((r) => (Array.isArray(r.ice_servers) ? r.ice_servers : [])),
 };
+
+/**
+ * Загрузить вложение (POST /channels/{id}/attachments) через XMLHttpRequest — ради событий прогресса.
+ * onProgress получает долю 0..1; signal отменяет загрузку (ApiError с кодом 0 и name «AbortError»).
+ */
+function uploadAttachment(
+  channelId: number,
+  file: File,
+  onProgress?: (fraction: number) => void,
+  signal?: AbortSignal,
+): Promise<UploadedFile> {
+  return new Promise((resolve, reject) => {
+    const aborted = () => {
+      const e = new ApiError(0, 'Загрузка отменена');
+      e.name = 'AbortError';
+      reject(e);
+    };
+    if (signal?.aborted) return aborted();
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/v1/channels/${channelId}/attachments`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(e.loaded / e.total);
+    xhr.onload = () => {
+      try {
+        const r = settle<Partial<UploadedFile> & { url: string }>(xhr.status, xhr.responseText);
+        // Старый сервер отвечает только {url} и принимает лишь картинки
+        resolve({ url: r.url, name: r.name ?? file.name, size: r.size ?? file.size, type: r.type ?? 'image' });
+      } catch (e) {
+        reject(e);
+      }
+    };
+    xhr.onerror = () => reject(new ApiError(0, 'Сервер недоступен'));
+    xhr.onabort = aborted;
+    signal?.addEventListener('abort', () => xhr.abort(), { once: true });
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    xhr.send(fd);
+  });
+}
 
 // SQLite CURRENT_TIMESTAMP — "YYYY-MM-DD HH:MM:SS" в UTC
 export function parseTs(ts: string): Date {

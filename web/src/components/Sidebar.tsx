@@ -1,9 +1,11 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, MouseEvent, useState } from 'react';
 import { api, ApiError, Presence } from '../lib/api';
+import { useNotifySettings } from '../lib/notify';
 import { useStore } from '../lib/store';
 import { useVoice } from '../lib/voice';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { Modal } from './Modal';
+import { NotifyMenu } from './NotifyMenu';
 import { VoiceBar } from './VoiceBar';
 import { VoiceUsers } from './VoiceRoom';
 
@@ -26,7 +28,9 @@ function HomeSide() {
   const presence = useStore((s) => s.presence);
   const incoming = useStore((s) => s.incoming);
   const open = useStore((s) => s.open);
+  const muted = useNotifySettings((s) => s.muted);
   const [creating, setCreating] = useState(false);
+  const [menu, setMenu] = useChannelMenu();
 
   return (
     <>
@@ -48,8 +52,9 @@ function HomeSide() {
         {dms.map((d) => (
           <div key={d.channel_id}>
             <button
-              className={`side-item${view.kind === 'dm' && view.channelId === d.channel_id ? ' active' : ''}`}
+              className={`side-item${view.kind === 'dm' && view.channelId === d.channel_id ? ' active' : ''}${itemState(d.channel_id, unread, muted)}`}
               onClick={() => open({ kind: 'dm', channelId: d.channel_id })}
+              onContextMenu={(e) => setMenu(e, d.channel_id, null)}
             >
               <Avatar name={d.display_name} src={d.avatar_path} id={d.user_id} size={32} presence={presence[d.user_id] ?? 'offline'} />
               <span className="grow ellipsis">{d.display_name}</span>
@@ -68,8 +73,9 @@ function HomeSide() {
         {groups.map((g) => (
           <div key={g.id}>
             <button
-              className={`side-item${view.kind === 'group' && view.channelId === g.id ? ' active' : ''}`}
+              className={`side-item${view.kind === 'group' && view.channelId === g.id ? ' active' : ''}${itemState(g.id, unread, muted)}`}
               onClick={() => open({ kind: 'group', channelId: g.id })}
+              onContextMenu={(e) => setMenu(e, g.id, null)}
             >
               <span className="side-icon">#</span>
               <span className="grow ellipsis">{g.name}</span>
@@ -80,8 +86,26 @@ function HomeSide() {
         ))}
       </div>
       {creating && <CreateGroupDialog onClose={() => setCreating(false)} />}
+      {menu}
     </>
   );
+}
+
+// Непрочитанный канал — жирным, заглушённый — приглушённым
+function itemState(channelId: number, unread: Record<number, number>, muted: number[]) {
+  if (muted.includes(channelId)) return ' muted-ch';
+  return unread[channelId] ? ' unread' : '';
+}
+
+// Контекстное меню канала (правая кнопка, Shift+F10): уведомления канала и сервера
+function useChannelMenu() {
+  const [at, setAt] = useState<{ channelId: number; serverId: number | null; point: { x: number; y: number } } | null>(null);
+  const show = (e: MouseEvent, channelId: number, serverId: number | null) => {
+    e.preventDefault();
+    setAt({ channelId, serverId, point: { x: e.clientX, y: e.clientY } });
+  };
+  const menu = at && <NotifyMenu channelId={at.channelId} serverId={at.serverId} point={at.point} onClose={() => setAt(null)} />;
+  return [menu, show] as const;
 }
 
 function CreateGroupDialog({ onClose }: { onClose: () => void }) {
@@ -125,8 +149,11 @@ function ServerSide({ serverId }: { serverId: number }) {
   const channels = useStore((s) => s.channelsByServer[serverId] ?? []);
   const view = useStore((s) => s.view);
   const unread = useStore((s) => s.unread);
+  const mentions = useStore((s) => s.mentions);
   const open = useStore((s) => s.open);
   const toast = useStore((s) => s.toast);
+  const muted = useNotifySettings((s) => s.muted);
+  const [channelMenu, setChannelMenu] = useChannelMenu();
   const myVoice = useVoice((s) => s.channelId);
   const joinVoice = useVoice((s) => s.join);
   const [adding, setAdding] = useState<null | 'text' | 'voice'>(null);
@@ -165,12 +192,17 @@ function ServerSide({ serverId }: { serverId: number }) {
         {text.map((c) => (
           <button
             key={c.id}
-            className={`side-item channel${activeCh === c.id ? ' active' : ''}${unread[c.id] ? ' unread' : ''}`}
+            className={`side-item channel${activeCh === c.id ? ' active' : ''}${itemState(c.id, unread, muted)}`}
             onClick={() => open({ kind: 'server', serverId, channelId: c.id })}
+            onContextMenu={(e) => setChannelMenu(e, c.id, serverId)}
           >
             <span className="side-icon">#</span>
             <span className="grow ellipsis">{c.name}</span>
-            {unread[c.id] > 0 && <span className="badge inline">{unread[c.id]}</span>}
+            {mentions[c.id] > 0 && (
+              <span className="badge inline mention" title={`Упоминаний: ${mentions[c.id]}`}>
+                @{mentions[c.id]}
+              </span>
+            )}
           </button>
         ))}
         {voiceChs.length > 0 && <div className="side-section">Голосовые каналы</div>}
@@ -189,6 +221,7 @@ function ServerSide({ serverId }: { serverId: number }) {
         ))}
       </div>
       {adding && <AddChannelDialog serverId={serverId} voice={adding === 'voice'} onClose={() => setAdding(null)} />}
+      {channelMenu}
     </>
   );
 }

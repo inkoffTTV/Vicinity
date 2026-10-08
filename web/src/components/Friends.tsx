@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError, UserSummary } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
+import { SearchBox } from './Search';
 
 type Tab = 'online' | 'all' | 'pending' | 'add';
 
@@ -71,6 +72,8 @@ export function Friends({ onMenu }: { onMenu: () => void }) {
             Добавить в друзья
           </button>
         </div>
+        <div className="grow" />
+        <SearchBox />
       </header>
       <div className="friends-body">
         {(tab === 'online' || tab === 'all') && (
