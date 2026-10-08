@@ -76,14 +76,18 @@ public:
     Q_INVOKABLE void syncProfile();
     Q_INVOKABLE void loadChannels();
     Q_INVOKABLE void createChannel(const QString& name);
-    Q_INVOKABLE void loadMessages(int channelId);
-    Q_INVOKABLE void sendChatMessage(int channelId, const QString& text,
-                                     const QString& attachment = QString());
+    Q_INVOKABLE void loadMessages(int channelId);                          // последние 50
+    Q_INVOKABLE void loadOlderMessages(int channelId, qlonglong beforeId);  // страница старше beforeId
+    // Возвращает nonce сообщения: сервер повторяет его в new_message, так своё сообщение
+    // узнаётся и здесь (оптимистичная строка), и на других устройствах
+    Q_INVOKABLE QString sendChatMessage(int channelId, const QString& text,
+                                        const QString& attachment = QString());
     Q_INVOKABLE void editMessage(int channelId, qlonglong msgId, const QString& text);
     Q_INVOKABLE void deleteMessage(int channelId, qlonglong msgId);
     Q_INVOKABLE void toggleReaction(int channelId, qlonglong msgId, const QString& emoji);
     Q_INVOKABLE void sendAttachment(int channelId, const QString& localFileUrl);
     Q_INVOKABLE void clearUser();
+    Q_INVOKABLE void logout();   // закрыть сессию на сервере и забыть пользователя
 
     Q_INVOKABLE void uploadAvatar(const QString& localPath);
     Q_INVOKABLE void uploadBanner(const QString& localPath);
@@ -129,8 +133,10 @@ signals:
     void userChanged();
     void serverChanged();
     void channelsReady(QVariantList channels);
-    void messagesReady(int channelId, QVariantList messages);
-    void messageSent(int channelId, qlonglong msgId);                       // свой текст получил id
+    // Сообщения новыми первыми; hasMore — на сервере есть более старые (старый сервер: всегда false)
+    void messagesReady(int channelId, QVariantList messages, bool hasMore);
+    void olderMessagesReady(int channelId, QVariantList messages, bool hasMore);
+    void messageSent(int channelId, qlonglong msgId, QString nonce);        // свой текст получил id
     void attachmentSent(int channelId, qlonglong msgId, QString attachUrl); // своё вложение отправлено
     void rolesReady(QVariantList roles);
     void roleError(QString message);
@@ -158,6 +164,8 @@ private:
     void saveSession();
     void clearSession();
     QString serverBase() const;
+    QVariantMap messageToVariant(const QJsonObject& msg) const;   // сообщение REST → строка модели
+    void fetchMessages(int channelId, qlonglong beforeId);        // beforeId 0 — последние
 
     bool      m_authenticated   = false;
     int64_t   m_userId          = 0;

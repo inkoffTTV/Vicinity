@@ -422,18 +422,18 @@ Item {
                             Layout.fillWidth: true; Layout.leftMargin: 16; Layout.rightMargin: 16
                             Layout.bottomMargin: 14; spacing: 6
                             RowLayout { spacing: 6
-                                Text { text: root.localName.length ? root.localName : "Имя"
+                                Text { textFormat: Text.PlainText; text: root.localName.length ? root.localName : "Имя"
                                     color: themeManager.textColor; font.pixelSize: 17; font.bold: true }
-                                Text { text: root.localPronouns; visible: root.localPronouns.length>0
+                                Text { textFormat: Text.PlainText; text: root.localPronouns; visible: root.localPronouns.length>0
                                     color: themeManager.textFaintColor; font.pixelSize: 12 } }
-                            Text { text: "@" + appState.username; color: themeManager.textMutedColor; font.pixelSize: 12 }
+                            Text { textFormat: Text.PlainText; text: "@" + appState.username; color: themeManager.textMutedColor; font.pixelSize: 12 }
                             Rectangle { Layout.fillWidth: true; height: 1; color: themeManager.borderColor }
                             Row { spacing: 6; visible: root.localShowStatus && root.localStatusText.length>0
                                 AppIcon { visible: root.localStatusIcon !== ""; name: root.localStatusIcon; size: 14
                                     color: themeManager.textColor; anchors.verticalCenter: parent.verticalCenter }
                                 Rectangle { visible: root.localStatusIcon === ""; width: 8; height: 8; radius: 4
                                     color: Qt.color(root.localStatusColor); anchors.verticalCenter: parent.verticalCenter }
-                                Text { text: root.localStatusText; color: themeManager.textColor; font.pixelSize: 13
+                                Text { textFormat: Text.PlainText; text: root.localStatusText; color: themeManager.textColor; font.pixelSize: 13
                                     anchors.verticalCenter: parent.verticalCenter } }
                             Text { visible: root.localShowBio && root.localBio.length>0
                                 Layout.fillWidth: true; wrapMode: Text.WordWrap; textFormat: Text.StyledText
@@ -447,7 +447,7 @@ Item {
         }
 
         // ═══ Плашка сохранения (1:1 как в Discord) ═══
-        Text { text: root.errorMsg; visible: root.errorMsg.length>0; color: themeManager.dangerColor
+        Text { textFormat: Text.PlainText; text: root.errorMsg; visible: root.errorMsg.length>0; color: themeManager.dangerColor
             Layout.leftMargin: 20; Layout.rightMargin: 20; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
         Rectangle {
             Layout.fillWidth: true

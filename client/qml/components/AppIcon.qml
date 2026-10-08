@@ -1,5 +1,5 @@
 import QtQuick 2.15
-import QtQuick.Shapes 1.15
+import QtQuick.Shapes   // без версии: preferredRendererType (Qt 6.6+) скрыт при импорте 1.15
 
 // Векторная иконка. Цвет — ВСЕГДА из токена (по умолчанию textColor),
 // никаких растровых ассетов. Аналог "SVG через currentColor".

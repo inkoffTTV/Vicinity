@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import "qrc:/qml/format.js" as Fmt
 
 // Плоская строка сообщения в стиле Discord (без пузырей, всё слева).
 // grouped = это сообщение того же автора подряд → без аватара и шапки.
@@ -88,6 +89,7 @@ Item {
             Text {
                 id: nameT
                 text: root.authorName
+                textFormat: Text.PlainText
                 color: root.roleColor !== "" ? root.roleColor : themeManager.textColor
                 font.pixelSize: 15; font.bold: true
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -102,12 +104,15 @@ Item {
             }
         }
 
-        // Обычный текст (+ метка «изменено»)
+        // Обычный текст (+ метка «изменено»). Текст пользователя — только экранированным:
+        // разметка из сообщения не должна стать разметкой (картинки, ссылки, шрифты)
         Text {
             visible: !root.editing && root.messageText.length > 0
             width: parent.width
-            text: root.messageText
-                  + (root.edited ? " <font color=\"" + themeManager.textFaintColor + "\" size=\"1\">(изменено)</font>" : "")
+            text: root.edited
+                  ? Fmt.plainToStyled(root.messageText)
+                    + " <font color=\"" + themeManager.textFaintColor + "\" size=\"1\">(изменено)</font>"
+                  : root.messageText
             textFormat: root.edited ? Text.StyledText : Text.PlainText
             color: themeManager.textColor
             font.pixelSize: 15
@@ -177,7 +182,7 @@ Item {
                     border.color: modelData.me ? themeManager.accentColor : themeManager.borderColor
                     Row {
                         id: rxRow; anchors.centerIn: parent; spacing: 4
-                        Text { text: modelData.emoji; font.pixelSize: 12 }
+                        Text { textFormat: Text.PlainText; text: modelData.emoji; font.pixelSize: 12 }
                         Text { text: modelData.count
                             color: modelData.me ? themeManager.accentColor : themeManager.textMutedColor
                             font.pixelSize: 11; font.bold: true }

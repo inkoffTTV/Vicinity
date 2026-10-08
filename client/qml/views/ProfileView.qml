@@ -468,6 +468,7 @@ Dialog {
                             leftMargin: 14; rightMargin: 14 }
                         Text {
                             text: appState.roleName !== "" ? "Роль: " + appState.roleName : "Управление ролями"
+                            textFormat: Text.PlainText
                             color: appState.roleColor !== "" ? appState.roleColor : themeManager.textColor
                             font.pixelSize: 13; width: parent.width - 20
                             elide: Text.ElideRight
@@ -649,6 +650,7 @@ Dialog {
 
                         Text {
                             text: root.localName.length > 0 ? root.localName : "Имя пользователя"
+                            textFormat: Text.PlainText
                             color: themeManager.textColor; font.pixelSize: 16; font.bold: true
                             width: parent.width - 32; elide: Text.ElideRight
                         }
@@ -657,7 +659,7 @@ Dialog {
                             visible: appState.roleName !== ""; spacing: 6
                             Rectangle { width: 10; height: 10; radius: 5; anchors.verticalCenter: parent.children[1].verticalCenter
                                 color: appState.roleColor !== "" ? appState.roleColor : themeManager.accentColor }
-                            Text { text: appState.roleName; font.pixelSize: 12; font.bold: true
+                            Text { textFormat: Text.PlainText; text: appState.roleName; font.pixelSize: 12; font.bold: true
                                 color: appState.roleColor !== "" ? appState.roleColor : themeManager.accentColor }
                         }
 
@@ -668,7 +670,7 @@ Dialog {
                             Rectangle { width: 9; height: 9; radius: 5
                                 anchors.verticalCenter: parent.children[1].verticalCenter
                                 color: root.localStatusColor }
-                            Text { text: root.localStatusText; font.pixelSize: 12
+                            Text { textFormat: Text.PlainText; text: root.localStatusText; font.pixelSize: 12
                                 color: Qt.rgba(themeManager.textColor.r, themeManager.textColor.g,
                                                themeManager.textColor.b, 0.85) }
                         }
@@ -682,6 +684,7 @@ Dialog {
 
                         Text {
                             text: root.localBio
+                            textFormat: Text.PlainText
                             visible: root.localShowBio && root.localBio !== ""
                             width: parent.width - 32; wrapMode: Text.WordWrap; font.pixelSize: 12
                             color: Qt.rgba(themeManager.textColor.r, themeManager.textColor.g,
@@ -697,6 +700,7 @@ Dialog {
                                 Text {
                                     width: parent.width
                                     text: "🔗 " + (lbl && lbl.length > 0 ? lbl : url)
+                                    textFormat: Text.PlainText
                                     visible: (lbl && lbl.length > 0) || (url && url.length > 0)
                                     color: themeManager.accentColor; font.pixelSize: 12
                                     elide: Text.ElideRight

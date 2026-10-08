@@ -1,5 +1,5 @@
 import QtQuick 2.15
-import QtQuick.Shapes 1.15
+import QtQuick.Shapes   // без версии: preferredRendererType (Qt 6.6+) скрыт при импорте 1.15
 
 // Рендер градиента по спецификации:
 //   { type: "linear"|"radial", angle: <deg>, stops: [{pos:0..1, color:"#.."}, ...] }

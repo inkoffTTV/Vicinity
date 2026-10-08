@@ -127,7 +127,7 @@ Popup {
                                     anchors.fill: parent; hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        if (modelData.logout) { root.close(); appState.clearUser() }
+                                        if (modelData.logout) { root.close(); appState.logout() }
                                         else if (modelData.sec !== undefined) root.section = modelData.sec
                                     }
                                 }

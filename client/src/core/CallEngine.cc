@@ -1,25 +1,76 @@
 #include "CallEngine.h"
-#include "VoiceEngine.h"
 #include "VideoEngine.h"
+#include "../network/ApiClient.h"
 #include <rtc/rtc.hpp>
 #include <opus/opus.h>
 #include <wels/codec_api.h>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QPointer>
+#include <QUrl>
 #include <QDebug>
+#include <cctype>
 #include <cstring>
+#include <exception>
+#include <random>
+#include <variant>
 
 // PCM 16кГц моно, кадр 20мс = 320 сэмплов (640 байт) — как в VoiceEngine.
 static constexpr int kSampleRate = 16000;
 static constexpr int kFrame      = 320;
 static constexpr int kRtpClock   = 48000;   // RTP-часы Opus всегда 48кГц (RFC 7587)
 static constexpr int kRtpInc     = kRtpClock / 50;  // 20мс → 960
+static constexpr int kMaxDecodeSamples = kSampleRate * 120 / 1000;   // самый длинный Opus-пакет — 120 мс
+static constexpr int kOpusBitrate = 32000;
+static constexpr int kTxGapMs    = 500;     // пауза в отправке длиннее (mute) — сдвигаем RTP-время
 
-// Видео: H264 (openh264), RTP-часы 90кГц, PT 96.
+// Видео: H264 (openh264), RTP-часы 90кГц. PT — 96 у звонящего, у принимающего — из offer'а.
 static constexpr int      kVideoPt    = 96;
+static constexpr int      kAudioPt    = 111;
 static constexpr uint32_t kVideoClock = 90000;
+static constexpr unsigned kRembBitrate = 2500000;   // REMB: сколько просим у собеседника на видео
 
-CallEngine::CallEngine(VoiceEngine* voice, VideoEngine* video, QObject* parent)
-    : QObject(parent), m_voice(voice), m_video(video) {
+// Таймауты звонка
+static constexpr int kRingTimeoutMs      = 45000;   // никто не ответил
+static constexpr int kIncomingTimeoutMs  = 60000;   // звонящий пропал, не сняв вызов
+static constexpr int kConnectTimeoutMs   = 30000;   // ответили, но ICE/DTLS не сошлись
+static constexpr int kDisconnectGraceMs  = 5000;    // Disconnected → ждём восстановления
+static constexpr int kIceFetchTimeoutMs  = 4000;    // GET /rtc/ice; дольше — запасные серверы
+static constexpr int kMaxPendingIce      = 64;
+
+namespace {
+
+std::string lower(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+// Значение параметра из строки fmtp ("a=1;b=2"), "" — если нет
+std::string fmtpParam(const std::string& fmtp, const std::string& key) {
+    size_t pos = 0;
+    while (pos < fmtp.size()) {
+        size_t end = fmtp.find(';', pos);
+        if (end == std::string::npos) end = fmtp.size();
+        const std::string part = fmtp.substr(pos, end - pos);
+        const size_t b = part.find_first_not_of(' ');
+        const size_t eq = part.find('=');
+        if (b != std::string::npos && eq != std::string::npos && eq > b &&
+            lower(part.substr(b, eq - b)) == key)
+            return part.substr(eq + 1);
+        pos = end + 1;
+    }
+    return {};
+}
+
+rtc::Description::Direction directionOf(bool send, bool recv) {
+    using D = rtc::Description::Direction;
+    return send && recv ? D::SendRecv : send ? D::SendOnly : recv ? D::RecvOnly : D::Inactive;
+}
+
+} // namespace
+
+CallEngine::CallEngine(VideoEngine* video, QObject* parent)
+    : QObject(parent), m_video(video) {
     // Логи libdatachannel → qWarning (диагностика ICE/DTLS в stderr-логе клиента)
     static std::once_flag rtcLogOnce;
     std::call_once(rtcLogOnce, [] {
@@ -29,17 +80,26 @@ CallEngine::CallEngine(VoiceEngine* voice, VideoEngine* video, QObject* parent)
     });
     int err = 0;
     m_enc = opus_encoder_create(kSampleRate, 1, OPUS_APPLICATION_VOIP, &err);
+    if (m_enc) {
+        opus_encoder_ctl(m_enc, OPUS_SET_BITRATE(kOpusBitrate));
+        opus_encoder_ctl(m_enc, OPUS_SET_INBAND_FEC(1));        // браузер восстановит потерянный пакет
+        opus_encoder_ctl(m_enc, OPUS_SET_PACKET_LOSS_PERC(5));
+    }
     m_dec = opus_decoder_create(kSampleRate, 1, &err);
-    if (m_voice)
-        connect(m_voice, &VoiceEngine::frameCaptured, this, &CallEngine::onMicFrame,
-                Qt::DirectConnection);   // энкодим прямо в потоке захвата
     if (m_video) {
         connect(m_video, &VideoEngine::frameCaptured, this, &CallEngine::onVideoFrame,
-                Qt::DirectConnection);   // видео тоже энкодим в потоке захвата
+                Qt::DirectConnection);   // видео энкодим в потоке захвата
         connect(m_video, &VideoEngine::screenFrameCaptured, this, &CallEngine::onScreenFrame,
                 Qt::DirectConnection);   // экран — свой поток захвата и свой трек
         connect(m_video, &VideoEngine::activeChanged, this, [this] { sendCtrl(); });
     }
+    m_timeout.setSingleShot(true);
+    connect(&m_timeout, &QTimer::timeout, this, &CallEngine::onTimeout);
+    m_dropTimer.setSingleShot(true);
+    m_dropTimer.setInterval(kDisconnectGraceMs);
+    connect(&m_dropTimer, &QTimer::timeout, this, [this] {
+        fail(QString("Связь с %1 прервалась").arg(peerLabel()));
+    });
 }
 
 CallEngine::~CallEngine() {
@@ -48,7 +108,33 @@ CallEngine::~CallEngine() {
     if (m_dec) opus_decoder_destroy(m_dec);
 }
 
-void CallEngine::setIceServers(const QStringList& urls) { m_iceUrls = urls; }
+void CallEngine::setIceServers(const QStringList& urls) { m_fallbackIce = urls; }
+
+QStringList CallEngine::iceUrlsFromResponse(const QJsonObject& resp) {
+    QStringList out;
+    for (const auto& sv : resp.value("ice_servers").toArray()) {
+        const QJsonObject s = sv.toObject();
+        QStringList urls;
+        const QJsonValue u = s.value("urls");
+        if (u.isString()) urls << u.toString();
+        for (const auto& uv : u.toArray()) urls << uv.toString();
+        const QString user = s.value("username").toString();
+        const QString cred = s.value("credential").toString();
+        for (const QString& url : urls) {
+            if (url.startsWith("stun:", Qt::CaseInsensitive)) {
+                out << url;
+            } else if (url.startsWith("turn:", Qt::CaseInsensitive) ||
+                       url.startsWith("turns:", Qt::CaseInsensitive)) {
+                if (user.isEmpty()) continue;   // TURN без учётки не пустит
+                // libdatachannel: turn:user:pass@host:port?transport=… (user/pass — percent-encoded)
+                const int colon = url.indexOf(':');
+                out << url.left(colon + 1) + QString::fromLatin1(QUrl::toPercentEncoding(user)) + ':'
+                       + QString::fromLatin1(QUrl::toPercentEncoding(cred)) + '@' + url.mid(colon + 1);
+            }
+        }
+    }
+    return out;
+}
 
 void CallEngine::setState(const QString& s) {
     if (m_state != s) { m_state = s; emit stateChanged(); }
@@ -71,22 +157,92 @@ void CallEngine::setRemoteScreen(bool on) {
 void CallEngine::sendJson(const QJsonObject& o) {
     emit sendSignal(QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)));
 }
+QString CallEngine::peerLabel() const {
+    return m_peerName.isEmpty() ? QString("Собеседник") : m_peerName;
+}
 
-void CallEngine::setupPeer(bool asCaller) {
+// ── Медиа-план ───────────────────────────────────────────────────────────────
+CallEngine::MediaPlan CallEngine::callerPlan() {
+    MediaPlan p;
+    p.audio.present  = true; p.audio.mid  = "audio";  p.audio.pt  = kAudioPt;
+    p.video.present  = true; p.video.mid  = "video";  p.video.pt  = kVideoPt;
+    p.screen.present = true; p.screen.mid = "screen"; p.screen.pt = kVideoPt;
+    return p;
+}
+
+bool CallEngine::planFromOffer(const std::string& sdp, MediaPlan& plan) {
+    plan = MediaPlan{};
+    rtc::Description offer(sdp, rtc::Description::Type::Offer);
+    int videoLines = 0;
+    for (int i = 0; i < offer.mediaCount(); ++i) {
+        auto entry = offer.media(i);
+        if (!std::holds_alternative<rtc::Description::Media*>(entry)) continue;
+        auto* m = std::get<rtc::Description::Media*>(entry);
+        const bool isVideo = m->type() == "video";
+        if (isVideo) ++videoLines;   // 1-я видео-линия — камера, 2-я — экран
+        if (m->isRemoved()) continue;
+
+        MediaLine line;
+        line.mid = m->mid();
+        // Своя m-line — зеркало offer'а: собеседник только отправляет → мы только принимаем
+        using D = rtc::Description::Direction;
+        const D dir = m->direction();
+        line.send = dir == D::SendRecv || dir == D::RecvOnly || dir == D::Unknown;
+        line.recv = dir == D::SendRecv || dir == D::SendOnly || dir == D::Unknown;
+
+        if (m->type() == "audio" && !plan.audio.present) {
+            for (int pt : m->payloadTypes()) {
+                const auto* map = m->rtpMap(pt);
+                if (map && lower(map->format) == "opus" && map->clockRate == kRtpClock) { line.pt = pt; break; }
+            }
+            if (line.pt < 0) continue;   // аудио без Opus: эту m-line отклонит libdatachannel
+            line.present = true;
+            plan.audio = line;
+        } else if (isVideo && videoLines <= 2) {
+            // H264 packetization-mode=1 из Baseline-семейства (openh264 декодирует его надёжно),
+            // лучше всего — 42e01f (тот же профиль, что шлём сами)
+            int bestScore = 0;
+            for (int pt : m->payloadTypes()) {
+                const auto* map = m->rtpMap(pt);
+                if (!map || lower(map->format) != "h264") continue;
+                std::string fmtp;
+                for (const auto& f : map->fmtps) { if (!fmtp.empty()) fmtp += ';'; fmtp += f; }
+                if (fmtpParam(fmtp, "packetization-mode") != "1") continue;
+                std::string profile = lower(fmtpParam(fmtp, "profile-level-id"));
+                if (profile.empty()) profile = "420010";   // RFC 6184: значение по умолчанию
+                const int score = profile == "42e01f"           ? 3
+                                : profile.compare(0, 4, "42e0") == 0 ? 2
+                                : profile.compare(0, 2, "42") == 0   ? 1 : 0;
+                if (score > bestScore) { bestScore = score; line.pt = pt; line.fmtp = fmtp; }
+            }
+            if (line.pt < 0) continue;   // без подходящего H264 видео-линию отклоняем, звук работает
+            line.present = true;
+            (videoLines == 1 ? plan.video : plan.screen) = line;
+        }
+    }
+    return plan.audio.present;
+}
+
+// ── Peer connection ──────────────────────────────────────────────────────────
+void CallEngine::setupPeer(const MediaPlan& plan, bool asCaller) {
     rtc::Configuration config;
     // Всё управление SDP у нас явное (offer в startCall, answer в acceptCall).
     // Иначе libdatachannel сам отвечает на offer, а наш setLocalDescription
     // генерит ВТОРОЙ offer → у собеседника call_busy → звонок рушится.
     config.disableAutoNegotiation = true;
     for (const QString& u : m_iceUrls) {
-        try { config.iceServers.emplace_back(u.toStdString()); } catch (...) {}
+        try { config.iceServers.emplace_back(u.toStdString()); }
+        catch (const std::exception& e) { qWarning() << "CallEngine: ICE server skipped:" << e.what(); }
     }
     m_pc = std::make_shared<rtc::PeerConnection>(config);
+    m_haveRemote = false;
+    const quint64 gen = m_gen;
 
-    m_pc->onLocalDescription([this](rtc::Description d) {
+    m_pc->onLocalDescription([this, gen](rtc::Description d) {
         std::string sdp = std::string(d);
         std::string type = d.typeString();
-        QMetaObject::invokeMethod(this, [this, sdp, type]() {
+        QMetaObject::invokeMethod(this, [this, gen, sdp, type]() {
+            if (gen != m_gen || !m_pc) return;
             QJsonObject o;
             o["type"] = (type == "offer") ? "call_invite" : "call_accept";
             o["to"]   = m_peerId;
@@ -96,10 +252,11 @@ void CallEngine::setupPeer(bool asCaller) {
             sendJson(o);
         }, Qt::QueuedConnection);
     });
-    m_pc->onLocalCandidate([this](rtc::Candidate c) {
+    m_pc->onLocalCandidate([this, gen](rtc::Candidate c) {
         std::string cand = std::string(c);
         std::string mid  = c.mid();
-        QMetaObject::invokeMethod(this, [this, cand, mid]() {
+        QMetaObject::invokeMethod(this, [this, gen, cand, mid]() {
+            if (gen != m_gen || !m_pc) return;
             QJsonObject o;
             o["type"] = "rtc_ice"; o["to"] = m_peerId;
             o["candidate"] = QString::fromStdString(cand);
@@ -107,102 +264,169 @@ void CallEngine::setupPeer(bool asCaller) {
             sendJson(o);
         }, Qt::QueuedConnection);
     });
-    m_pc->onStateChange([this](rtc::PeerConnection::State s) {
-        QMetaObject::invokeMethod(this, [this, s]() {
-            using St = rtc::PeerConnection::State;
-            qDebug() << "CallEngine: PC state" << static_cast<int>(s);
-            if (s == St::Connected) setState("incall");
-            else if (s == St::Disconnected || s == St::Failed || s == St::Closed) teardown();
-        }, Qt::QueuedConnection);
+    m_pc->onStateChange([this, gen](rtc::PeerConnection::State s) {
+        QMetaObject::invokeMethod(this, [this, gen, s]() { onPcState(gen, static_cast<int>(s)); },
+                                  Qt::QueuedConnection);
+    });
+    // Свои m-line'ы создаются до setRemoteDescription, так что сюда (синхронно, внутри него)
+    // попадают только чужие: без кодека, который мы умеем, или лишние. Без этого libdatachannel
+    // согласился бы на них с кодеками собеседника (VP8 и т.п.) — отклоняем (порт 0 в answer).
+    m_pc->onTrack([](std::shared_ptr<rtc::Track> t) {
+        auto desc = t->description();
+        desc.markRemoved();
+        t->setDescription(std::move(desc));
     });
 
-    // Аудио-трек (SendRecv, Opus PT=111)
-    rtc::Description::Audio media("audio", rtc::Description::Direction::SendRecv);
-    media.addOpusCodec(111);
-    // a=ssrc ОБЯЗАТЕЛЕН: при >1 трека libdatachannel маршрутизирует входящие RTP
-    // только по таблице SSRC→трек из SDP; без него весь звук/видео молча дропается.
-    media.addSSRC(m_ssrc, "vicinity-audio");
-    m_track = m_pc->addTrack(media);
+    // Случайные SSRC на каждый звонок (у старых десктопов были фиксированные 42/43/44)
+    std::random_device rd;
+    std::mt19937 rng(rd());
+    std::uniform_int_distribution<uint32_t> dist(1, 0xFFFFFFF0u);
+    uint32_t ssrc[3];
+    for (int i = 0; i < 3; ++i) {
+        do ssrc[i] = dist(rng);
+        while ((i > 0 && ssrc[i] == ssrc[0]) || (i > 1 && ssrc[i] == ssrc[1]));
+    }
 
-    m_rtp = std::make_shared<rtc::RtpPacketizationConfig>(m_ssrc, "audio", 111, kRtpClock);
-    auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(m_rtp);
+    // Аудио-трек (Opus). a=ssrc ОБЯЗАТЕЛЕН: при >1 трека libdatachannel маршрутизирует
+    // входящие RTP только по таблице SSRC→трек из SDP; без него звук молча дропается.
+    rtc::Description::Audio media(plan.audio.mid, directionOf(plan.audio.send, plan.audio.recv));
+    media.addOpusCodec(plan.audio.pt);
+    media.addSSRC(ssrc[0], "vicinity-audio");
+    auto track = m_pc->addTrack(media);
+
+    auto rtp = std::make_shared<rtc::RtpPacketizationConfig>(
+        ssrc[0], "vicinity-audio", static_cast<uint8_t>(plan.audio.pt), kRtpClock);
+    auto packetizer = std::make_shared<rtc::OpusRtpPacketizer>(rtp);
     packetizer->addToChain(std::make_shared<rtc::RtpDepacketizer>(static_cast<uint32_t>(kRtpClock)));
-    packetizer->addToChain(std::make_shared<rtc::RtcpSrReporter>(m_rtp));
+    // RR собеседнику (стоит до SR/NACK-обработчиков: RTCP дальше по цепочке не пропускает)
+    packetizer->addToChain(std::make_shared<rtc::RtcpReceivingSession>());
+    packetizer->addToChain(std::make_shared<rtc::RtcpSrReporter>(rtp));
     packetizer->addToChain(std::make_shared<rtc::RtcpNackResponder>());
-    m_track->setMediaHandler(packetizer);
-
-    m_track->onFrame([this](rtc::binary data, rtc::FrameInfo) {
-        onIncomingOpus(QByteArray(reinterpret_cast<const char*>(data.data()),
-                                  static_cast<int>(data.size())));
+    track->setMediaHandler(packetizer);
+    track->onFrame([this](rtc::binary data, rtc::FrameInfo info) {
+        if (info.payloadType != m_audioPt.load()) return;
+        onIncomingOpus(data.data(), data.size(), info.timestamp);
     });
+    {
+        std::lock_guard<std::mutex> lk(m_audioMx);
+        m_track = track;
+        m_rtp   = rtp;
+        if (m_enc) opus_encoder_ctl(m_enc, OPUS_RESET_STATE);
+        m_lastTxMs = -1;
+        m_txClock.start();
+    }
+    {
+        std::lock_guard<std::mutex> lk(m_adecMx);
+        if (m_dec) opus_decoder_ctl(m_dec, OPUS_RESET_STATE);
+        m_haveRxTs = false;
+    }
+    m_audioPt   = plan.audio.pt;
+    m_sendAudio = plan.audio.send;
 
-    // Видео-трек (SendRecv, H264 PT=96). Кадры шлём только когда камера включена;
-    // сам трек в SDP есть всегда — камеру можно включать без ренеготиации.
-    rtc::Description::Video vmedia("video", rtc::Description::Direction::SendRecv);
-    vmedia.addH264Codec(kVideoPt);
-    vmedia.addSSRC(m_ssrc + 1, "vicinity-video");
-    m_vtrack = m_pc->addTrack(vmedia);
-
-    m_vrtp = std::make_shared<rtc::RtpPacketizationConfig>(m_ssrc + 1, "video", kVideoPt, kVideoClock);
-    auto vpack = std::make_shared<rtc::H264RtpPacketizer>(
-        rtc::NalUnit::Separator::StartSequence, m_vrtp);
-    vpack->addToChain(std::make_shared<rtc::H264RtpDepacketizer>());
-    vpack->addToChain(std::make_shared<rtc::RtcpSrReporter>(m_vrtp));
-    vpack->addToChain(std::make_shared<rtc::RtcpNackResponder>());
-    vpack->addToChain(std::make_shared<rtc::PliHandler>([this] { m_forceIdr = true; }));
-    m_vtrack->setMediaHandler(vpack);
-
-    m_vtrack->onFrame([this](rtc::binary data, rtc::FrameInfo) {
-        onIncomingH264(QByteArray(reinterpret_cast<const char*>(data.data()),
-                                  static_cast<int>(data.size())));
-    });
-
-    // Трек демонстрации экрана (Фаза D) — отдельный, чтобы камера и экран шли ОДНОВРЕМЕННО
-    rtc::Description::Video smedia("screen", rtc::Description::Direction::SendRecv);
-    smedia.addH264Codec(kVideoPt);
-    smedia.addSSRC(m_ssrc + 2, "vicinity-screen");
-    m_strack = m_pc->addTrack(smedia);
-
-    m_srtp = std::make_shared<rtc::RtpPacketizationConfig>(m_ssrc + 2, "screen", kVideoPt, kVideoClock);
-    auto spack = std::make_shared<rtc::H264RtpPacketizer>(
-        rtc::NalUnit::Separator::StartSequence, m_srtp);
-    spack->addToChain(std::make_shared<rtc::H264RtpDepacketizer>());
-    spack->addToChain(std::make_shared<rtc::RtcpSrReporter>(m_srtp));
-    spack->addToChain(std::make_shared<rtc::RtcpNackResponder>());
-    spack->addToChain(std::make_shared<rtc::PliHandler>([this] { m_sForceIdr = true; }));
-    m_strack->setMediaHandler(spack);
-
-    m_strack->onFrame([this](rtc::binary data, rtc::FrameInfo) {
-        onIncomingScreenH264(QByteArray(reinterpret_cast<const char*>(data.data()),
-                                        static_cast<int>(data.size())));
-    });
+    // Видео: камера и экран — отдельные треки, чтобы шли ОДНОВРЕМЕННО. Кадры шлём только
+    // когда источник включён; сам трек в SDP есть всегда — включение без ренеготиации.
+    setupVideoTrack(plan.video,  ssrc[1], "vicinity-video",  m_vtrack, m_vrtp, m_forceIdr,  false);
+    setupVideoTrack(plan.screen, ssrc[2], "vicinity-screen", m_strack, m_srtp, m_sForceIdr, true);
 
     // DataChannel «ctrl»: in-call сигналы (вкл/выкл камеры) мимо бэка.
     // Создаёт звонящий; принимающий получает через onDataChannel.
     if (asCaller) {
         setupCtrl(m_pc->createDataChannel("ctrl"));
     } else {
-        m_pc->onDataChannel([this](std::shared_ptr<rtc::DataChannel> ch) {
-            QMetaObject::invokeMethod(this, [this, ch]() { setupCtrl(ch); },
-                                      Qt::QueuedConnection);
+        m_pc->onDataChannel([this, gen](std::shared_ptr<rtc::DataChannel> ch) {
+            QMetaObject::invokeMethod(this, [this, gen, ch]() {
+                if (gen == m_gen && m_pc) setupCtrl(ch);
+            }, Qt::QueuedConnection);
         });
     }
 
     m_vClock.start();
     m_live = true;
-    if (m_voice) m_voice->start();   // микрофон + динамики
+    emit audioActiveChanged(true);   // микрофон + динамики
+}
+
+void CallEngine::setupVideoTrack(const MediaLine& line, uint32_t ssrc, const char* cname,
+                                 std::shared_ptr<rtc::Track>& track,
+                                 std::shared_ptr<rtc::RtpPacketizationConfig>& rtp,
+                                 std::atomic<bool>& forceIdr, bool screen) {
+    std::atomic<int>& pt = screen ? m_screenPt : m_videoPt;
+    pt = line.present ? line.pt : -1;
+    if (!line.present) return;   // собеседник эту линию не предложил — без трека (её отклонят)
+
+    rtc::Description::Video media(line.mid, directionOf(line.send, line.recv));
+    if (line.fmtp.empty()) media.addH264Codec(line.pt);
+    else                   media.addH264Codec(line.pt, line.fmtp);
+    media.addSSRC(ssrc, cname);
+    auto t = m_pc->addTrack(media);
+
+    auto cfg = std::make_shared<rtc::RtpPacketizationConfig>(
+        ssrc, cname, static_cast<uint8_t>(line.pt), kVideoClock);
+    auto pack = std::make_shared<rtc::H264RtpPacketizer>(rtc::NalUnit::Separator::StartSequence, cfg);
+    pack->addToChain(std::make_shared<rtc::H264RtpDepacketizer>());
+    // RR + REMB (браузер поднимает оценку полосы) и наши PLI; RTCP дальше не пропускает
+    pack->addToChain(std::make_shared<rtc::RtcpReceivingSession>());
+    pack->addToChain(std::make_shared<rtc::RtcpSrReporter>(cfg));
+    pack->addToChain(std::make_shared<rtc::RtcpNackResponder>());
+    pack->addToChain(std::make_shared<rtc::PliHandler>([&forceIdr] { forceIdr = true; }));
+    t->setMediaHandler(pack);
+
+    std::weak_ptr<rtc::Track> weak = t;
+    t->onOpen([weak] {
+        // Без REMB браузер держит стартовые ~300 кбит/с и камера приходит мылом
+        if (auto tr = weak.lock()) {
+            try { tr->requestBitrate(kRembBitrate); } catch (const std::exception&) {}
+        }
+    });
+    t->onFrame([this, screen, &pt](rtc::binary data, rtc::FrameInfo info) {
+        if (info.payloadType != pt.load()) return;
+        const QByteArray au(reinterpret_cast<const char*>(data.data()), static_cast<int>(data.size()));
+        if (screen) onIncomingScreenH264(au);
+        else        onIncomingH264(au);
+    });
+
+    std::scoped_lock lk(screen ? m_sencMx : m_encMx, screen ? m_sdecMx : m_decMx);
+    track = t;
+    rtp   = cfg;
+}
+
+void CallEngine::onPcState(quint64 gen, int state) {
+    if (gen != m_gen || !m_pc) return;
+    using St = rtc::PeerConnection::State;
+    qDebug() << "CallEngine: PC state" << state;
+    switch (static_cast<St>(state)) {
+    case St::Connected:
+        m_dropTimer.stop();
+        m_timeout.stop();
+        setState("incall");
+        break;
+    case St::Disconnected:   // может восстановиться; не восстановилось — m_dropTimer
+        if (!m_dropTimer.isActive()) m_dropTimer.start();
+        break;
+    case St::Failed:
+        fail(m_state == "incall" ? QString("Связь с %1 прервалась").arg(peerLabel())
+                                 : QString("Не удалось соединиться с %1").arg(peerLabel()));
+        break;
+    case St::Closed:
+        endCall(QStringLiteral("call_end"), QString());
+        break;
+    default:
+        break;
+    }
 }
 
 void CallEngine::setupCtrl(std::shared_ptr<rtc::DataChannel> ch) {
     m_ctrl = ch;
     if (!ch) return;
-    ch->onOpen([this]() {
-        QMetaObject::invokeMethod(this, [this]() { sendCtrl(); }, Qt::QueuedConnection);
+    const quint64 gen = m_gen;
+    ch->onOpen([this, gen]() {
+        QMetaObject::invokeMethod(this, [this, gen]() { if (gen == m_gen) sendCtrl(); },
+                                  Qt::QueuedConnection);
     });
-    ch->onMessage([this](rtc::message_variant msg) {
+    ch->onMessage([this, gen](rtc::message_variant msg) {
         if (!std::holds_alternative<rtc::string>(msg)) return;
         const QByteArray raw = QByteArray::fromStdString(std::get<rtc::string>(msg));
-        QMetaObject::invokeMethod(this, [this, raw]() {
+        QMetaObject::invokeMethod(this, [this, gen, raw]() {
+            if (gen != m_gen) return;
             const QJsonObject o = QJsonDocument::fromJson(raw).object();
             if (o.contains("video"))  setRemoteVideo(o["video"].toBool());
             if (o.contains("screen")) setRemoteScreen(o["screen"].toBool());
@@ -221,7 +445,9 @@ void CallEngine::sendCtrl() {
     try {
         if (m_ctrl->isOpen())
             m_ctrl->send(QJsonDocument(o).toJson(QJsonDocument::Compact).toStdString());
-    } catch (...) {}
+    } catch (const std::exception& e) {
+        qWarning() << "CallEngine: ctrl send failed:" << e.what();
+    }
 }
 
 void CallEngine::toggleCamera() {
@@ -237,106 +463,249 @@ void CallEngine::toggleScreen() {
     else                         m_video->startScreen();
 }
 
-void CallEngine::startCall(qlonglong peer, const QString& name) {
-    if (m_state != "idle" || peer == 0) return;
-    setPeer(peer, name);
-    setState("outgoing");
-    setupPeer(true);
-    m_pc->setLocalDescription();   // сгенерит offer → onLocalDescription → call_invite
+// ── Жизненный цикл звонка ────────────────────────────────────────────────────
+void CallEngine::armTimeout(int ms) { m_timeout.start(ms); }
+
+void CallEngine::onTimeout() {
+    if (m_state == "outgoing")
+        endCall(QStringLiteral("call_end"), QString("%1 не отвечает").arg(peerLabel()));
+    else if (m_state == "incoming")
+        endCall(QStringLiteral("call_reject"), QString());
+    else if (m_state == "connecting")
+        fail(QString("Не удалось соединиться с %1").arg(peerLabel()));
 }
 
-void CallEngine::acceptCall() {
-    if (m_state != "incoming" || m_pendingOffer.isEmpty()) return;
-    setState("connecting");
-    setupPeer(false);
-    std::string sdp = m_pendingOffer["sdp"].toString().toStdString();
+void CallEngine::fetchIce() {
+    // Свежие STUN/TURN (временные учётки TURN) перед каждым звонком; старый бэкенд
+    // без /rtc/ice или сбой — остаёмся на запасных серверах
+    m_iceReady = false;
+    m_iceUrls  = m_fallbackIce;
+    const quint64 gen = m_gen;
+    QPointer<CallEngine> self(this);
+    ApiClient::instance().get("/rtc/ice", [self, gen](bool ok, const QJsonObject& data) {
+        if (!self || self->m_gen != gen || self->m_state == "idle") return;
+        const QStringList urls = ok ? iceUrlsFromResponse(data) : QStringList();
+        if (!urls.isEmpty()) self->m_iceUrls = urls;
+        self->m_iceReady = true;
+        self->onIceReady();
+    }, kIceFetchTimeoutMs);
+}
+
+void CallEngine::onIceReady() {
+    if (m_pc) return;
+    if (m_state == "outgoing")        beginOutgoing();
+    else if (m_state == "connecting") beginAnswer();   // приняли, пока ждали /rtc/ice
+}
+
+void CallEngine::beginOutgoing() {
     try {
-        m_pc->setRemoteDescription(rtc::Description(sdp, "offer"));
-        // ICE-кандидаты, прилетевшие пока звонок «висел» входящим (до создания PC)
-        for (const auto& c : m_pendingIce) {
-            try { m_pc->addRemoteCandidate(rtc::Candidate(c.first.toStdString(),
-                                                          c.second.toStdString())); }
-            catch (...) {}
+        setupPeer(callerPlan(), true);
+        m_pc->setLocalDescription();   // offer → onLocalDescription → call_invite
+    } catch (const std::exception& e) {
+        qWarning() << "CallEngine: call setup failed:" << e.what();
+        fail(QString("Не удалось начать звонок"));
+    }
+}
+
+void CallEngine::beginAnswer() {
+    const std::string sdp = m_pendingOffer.value("sdp").toString().toStdString();
+    try {
+        // Подстраиваемся под offer: mid'ы и PT собеседника (браузер — 0/1/2 и свои номера)
+        MediaPlan plan;
+        if (!planFromOffer(sdp, plan)) {
+            fail(QString("Звонок не поддерживается: нет общего аудиокодека"));
+            return;
         }
-        m_pendingIce.clear();
+        setupPeer(plan, false);
+        m_pc->setRemoteDescription(rtc::Description(sdp, rtc::Description::Type::Offer));
+        m_haveRemote = true;
+        // ICE-кандидаты, прилетевшие пока звонок «висел» входящим (до создания PC)
+        flushRemoteCandidates();
         m_pc->setLocalDescription();   // answer → onLocalDescription → call_accept
     } catch (const std::exception& e) {
         qWarning() << "CallEngine: accept failed:" << e.what();
-        teardown();
+        fail(QString("Не удалось принять звонок"));
         return;
     }
     m_pendingOffer = QJsonObject();
 }
 
-void CallEngine::rejectCall() {
-    if (m_peerId) { QJsonObject o; o["type"]="call_reject"; o["to"]=m_peerId; sendJson(o); }
-    teardown();
+void CallEngine::addRemoteCandidate(const QString& candidate, const QString& mid) {
+    // Один негодный кандидат (например, неразрешимый mDNS) звонок не рвёт: остальные
+    // могут сработать, а безнадёжный случай закроют Failed и таймаут соединения
+    try {
+        if (mid.isEmpty()) m_pc->addRemoteCandidate(rtc::Candidate(candidate.toStdString()));
+        else m_pc->addRemoteCandidate(rtc::Candidate(candidate.toStdString(), mid.toStdString()));
+    } catch (const std::exception& e) {
+        qWarning() << "CallEngine: remote candidate ignored:" << e.what();
+    }
 }
 
-void CallEngine::hangup() {
-    if (m_peerId) { QJsonObject o; o["type"]="call_end"; o["to"]=m_peerId; sendJson(o); }
+void CallEngine::flushRemoteCandidates() {
+    const auto pending = m_pendingIce;
+    m_pendingIce.clear();
+    for (const auto& c : pending) addRemoteCandidate(c.first, c.second);
+}
+
+void CallEngine::startCall(qlonglong peer, const QString& name) {
+    if (m_state != "idle" || peer <= 0) return;
+    ++m_gen;
+    setPeer(peer, name);
+    setState("outgoing");
+    armTimeout(kRingTimeoutMs);
+    fetchIce();   // дальше beginOutgoing
+}
+
+void CallEngine::acceptCall() {
+    if (m_state != "incoming" || m_pendingOffer.isEmpty()) return;
+    setState("connecting");
+    armTimeout(kConnectTimeoutMs);
+    if (m_iceReady) beginAnswer();   // иначе — когда придёт /rtc/ice
+}
+
+void CallEngine::rejectCall() { endCall(QStringLiteral("call_reject"), QString()); }
+
+void CallEngine::hangup() { endCall(QStringLiteral("call_end"), QString()); }
+
+void CallEngine::endCall(const QString& notifyType, const QString& notice) {
+    if (m_state == "idle") return;
+    if (!notifyType.isEmpty() && m_peerId) {
+        QJsonObject o; o["type"] = notifyType; o["to"] = m_peerId; sendJson(o);
+    }
     teardown();
+    if (!notice.isEmpty()) emit callNotice(notice);
 }
 
 void CallEngine::handleSignal(const QJsonObject& msg) {
-    const QString t = msg["type"].toString();
-    const qlonglong from = msg["from"].toVariant().toLongLong();
+    // Сигналинг приходит от собеседника как есть: ничто отсюда не должно уронить UI
+    try {
+        const QString t = msg.value("type").toString();
+        const qlonglong from = msg.value("from").toVariant().toLongLong();
 
-    if (t == "call_invite") {
-        if (m_state != "idle") {   // занят — busy
-            QJsonObject o; o["type"]="call_busy"; o["to"]=from; sendJson(o); return;
+        if (t == "call_invite") {
+            if (from <= 0) return;
+            if (m_state != "idle") {
+                if (from == m_peerId && m_state == "incoming") {
+                    m_pendingOffer = msg;   // повторный invite того же собеседника — свежий offer
+                    m_pendingIce.clear();
+                    return;
+                }
+                if (from == m_peerId && (m_state == "connecting" || m_state == "incall")) {
+                    teardown();   // собеседник начал звонок заново (перезапуск клиента)
+                } else {
+                    QJsonObject o; o["type"] = "call_busy"; o["to"] = from; sendJson(o);
+                    return;
+                }
+            }
+            ++m_gen;
+            m_pendingOffer = msg;
+            m_pendingIce.clear();
+            setPeer(from, msg.value("name").toString());
+            setState("incoming");
+            armTimeout(kIncomingTimeoutMs);
+            fetchIce();   // пока звонит — к accept серверы уже будут
+            emit incomingCall(from);
         }
-        m_pendingOffer = msg;
-        setPeer(from, msg.value("name").toString());
-        setState("incoming");
-        emit incomingCall(from);
-    }
-    else if (t == "call_accept") {
-        if (from != m_peerId) return;
-        std::string sdp = msg["sdp"].toString().toStdString();
-        if (m_pc) m_pc->setRemoteDescription(rtc::Description(sdp, "answer"));
-    }
-    else if (t == "rtc_ice") {
-        if (from != m_peerId) return;
-        if (!m_pc) {   // PC ещё не создан (входящий не принят) — копим кандидатов
-            if (m_state == "incoming")
-                m_pendingIce.append({ msg["candidate"].toString(), msg["mid"].toString() });
-            return;
+        else if (t == "call_accept") {
+            if (from != m_peerId || m_state != "outgoing" || !m_pc || m_haveRemote) return;
+            try {
+                m_pc->setRemoteDescription(rtc::Description(msg.value("sdp").toString().toStdString(),
+                                                            rtc::Description::Type::Answer));
+            } catch (const std::exception& e) {
+                qWarning() << "CallEngine: bad answer:" << e.what();
+                fail(QString("Не удалось установить звонок"));
+                return;
+            }
+            m_haveRemote = true;
+            flushRemoteCandidates();
+            setState("connecting");
+            armTimeout(kConnectTimeoutMs);
         }
-        try {
-            m_pc->addRemoteCandidate(rtc::Candidate(msg["candidate"].toString().toStdString(),
-                                                    msg["mid"].toString().toStdString()));
-        } catch (...) {}
-    }
-    else if (t == "call_reject" || t == "call_end" || t == "call_busy") {
-        qDebug() << "CallEngine: signal" << t << "from" << from;
-        if (from == m_peerId) teardown();
+        else if (t == "rtc_ice") {
+            if (from != m_peerId || m_state == "idle") return;
+            const QString cand = msg.value("candidate").toString();
+            if (cand.isEmpty()) return;   // end-of-candidates
+            const QString mid = msg.value("mid").toString();
+            // До remote description кандидат не применить — копим (и у звонящего, и у принимающего)
+            if (!m_pc || !m_haveRemote) {
+                if (m_pendingIce.size() < kMaxPendingIce) m_pendingIce.append({ cand, mid });
+                return;
+            }
+            addRemoteCandidate(cand, mid);
+        }
+        else if (t == "call_reject" || t == "call_end" || t == "call_busy") {
+            qDebug() << "CallEngine: signal" << t << "from" << from;
+            if (from != m_peerId || m_state == "idle") return;
+            QString notice;
+            if (t == "call_busy") notice = QString("%1: линия занята").arg(peerLabel());
+            else if (t == "call_reject" && m_state == "outgoing") notice = QString("Звонок отклонён");
+            endCall(QString(), notice);
+        }
+        else if (t == "call_unavailable") {
+            // Сервер: адресат не в сети (сигнал не доставлен)
+            const qlonglong uid = msg.value("user_id").toVariant().toLongLong();
+            if (uid != m_peerId || (m_state != "outgoing" && m_state != "connecting")) return;
+            endCall(QString(), QString("%1 не в сети").arg(peerLabel()));
+        }
+    } catch (const std::exception& e) {
+        qWarning() << "CallEngine: signal failed:" << e.what();
+        fail(QString("Не удалось установить звонок"));
+    } catch (...) {
+        qWarning() << "CallEngine: signal failed";
+        fail(QString("Не удалось установить звонок"));
     }
 }
 
-void CallEngine::onMicFrame(const QByteArray& pcm) {
-    if (!m_track || !m_enc || pcm.size() < kFrame * 2) return;
-    if (m_state != "incall" && m_state != "connecting") return;
-    unsigned char out[4000];
-    int n = opus_encode(m_enc, reinterpret_cast<const opus_int16*>(pcm.constData()),
-                        kFrame, out, sizeof(out));
-    if (n > 0 && m_track->isOpen()) {
-        m_rtp->timestamp += kRtpInc;
-        try { m_track->send(reinterpret_cast<const std::byte*>(out), static_cast<size_t>(n)); }
-        catch (...) {}
-        static int txa = 0;
-        if ((++txa % 250) == 0) qDebug() << "CallEngine: audio tx" << txa;
-    }
+// ── Аудио: микрофон → Opus → RTP (поток захвата) ────────────────────────────
+void CallEngine::pushMicFrame(const QByteArray& pcm) {
+    if (!m_sendAudio.load() || pcm.size() < kFrame * 2) return;
+    std::lock_guard<std::mutex> lk(m_audioMx);
+    if (!m_track || !m_rtp || !m_enc || !m_track->isOpen()) return;
+    unsigned char out[1500];
+    const int n = opus_encode(m_enc, reinterpret_cast<const opus_int16*>(pcm.constData()),
+                              kFrame, out, sizeof(out));
+    if (n <= 0) return;
+    // RTP-время — по реальному времени: после паузы (mute) сдвигаем на её длину,
+    // иначе у собеседника время «отстаёт» и NetEq спотыкается
+    const qint64 now = m_txClock.elapsed();
+    uint32_t inc = kRtpInc;
+    if (m_lastTxMs >= 0 && now - m_lastTxMs > kTxGapMs)
+        inc = static_cast<uint32_t>((now - m_lastTxMs + 10) / 20) * kRtpInc;
+    m_lastTxMs = now;
+    m_rtp->timestamp += inc;
+    try { m_track->send(reinterpret_cast<const std::byte*>(out), static_cast<size_t>(n)); }
+    catch (const std::exception& e) { qWarning() << "CallEngine: audio send failed:" << e.what(); }
 }
 
-void CallEngine::onIncomingOpus(const QByteArray& opus) {
-    static int rxa = 0;
-    if ((++rxa % 250) == 0) qDebug() << "CallEngine: audio rx" << rxa;
-    if (!m_dec || !m_voice || opus.isEmpty()) return;
-    opus_int16 pcm[kFrame];
-    int got = opus_decode(m_dec, reinterpret_cast<const unsigned char*>(opus.constData()),
-                          static_cast<int>(opus.size()), pcm, kFrame, 0);
-    if (got > 0) m_voice->playFrame(QByteArray(reinterpret_cast<const char*>(pcm), got * 2));
+// ── Аудио: RTP → Opus → PCM собеседника (поток сети) ────────────────────────
+void CallEngine::onIncomingOpus(const std::byte* data, size_t size, uint32_t timestamp) {
+    if (!m_live || size == 0) return;
+    const auto* pkt = reinterpret_cast<const unsigned char*>(data);
+    const int len = static_cast<int>(size);
+    opus_int16 pcm[kMaxDecodeSamples];
+    QByteArray out;
+    {
+        std::lock_guard<std::mutex> lk(m_adecMx);
+        if (!m_dec) return;
+        const int dur = opus_packet_get_nb_samples(pkt, len, kRtpClock);   // в тиках 48 кГц
+        if (dur <= 0) return;   // битый пакет
+        if (m_haveRxTs) {
+            const int32_t delta = static_cast<int32_t>(timestamp - m_lastRxTs);
+            if (delta <= 0) return;   // опоздал или повтор — его место уже проиграно
+            // Потерю до 100 мс маскируем (PLC декодера), дольше — собеседник молчал
+            const int32_t lost = delta - static_cast<int32_t>(m_lastRxDur);
+            if (lost >= kRtpInc && lost <= 5 * kRtpInc) {
+                const int n = opus_decode(m_dec, nullptr, 0, pcm, (lost / 120) * 40, 0);  // шаг 2.5 мс
+                if (n > 0) out.append(reinterpret_cast<const char*>(pcm), n * 2);
+            }
+        }
+        m_haveRxTs  = true;
+        m_lastRxTs  = timestamp;
+        m_lastRxDur = static_cast<uint32_t>(dur);
+        const int got = opus_decode(m_dec, pkt, len, pcm, kMaxDecodeSamples, 0);
+        if (got > 0) out.append(reinterpret_cast<const char*>(pcm), got * 2);
+    }
+    if (!out.isEmpty()) emit remoteAudio(out);
 }
 
 // ── Видео: общий энкод I420 → openh264 → RTP (зовётся под мьютексом источника) ──
@@ -485,7 +854,7 @@ void CallEngine::onIncomingH264(const QByteArray& au) {
         m_video->displayRemoteFrame(i420, w, h);
         // Страховка: кадры идут, а ctrl-сообщение могло потеряться
         if (!m_remoteVideo)
-            QMetaObject::invokeMethod(this, [this]() { setRemoteVideo(true); },
+            QMetaObject::invokeMethod(this, [this]() { if (m_live) setRemoteVideo(true); },
                                       Qt::QueuedConnection);
     }
 }
@@ -536,14 +905,29 @@ void CallEngine::onIncomingScreenH264(const QByteArray& au) {
         for (int y = 0; y < h / 2; y++) memcpy(dv + y * (w / 2), dst[2] + y * sc, w / 2);
         m_video->displayRemoteScreen(i420, w, h);
         if (!m_remoteScreen)
-            QMetaObject::invokeMethod(this, [this]() { setRemoteScreen(true); },
+            QMetaObject::invokeMethod(this, [this]() { if (m_live) setRemoteScreen(true); },
                                       Qt::QueuedConnection);
     }
 }
 
+
 void CallEngine::teardown() {
-    m_live = false;
-    if (m_track) { m_track.reset(); }
+    const bool hadPeer = m_live.exchange(false);
+    m_sendAudio = false;
+    ++m_gen;   // всё, что ещё в очереди от этого звонка (и ответ /rtc/ice), — мимо
+    m_timeout.stop();
+    m_dropTimer.stop();
+    // Сначала отцепляем коллбеки libdatachannel: после этого они не придут
+    // (reset ждёт уже идущий коллбек, а наши мьютексы здесь ещё не захвачены)
+    for (const auto& t : { m_track, m_vtrack, m_strack })
+        if (t) t->resetCallbacks();
+    if (m_ctrl) m_ctrl->resetCallbacks();
+    if (m_pc)   m_pc->resetCallbacks();
+    {
+        std::lock_guard<std::mutex> lk(m_audioMx);
+        m_track.reset();
+        m_rtp.reset();
+    }
     {   // видео-часть: блокируем все кодек-потоки (захваты и сеть)
         std::scoped_lock lk(m_encMx, m_decMx, m_sencMx, m_sdecMx);
         m_vtrack.reset();
@@ -558,12 +942,17 @@ void CallEngine::teardown() {
         if (m_sdec) { m_sdec->Uninitialize(); WelsDestroyDecoder(m_sdec); m_sdec = nullptr; }
     }
     m_ctrl.reset();
-    if (m_pc) { try { m_pc->close(); } catch (...) {} m_pc.reset(); }
-    m_rtp.reset();
+    if (m_pc) {
+        try { m_pc->close(); }
+        catch (const std::exception& e) { qWarning() << "CallEngine: close failed:" << e.what(); }
+        m_pc.reset();
+    }
     m_pendingOffer = QJsonObject();
     m_pendingIce.clear();
-    // Останавливаем аудио только если не в серверном голосовом канале (это отдельный путь).
-    if (m_voice && m_voice->isActive()) m_voice->stop();
+    m_haveRemote = false;
+    m_iceReady   = false;
+    // Голосовой канал (если я в нём) звонок не трогает: VoiceEngine сам решает, закрывать ли устройства
+    if (hadPeer) emit audioActiveChanged(false);
     if (m_video && m_video->active()) m_video->stop();
     setRemoteVideo(false);
     setRemoteScreen(false);

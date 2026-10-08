@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Сборка Vicinity на Linux (CachyOS/Arch). Зависимости — см. BUILD-LINUX.md.
+# Сборка Vicinity на Linux. Зависимости (Qt ≥ 6.6, libdatachannel ≥ 0.23, Opus, OpenH264, ALSA) — см. BUILD-LINUX.md.
 set -e
 cd "$(dirname "$0")"
 

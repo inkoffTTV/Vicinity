@@ -20,6 +20,9 @@ Item {
     property string activeChannelName: ""
     property bool   activeIsDm:        false
     property int    activeDmUserId:    0     // id собеседника в активной личке (для профиля из шапки)
+    property int    activeChannelServerId: 0 // сервер открытого канала (0 — личка)
+    property bool   hasOlder:          false // на сервере есть сообщения старше загруженных
+    property bool   loadingOlder:      false
     property var    unreadMap:         ({})  // {channelId: true} — непрочитанные чаты
     property int    unreadTick:        0     // меняем, чтобы пересчитать биндинги непрочитанного
     property int    activeServerId:    0     // 0 = дом (личка + каналы)
@@ -30,6 +33,7 @@ Item {
     property bool   showMembers:       true  // показывать панель участников на сервере
     property var    ctxMember:         ({})  // участник под правым кликом
     property int    myVoiceChannel:    0     // голосовой канал, в котором я сейчас
+    property int    myVoiceServer:     0     // его сервер (0 — голос в личке)
     property string myVoiceName:       ""
     property var    voiceMembers:      ({})  // channelId -> [{id,name,speaking}]
     property int    voiceTick:         0     // дёргаем при изменении voiceMembers (для биндингов)
@@ -66,25 +70,23 @@ Item {
             root.openConversation(channelId, displayName, true, userId)
         }
 
-        // Свой текст получил серверный id → допишем его в оптимистичную строку
-        function onMessageSent(channelId, msgId) {
+        // Свой текст получил серверный id → допишем его в оптимистичную строку (если new_message
+        // с тем же nonce не успел раньше)
+        function onMessageSent(channelId, msgId, nonce) {
             if (channelId !== root.activeChannelId) return
-            for (var i = messageModel.count - 1; i >= 0; i--) {
-                var it = messageModel.get(i)
-                if (it.own === true && it.msgId === 0) {
-                    messageModel.setProperty(i, "msgId", parseInt(msgId)); break
-                }
-            }
+            var i = root.findNonce(nonce)
+            if (i >= 0 && messageModel.get(i).msgId === 0)
+                messageModel.setProperty(i, "msgId", parseInt(msgId))
         }
 
-        // Своё вложение загружено и отправлено → показать в ленте
+        // Своё вложение загружено и отправлено → показать в ленте (если его ещё не показал new_message)
         function onAttachmentSent(channelId, msgId, attachUrl) {
-            if (channelId !== root.activeChannelId) return
+            if (channelId !== root.activeChannelId || root.findMsg(msgId) >= 0) return
             messageModel.append({
                 author: appState.displayName, authorId: appState.userId, txt: "",
                 ts: Qt.formatTime(new Date(), "hh:mm"),
                 own: true, av: appState.avatarPath, rc: appState.roleColor,
-                msgId: parseInt(msgId), edited: false, attach: attachUrl, rx: "[]",
+                msgId: parseInt(msgId), edited: false, attach: attachUrl, rx: "[]", nonce: "",
                 grp: (messageModel.count > 0 && messageModel.get(messageModel.count - 1).authorId === appState.userId)
             })
             msgList.toBottom()
@@ -124,6 +126,13 @@ Item {
         }
 
         function onServerChannelsReady(serverId, channels) {
+            // Канал удалили: открытый — закрываем, голосовой — сервер нас из него уже вывел
+            var ids = {}
+            for (var c = 0; c < channels.length; c++) ids[channels[c].id] = true
+            if (root.activeChannelServerId === serverId && root.activeChannelId !== 0 && !ids[root.activeChannelId])
+                root.closeConversation()
+            if (root.myVoiceServer === serverId && root.myVoiceChannel !== 0 && !ids[root.myVoiceChannel])
+                root.leaveVoice()
             if (serverId !== root.activeServerId) return
             serverChannelModel.clear()
             for (var i = 0; i < channels.length; i++)
@@ -137,9 +146,11 @@ Item {
             root.selectServer(serverId, name)
         }
 
-        function onMessagesReady(channelId, messages) {
+        function onMessagesReady(channelId, messages, hasMore) {
             if (channelId !== root.activeChannelId) return
             messageModel.clear()
+            root.hasOlder = hasMore
+            root.loadingOlder = false
             // сервер отдаёт новейшие первыми → кладём в хронологическом порядке (старые сверху)
             for (var i = messages.length - 1; i >= 0; i--) {
                 var mm = messages[i]
@@ -148,6 +159,24 @@ Item {
                 messageModel.append(mm)
             }
             msgList.toBottom()
+        }
+
+        // Страница перед самым старым загруженным → вставляем сверху, на экране остаётся то же сообщение
+        function onOlderMessagesReady(channelId, messages, hasMore) {
+            if (channelId !== root.activeChannelId || !root.loadingOlder) return
+            root.loadingOlder = false
+            root.hasOlder = hasMore
+            var at = 0
+            for (var i = messages.length - 1; i >= 0; i--) {
+                var mm = messages[i]
+                if (root.findMsg(mm.msgId) >= 0) continue
+                mm.grp = at > 0 && messageModel.get(at - 1).authorId === mm.authorId
+                messageModel.insert(at++, mm)
+            }
+            if (at === 0) return
+            if (at < messageModel.count)   // бывшее первое сообщение могло стать продолжением группы
+                messageModel.setProperty(at, "grp", messageModel.get(at - 1).authorId === messageModel.get(at).authorId)
+            msgList.positionViewAtIndex(at, ListView.Beginning)
         }
     }
 
@@ -161,10 +190,18 @@ Item {
     // Входящие сообщения в реальном времени по WebSocket
     Connections {
         target: networkManager
+        // Переподключение: сервер выкинул нас из голоса вместе со старым подключением —
+        // заходим обратно и заново спрашиваем, кто сидит в каналах сервера
+        function onConnected() {
+            if (root.myVoiceChannel !== 0) root.sendVoiceJoin(root.myVoiceChannel)
+            if (root.activeServerId > 0)
+                networkManager.sendMessage(JSON.stringify({ type: "voice_query", server_id: root.activeServerId }))
+        }
         function onMessageReceived(m) {
             // Сигналинг звонков (WebRTC) → в CallEngine
             if (m.type === "call_invite" || m.type === "call_accept" || m.type === "rtc_ice" ||
-                m.type === "call_reject" || m.type === "call_end" || m.type === "call_busy") {
+                m.type === "call_reject" || m.type === "call_end" || m.type === "call_busy" ||
+                m.type === "call_unavailable") {
                 callEngine.handleSignal(m); return
             }
             if (m.type === "voice_state") {
@@ -182,10 +219,45 @@ Item {
             }
             if (m.type === "server_added") { appState.loadServers(); return }
             if (m.type === "channel_added") { appState.loadChannels(); appState.loadDms(); return }
-            if (m.type === "server_removed") {
-                if (root.activeServerId === parseInt(m.server_id)) root.selectHome()
-                appState.loadServers(); return
+            if (m.type === "server_removed") { root.forgetServer(parseInt(m.server_id)); return }
+            if (m.type === "server_member_joined" || m.type === "server_member_left") {
+                var msid = parseInt(m.server_id)
+                if (m.type === "server_member_left" && parseInt(m.user_id) === appState.userId) {
+                    root.forgetServer(msid); return   // вышел сам (с другого устройства) или забанен
+                }
+                if (msid === root.activeServerId) appState.loadServerMembers(msid)
+                return
             }
+            if (m.type === "server_channels_changed") {
+                var csid = parseInt(m.server_id)
+                if (csid === root.activeServerId || csid === root.activeChannelServerId || csid === root.myVoiceServer)
+                    appState.loadServerChannels(csid)
+                return
+            }
+            if (m.type === "server_updated") {
+                var usid = parseInt(m.server_id)
+                for (var si = 0; si < serverModel.count; si++)
+                    if (serverModel.get(si).sId === usid) { serverModel.setProperty(si, "sName", String(m.name)); break }
+                if (usid === root.activeServerId) root.activeServerName = String(m.name)
+                return
+            }
+            if (m.type === "channel_updated") {
+                var ucid = parseInt(m.channel_id)
+                for (var ci = 0; ci < serverChannelModel.count; ci++)
+                    if (serverChannelModel.get(ci).scId === ucid) { serverChannelModel.setProperty(ci, "scName", String(m.name)); break }
+                if (ucid === root.activeChannelId && !root.activeIsDm) root.activeChannelName = String(m.name)
+                if (ucid === root.myVoiceChannel) root.myVoiceName = String(m.name)
+                return
+            }
+            if (m.type === "channel_removed") {
+                var rcid = parseInt(m.channel_id)
+                if (rcid === root.activeChannelId) root.closeConversation()
+                if (rcid === root.myVoiceChannel) root.leaveVoice()
+                root.clearUnread(rcid)
+                appState.loadChannels(); appState.loadDms()
+                return
+            }
+            if (m.type === "user_updated") { root.applyUserUpdate(m); return }
             if (m.type === "presence") {
                 var uid = parseInt(m.user_id)
                 for (var pi = 0; pi < memberModel.count; pi++)
@@ -236,7 +308,17 @@ Item {
             }
 
             if (m.type !== "new_message") return
-            if (m.author_id === appState.userId) return
+            var mine = parseInt(m.author_id) === appState.userId
+            if (mine) {
+                // Своё: эта же строка уже есть (оптимистичная — по nonce) или ушло с другого устройства.
+                // Без nonce (старый сервер) — как раньше: своё не дублируем
+                var ni = root.findNonce(m.nonce)
+                if (ni >= 0) {
+                    if (messageModel.get(ni).msgId === 0) messageModel.setProperty(ni, "msgId", parseInt(m.id))
+                    return
+                }
+                if (!m.nonce || parseInt(m.channel_id) !== root.activeChannelId || root.findMsg(m.id) >= 0) return
+            }
             if (m.channel_id !== root.activeChannelId) {
                 // Сообщение в неоткрытый чат: подтянуть список личек (вдруг это новый DM)
                 // и пометить чат непрочитанным.
@@ -251,10 +333,10 @@ Item {
                 author: m.author_name, authorId: aid,
                 txt: m.text,
                 ts: ts.length >= 16 ? ts.substring(11, 16) : ts,
-                own: false, av: appState.mediaUrl(m.author_avatar ? m.author_avatar : ""), rc: "",
+                own: mine, av: appState.mediaUrl(m.author_avatar ? m.author_avatar : ""), rc: mine ? appState.roleColor : "",
                 msgId: parseInt(m.id), edited: false,
                 attach: m.attachment && m.attachment.length ? appState.mediaUrl(m.attachment) : "",
-                rx: "[]",
+                rx: "[]", nonce: "",
                 grp: (messageModel.count > 0 && messageModel.get(messageModel.count - 1).authorId === aid)
             })
             if (wasAtBottom) msgList.toBottom()
@@ -267,6 +349,67 @@ Item {
         for (var i = messageModel.count - 1; i >= 0; i--)
             if (messageModel.get(i).msgId === target) return i
         return -1
+    }
+    // ...и своего неподтверждённого по nonce
+    function findNonce(nonce) {
+        if (!nonce) return -1
+        for (var i = messageModel.count - 1; i >= 0; i--)
+            if (messageModel.get(i).nonce === nonce) return i
+        return -1
+    }
+
+    // Кто-то сменил имя/аватар: лички, участники, лента, голос; свой профиль — тоже (с другого устройства)
+    function applyUserUpdate(m) {
+        var uid = parseInt(m.user_id)
+        var name = String(m.display_name || "")
+        var av = appState.mediaUrl(m.avatar_path ? String(m.avatar_path) : "")
+        if (name === "") return
+        if (uid === appState.userId) {
+            appState.setDisplayName(name)
+            appState.setAvatarPath(av)
+            appState.setBannerPath(appState.mediaUrl(m.banner_path ? String(m.banner_path) : ""))
+            appState.setAccentColor(String(m.accent_color || ""))
+            appState.setBio(String(m.bio || ""))
+        }
+        for (var i = 0; i < dmModel.count; i++)
+            if (dmModel.get(i).dmUserId === uid) { dmModel.setProperty(i, "dmName", name); dmModel.setProperty(i, "dmAvatar", av) }
+        if (root.activeIsDm && root.activeDmUserId === uid) root.activeChannelName = name
+        for (var j = 0; j < memberModel.count; j++)
+            if (memberModel.get(j).id === uid) { memberModel.setProperty(j, "displayName", name); memberModel.setProperty(j, "avatar", av) }
+        for (var k = 0; k < messageModel.count; k++)
+            if (messageModel.get(k).authorId === uid) { messageModel.setProperty(k, "author", name); messageModel.setProperty(k, "av", av) }
+        for (var ch in root.voiceMembers) {
+            var arr = root.voiceMembers[ch]
+            for (var v = 0; v < arr.length; v++)
+                if (arr[v].id === uid) { arr[v].name = name; root.refreshVoiceRow(parseInt(ch)) }
+        }
+    }
+
+    // Сервер удалён или нас в нём больше нет
+    function forgetServer(serverId) {
+        if (root.activeChannelServerId === serverId) root.closeConversation()
+        if (root.myVoiceServer === serverId) root.leaveVoice()
+        if (root.activeServerId === serverId) root.selectHome()
+        appState.loadServers()
+    }
+
+    function closeConversation() {
+        root.activeChannelId = 0
+        root.activeChannelName = ""
+        root.activeIsDm = false
+        root.activeDmUserId = 0
+        root.activeChannelServerId = 0
+        root.hasOlder = false
+        root.loadingOlder = false
+        messageModel.clear()
+    }
+
+    function loadOlder() {
+        if (!root.hasOlder || root.loadingOlder || messageModel.count === 0) return
+        var oldest = messageModel.get(0).msgId
+        if (!(oldest > 0)) return
+        root.loadingOlder = true
+        appState.loadOlderMessages(root.activeChannelId, oldest)
     }
 
     // Локальная детекция речи → серверу + своя подсветка
@@ -290,6 +433,9 @@ Item {
             for (var i = 0; i < dmModel.count; i++)
                 if (dmModel.get(i).dmId === id) { uid = dmModel.get(i).dmUserId; break }
         root.activeDmUserId = isDm ? uid : 0
+        root.activeChannelServerId = isDm ? 0 : root.activeServerId
+        root.hasOlder = false
+        root.loadingOlder = false
         root.clearUnread(id)
         appState.loadMessages(id)
     }
@@ -370,20 +516,28 @@ Item {
         }
     }
 
+    // proto 2: сервер ставит перед каждым кадром id говорящего — VoiceEngine сводит голоса раздельно
+    function sendVoiceJoin(channelId) {
+        networkManager.sendMessage(JSON.stringify({ type: "voice_join", channel_id: channelId, proto: 2 }))
+    }
+
     function joinVoice(channelId, name) {
         if (root.myVoiceChannel === channelId) return
-        networkManager.sendMessage(JSON.stringify({ type: "voice_join", channel_id: channelId }))
+        root.sendVoiceJoin(channelId)
         root.myVoiceChannel = channelId
+        // голос лички — из её шапки, голосовой канал сервера — из списка активного сервера
+        root.myVoiceServer  = channelId === root.activeChannelId ? root.activeChannelServerId : root.activeServerId
         root.myVoiceName    = name
-        voiceEngine.start()     // включить микрофон + динамики
+        voiceEngine.setChannelActive(true)    // микрофон + динамики, кадры в канал
     }
 
     function leaveVoice() {
         if (root.myVoiceChannel === 0) return
         networkManager.sendMessage(JSON.stringify({ type: "voice_leave" }))
         root.myVoiceChannel = 0
+        root.myVoiceServer  = 0
         root.myVoiceName    = ""
-        voiceEngine.stop()      // выключить аудио
+        voiceEngine.setChannelActive(false)   // устройства закроются, если не нужны звонку
     }
 
     // ── Layout ───────────────────────────────────────────────────────────────
@@ -502,6 +656,7 @@ Item {
                         anchors { fill: parent; leftMargin: 16; rightMargin: 12 }
                         Text {
                             text: root.activeServerId === 0 ? "Vicinity" : root.activeServerName
+                            textFormat: Text.PlainText
                             color: themeManager.textColor; font.pixelSize: 15; font.bold: true
                             elide: Text.ElideRight; Layout.fillWidth: true
                         }
@@ -585,6 +740,7 @@ Item {
                                     Text {
                                         Layout.fillWidth: true; elide: Text.ElideRight
                                         text: dmName
+                                        textFormat: Text.PlainText
                                         color: parent.parent.active ? themeManager.accentTextColor
                                                : (parent.parent.unread ? themeManager.textColor : themeManager.textMutedColor)
                                         font.pixelSize: 14; font.bold: !!(parent.parent.unread || parent.parent.active)
@@ -593,6 +749,7 @@ Item {
                                         Layout.fillWidth: true; elide: Text.ElideRight
                                         visible: dmHandle.length > 0
                                         text: "@" + dmHandle
+                                        textFormat: Text.PlainText
                                         color: themeManager.textFaintColor; font.pixelSize: 11
                                     }
                                 }
@@ -670,6 +827,7 @@ Item {
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: parent.width - 26; elide: Text.ElideRight
                                         text: scName + (scVoice && memberCount > 0 ? "  · " + memberCount : "")
+                                        textFormat: Text.PlainText
                                         color: parent.parent.active ? themeManager.accentTextColor
                                                : (scHover.containsMouse ? themeManager.textColor : themeManager.textMutedColor)
                                         font.pixelSize: 15
@@ -719,6 +877,7 @@ Item {
                                     Text {
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: parent.p.length > 1 ? parent.p[1] : ""
+                                        textFormat: Text.PlainText
                                         color: parent.speaking ? themeManager.successColor
                                                : Qt.rgba(themeManager.textColor.r, themeManager.textColor.g,
                                                          themeManager.textColor.b, 0.7)
@@ -744,7 +903,7 @@ Item {
                             spacing: 0; Layout.fillWidth: true
                             Text { text: "Голосовой подключён"; color: themeManager.successColor
                                 font.pixelSize: 11; font.bold: true }
-                            Text { text: root.myVoiceName; color: Qt.rgba(themeManager.textColor.r,
+                            Text { textFormat: Text.PlainText; text: root.myVoiceName; color: Qt.rgba(themeManager.textColor.r,
                                    themeManager.textColor.g, themeManager.textColor.b, 0.6)
                                 font.pixelSize: 10; elide: Text.ElideRight; Layout.fillWidth: true }
                         }
@@ -827,11 +986,13 @@ Item {
                             spacing: 0; Layout.fillWidth: true
                             Text {
                                 text: appState.displayName
+                                textFormat: Text.PlainText
                                 color: themeManager.textColor; font.pixelSize: 14; font.bold: true
                                 elide: Text.ElideRight; Layout.fillWidth: true
                             }
                             Text {
                                 text: appState.roleName !== "" ? appState.roleName : "@" + appState.username
+                                textFormat: Text.PlainText
                                 color: appState.roleColor !== "" ? appState.roleColor : themeManager.textMutedColor
                                 font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true
                             }
@@ -852,7 +1013,7 @@ Item {
                                 color: logoutBtn.containsMouse ? themeManager.dangerColor : themeManager.textMutedColor }
                             MouseArea { id: logoutBtn; anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor; hoverEnabled: true
-                                onClicked: appState.clearUser() }
+                                onClicked: appState.logout() }
                         }
                     }
                 }
@@ -886,6 +1047,7 @@ Item {
                         }
                         Text {
                             text: root.activeChannelName !== "" ? root.activeChannelName : "Выбери чат или канал"
+                            textFormat: Text.PlainText
                             color: themeManager.textColor; font.pixelSize: 16; font.bold: true
                             Layout.fillWidth: true; elide: Text.ElideRight
                             MouseArea {
@@ -971,7 +1133,7 @@ Item {
                             Text { text: callBar.meIn ? "🔊 Вы в звонке" : "📞 Входящий звонок"
                                 color: callBar.meIn ? themeManager.successColor : themeManager.presenceIdle
                                 font.pixelSize: 14; font.bold: true }
-                            Text { text: callBar.meIn ? "зелёный = говорит" : root.activeChannelName + " ждёт"
+                            Text { textFormat: Text.PlainText; text: callBar.meIn ? "зелёный = говорит" : root.activeChannelName + " ждёт"
                                 color: themeManager.textMutedColor; font.pixelSize: 11 }
                         }
 
@@ -1020,6 +1182,7 @@ Item {
                                         Text {
                                             anchors.verticalCenter: parent.verticalCenter
                                             text: modelData.id === appState.userId ? "Вы" : modelData.name
+                                            textFormat: Text.PlainText
                                             color: themeManager.textColor; font.pixelSize: 13
                                             font.bold: chip.talking
                                         }
@@ -1077,6 +1240,24 @@ Item {
                     onHeightChanged: if (atBottom) Qt.callLater(toBottom)
                     Component.onCompleted: Qt.callLater(toBottom)
 
+                    // На сервере есть сообщения старше загруженных — подгружаем по кнопке
+                    header: Item {
+                        width: msgList.width
+                        height: root.hasOlder ? 44 : 0
+                        visible: root.hasOlder
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: olderTxt.implicitWidth + 28; height: 30; radius: 15
+                            color: olderMa.containsMouse ? themeManager.hoverColor : themeManager.inputColor
+                            Text { id: olderTxt; anchors.centerIn: parent
+                                text: root.loadingOlder ? "Загрузка…" : "Показать более ранние сообщения"
+                                color: themeManager.textMutedColor; font.pixelSize: 12 }
+                            MouseArea { id: olderMa; anchors.fill: parent; hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor; enabled: !root.loadingOlder
+                                onClicked: root.loadOlder() }
+                        }
+                    }
+
                     // Только мягкое появление по прозрачности — без сдвигов по Y и без
                     // displaced, чтобы пузыри никогда не наезжали друг на друга.
                     add: Transition {
@@ -1129,14 +1310,25 @@ Item {
                                 Layout.fillWidth: true; Layout.fillHeight: true
                                 verticalAlignment: TextInput.AlignVCenter
                                 rightPadding: 8
-                                placeholderText: root.activeChannelName !== ""
-                                                 ? "Написать в " + (root.activeIsDm ? "" : "#") + root.activeChannelName
-                                                 : "Выбери чат…"
-                                placeholderTextColor: themeManager.textFaintColor
                                 color: themeManager.textColor; font.pixelSize: 15
                                 background: Item {}
                                 enabled: root.activeChannelId !== 0
                                 Keys.onReturnPressed: sendMsg()
+                                // Подсказка своим Text: встроенный placeholder понимает разметку,
+                                // а в нём имя собеседника/канала
+                                Text {
+                                    x: inputField.leftPadding
+                                    width: inputField.width - inputField.leftPadding - inputField.rightPadding
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: inputField.length === 0 && inputField.preeditText.length === 0
+                                    text: root.activeChannelName !== ""
+                                          ? "Написать в " + (root.activeIsDm ? "" : "#") + root.activeChannelName
+                                          : "Выбери чат…"
+                                    textFormat: Text.PlainText
+                                    color: themeManager.textFaintColor
+                                    font: inputField.font
+                                    elide: Text.ElideRight
+                                }
                             }
                             Rectangle {
                                 Layout.preferredWidth: 46; Layout.fillHeight: true; color: "transparent"
@@ -1258,7 +1450,7 @@ Item {
                                 anchors.verticalCenter: parent.verticalCenter; spacing: 2
                                 Row {
                                     spacing: 5
-                                    Text { text: model.displayName
+                                    Text { textFormat: Text.PlainText; text: model.displayName
                                         color: (model.roles && model.roles.length > 0 && model.roles[0].color)
                                                ? model.roles[0].color : themeManager.textColor
                                         font.pixelSize: 14
@@ -1276,7 +1468,7 @@ Item {
                                 // @username + цветные бейджи ролей
                                 Row {
                                     spacing: 5
-                                    Text { text: "@" + model.username
+                                    Text { textFormat: Text.PlainText; text: "@" + model.username
                                         color: themeManager.textFaintColor; font.pixelSize: 11
                                         elide: Text.ElideRight
                                         width: Math.min(implicitWidth, model.roles && model.roles.length > 0 ? 60 : 140)
@@ -1288,7 +1480,7 @@ Item {
                                             anchors.verticalCenter: parent.verticalCenter
                                             color: Qt.rgba(Qt.color(modelData.color).r, Qt.color(modelData.color).g,
                                                            Qt.color(modelData.color).b, 0.18)
-                                            Text { id: rlt; anchors.centerIn: parent; text: modelData.name
+                                            Text { textFormat: Text.PlainText; id: rlt; anchors.centerIn: parent; text: modelData.name
                                                 color: Qt.color(modelData.color); font.pixelSize: 8; font.bold: true }
                                         }
                                     }
@@ -1629,8 +1821,8 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
-                            Text { text: uName; color: themeManager.textColor; font.pixelSize: 14; font.bold: true }
-                            Text { text: "@" + uTag
+                            Text { textFormat: Text.PlainText; text: uName; color: themeManager.textColor; font.pixelSize: 14; font.bold: true }
+                            Text { textFormat: Text.PlainText; text: "@" + uTag
                                 color: Qt.rgba(themeManager.textColor.r, themeManager.textColor.g, themeManager.textColor.b, 0.45)
                                 font.pixelSize: 11 }
                         }
@@ -1665,7 +1857,7 @@ Item {
         }
         Column {
             width: parent.width; spacing: 14
-            Text { text: voiceNotice.chName !== "" ? "🔊 " + voiceNotice.chName : "📞 Звонки"
+            Text { textFormat: Text.PlainText; text: voiceNotice.chName !== "" ? "🔊 " + voiceNotice.chName : "📞 Звонки"
                 font.pixelSize: 16; font.bold: true; color: themeManager.textColor }
             Text {
                 width: parent.width; wrapMode: Text.WordWrap
@@ -1693,15 +1885,16 @@ Item {
     function sendMsg() {
         var t = inputField.text.trim()
         if (t === "" || root.activeChannelId === 0) return
+        // Ответ сервера и new_message придут не раньше следующего прохода цикла событий
+        var nonce = appState.sendChatMessage(root.activeChannelId, t)
         messageModel.append({
             author: appState.displayName, authorId: appState.userId, txt: t,
             ts: Qt.formatTime(new Date(), "hh:mm"),
             own: true, av: appState.avatarPath, rc: appState.roleColor,
-            msgId: 0, edited: false, attach: "", rx: "[]",   // id допишет onMessageSent
+            msgId: 0, edited: false, attach: "", rx: "[]", nonce: nonce,   // id допишет onMessageSent
             grp: (messageModel.count > 0 && messageModel.get(messageModel.count - 1).authorId === appState.userId)
         })
         msgList.toBottom()
-        appState.sendChatMessage(root.activeChannelId, t)
         inputField.text = ""
     }
 
@@ -1749,6 +1942,37 @@ Item {
     ProfileModal { id: profileModal }
     CallOverlay  { id: callOverlay }
 
+    // ── Короткие уведомления (звонок: не в сети / нет ответа / сбой) ──
+    function showToast(text) {
+        toastText.text = text
+        toast.opacity = 1
+        toastTimer.restart()
+    }
+    Connections {
+        target: callEngine
+        function onCallNotice(text) { root.showToast(text) }
+    }
+    Rectangle {
+        id: toast
+        z: 110
+        anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 16 }
+        width: Math.min(toastText.implicitWidth + 32, parent.width - 32); height: 40; radius: 20
+        color: themeManager.elevatedColor
+        border.color: themeManager.borderColor; border.width: 1
+        opacity: 0
+        visible: opacity > 0.01
+        Behavior on opacity { NumberAnimation { duration: themeManager.animDuration(180) } }
+        Text {
+            id: toastText
+            anchors.centerIn: parent
+            width: Math.min(implicitWidth, parent.width - 32)
+            elide: Text.ElideRight
+            textFormat: Text.PlainText
+            color: themeManager.textColor; font.pixelSize: 13
+        }
+        Timer { id: toastTimer; interval: 3500; onTriggered: toast.opacity = 0 }
+    }
+
     // ── Мини-плашка свёрнутого звонка (звонок живёт, приложение свободно) ──
     Rectangle {
         visible: callOverlay.minimized && callEngine.state !== "idle"
@@ -1776,7 +2000,7 @@ Item {
             anchors.centerIn: parent; spacing: 8
             Rectangle { width: 8; height: 8; radius: 4; anchors.verticalCenter: parent.verticalCenter
                 color: callEngine.state === "incall" ? themeManager.successColor : themeManager.warningColor }
-            Text { text: callEngine.peerName.length ? callEngine.peerName : "Звонок"
+            Text { textFormat: Text.PlainText; text: callEngine.peerName.length ? callEngine.peerName : "Звонок"
                 anchors.verticalCenter: parent.verticalCenter
                 color: themeManager.textColor; font.pixelSize: 13; font.bold: true }
             MiniBtn { anchors.verticalCenter: parent.verticalCenter

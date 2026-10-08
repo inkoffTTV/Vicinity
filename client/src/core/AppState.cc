@@ -6,6 +6,7 @@
 #include <QUrl>
 #include <QGuiApplication>
 #include <QClipboard>
+#include <QUuid>
 
 AppState& AppState::instance() {
     static AppState inst;
@@ -267,6 +268,13 @@ void AppState::clearUser() {
     emit authChanged();
 }
 
+void AppState::logout() {
+    // Сессию закрываем и на сервере (запрос уходит с ещё действующим токеном), ответ не ждём
+    if (!m_sessionToken.isEmpty())
+        ApiClient::instance().post("/auth/logout", QJsonObject{}, [](bool, const QJsonObject&) {});
+    clearUser();
+}
+
 // ── Профиль ───────────────────────────────────────────────────────────────────
 
 void AppState::setDisplayName(const QString& name) {
@@ -378,60 +386,78 @@ void AppState::loadChannels() {
     });
 }
 
-void AppState::loadMessages(int channelId) {
+QVariantMap AppState::messageToVariant(const QJsonObject& msg) const {
+    QVariantMap m;
+    m["author"]   = msg["author_name"].toString();
+    m["authorId"] = static_cast<qlonglong>(msg["author_id"].toInteger());
+    m["txt"]      = msg["text"].toString();
+    QString ts = msg["created_at"].toString();
+    m["ts"]  = ts.length() >= 16 ? ts.mid(11, 5) : ts;
+    m["own"] = msg["author_id"].toInteger() == m_userId;
+    m["av"]  = mediaUrl(msg["author_avatar"].toString());
+    m["rc"]  = QString{};
+    m["msgId"]  = static_cast<qlonglong>(msg["id"].toInteger());
+    m["edited"] = msg["edited"].toBool();
+    QString att = msg["attachment"].toString();
+    m["attach"] = att.isEmpty() ? QString() : mediaUrl(att);
+    m["nonce"]  = QString{};
+    // Реакции: [{emoji,count,users[]}] → JSON-строка [{emoji,count,me}] для модели
+    QJsonArray rx;
+    for (const auto& rv : msg["reactions"].toArray()) {
+        auto r = rv.toObject();
+        bool me = false;
+        for (const auto& uv : r["users"].toArray())
+            if (uv.toInteger() == m_userId) { me = true; break; }
+        QJsonObject o; o["emoji"] = r["emoji"].toString();
+        o["count"] = r["count"].toInt(); o["me"] = me;
+        rx.append(o);
+    }
+    m["rx"] = QString::fromUtf8(QJsonDocument(rx).toJson(QJsonDocument::Compact));
+    return m;
+}
+
+void AppState::fetchMessages(int channelId, qlonglong beforeId) {
     QString path = "/channels/" + QString::number(channelId) + "/messages";
-    ApiClient::instance().get(path, [this, channelId](bool ok, const QJsonObject& data) {
-        if (!ok) return;
-        QVariantList list;
-        auto arr = data["messages"].toArray();
-        for (const auto& val : arr) {
-            auto msg = val.toObject();
-            QVariantMap m;
-            m["author"]   = msg["author_name"].toString();
-            m["authorId"] = static_cast<qlonglong>(msg["author_id"].toInteger());
-            m["txt"]      = msg["text"].toString();
-            QString ts = msg["created_at"].toString();
-            m["ts"]  = ts.length() >= 16 ? ts.mid(11, 5) : ts;
-            m["own"] = msg["author_id"].toInteger() == m_userId;
-            m["av"]  = mediaUrl(msg["author_avatar"].toString());
-            m["rc"]  = QString{};
-            m["msgId"]  = static_cast<qlonglong>(msg["id"].toInteger());
-            m["edited"] = msg["edited"].toBool();
-            QString att = msg["attachment"].toString();
-            m["attach"] = att.isEmpty() ? QString() : mediaUrl(att);
-            // Реакции: [{emoji,count,users[]}] → JSON-строка [{emoji,count,me}] для модели
-            QJsonArray rx;
-            for (const auto& rv : msg["reactions"].toArray()) {
-                auto r = rv.toObject();
-                bool me = false;
-                for (const auto& uv : r["users"].toArray())
-                    if (uv.toInteger() == m_userId) { me = true; break; }
-                QJsonObject o; o["emoji"] = r["emoji"].toString();
-                o["count"] = r["count"].toInt(); o["me"] = me;
-                rx.append(o);
-            }
-            m["rx"] = QString::fromUtf8(QJsonDocument(rx).toJson(QJsonDocument::Compact));
-            list.append(m);
+    if (beforeId > 0) path += "?before=" + QString::number(beforeId);
+    ApiClient::instance().get(path, [this, channelId, beforeId](bool ok, const QJsonObject& data) {
+        if (!ok) {
+            // Не загрузилось — «раньше» остаётся, можно повторить
+            if (beforeId > 0) emit olderMessagesReady(channelId, QVariantList{}, true);
+            return;
         }
-        emit messagesReady(channelId, list);
+        QVariantList list;
+        for (const auto& val : data["messages"].toArray())
+            list.append(messageToVariant(val.toObject()));
+        const bool hasMore = data["has_more"].toBool();
+        if (beforeId > 0) emit olderMessagesReady(channelId, list, hasMore);
+        else              emit messagesReady(channelId, list, hasMore);
     });
 }
 
-void AppState::sendChatMessage(int channelId, const QString& text, const QString& attachment) {
-    if (channelId == 0 || (text.trimmed().isEmpty() && attachment.isEmpty())) return;
+void AppState::loadMessages(int channelId) { fetchMessages(channelId, 0); }
+
+void AppState::loadOlderMessages(int channelId, qlonglong beforeId) {
+    if (channelId != 0 && beforeId > 0) fetchMessages(channelId, beforeId);
+}
+
+QString AppState::sendChatMessage(int channelId, const QString& text, const QString& attachment) {
+    if (channelId == 0 || (text.trimmed().isEmpty() && attachment.isEmpty())) return {};
+    const QString nonce = QUuid::createUuid().toString(QUuid::WithoutBraces);
     QString path = "/channels/" + QString::number(channelId) + "/messages";
     QJsonObject body;
-    body["text"] = text;
+    body["text"]  = text;
+    body["nonce"] = nonce;
     if (!attachment.isEmpty()) body["attachment"] = attachment;
     ApiClient::instance().post(path, body,
-                               [this, channelId, attachment](bool ok, const QJsonObject& d) {
+                               [this, channelId, attachment, nonce](bool ok, const QJsonObject& d) {
         // Доставка получателям — через WebSocket-рассылку сервера.
         // Отправителю отдаём id: без него не отредактировать/удалить своё же сообщение.
         if (!ok) return;
         qlonglong id = static_cast<qlonglong>(d["id"].toInteger());
-        if (attachment.isEmpty()) emit messageSent(channelId, id);
+        if (attachment.isEmpty()) emit messageSent(channelId, id, nonce);
         else                      emit attachmentSent(channelId, id, mediaUrl(attachment));
     });
+    return nonce;
 }
 
 void AppState::editMessage(int channelId, qlonglong msgId, const QString& text) {

@@ -108,10 +108,10 @@ Item {
                             ColumnLayout {
                                 spacing: 0
                                 Layout.fillWidth: true
-                                Text { text: appState.displayName; color: themeManager.textColor
+                                Text { textFormat: Text.PlainText; text: appState.displayName; color: themeManager.textColor
                                     font.pixelSize: 20; font.bold: true; elide: Text.ElideRight
                                     Layout.fillWidth: true }
-                                Text { text: "@" + appState.username; color: themeManager.textMutedColor
+                                Text { textFormat: Text.PlainText; text: "@" + appState.username; color: themeManager.textMutedColor
                                     font.pixelSize: 13 }
                             }
                             AccentBtn { label: "Изменить профиль"; onClicked: root.editProfile() }
@@ -141,7 +141,7 @@ Item {
                                     spacing: 2; Layout.fillWidth: true
                                     Text { text: caption; color: themeManager.textFaintColor
                                         font.pixelSize: 11; font.bold: true }
-                                    Text { text: value; color: themeManager.textColor
+                                    Text { textFormat: Text.PlainText; text: value; color: themeManager.textColor
                                         font.pixelSize: 14; elide: Text.ElideRight; Layout.fillWidth: true }
                                 }
                                 GreyBtn { label: btnLabel; onClicked: act() }

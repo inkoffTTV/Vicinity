@@ -162,10 +162,10 @@ Popup {
                 // Имя + хэндл
                 ColumnLayout {
                     spacing: 0
-                    Text { text: root.prof.display_name ? root.prof.display_name : ""
+                    Text { textFormat: Text.PlainText; text: root.prof.display_name ? root.prof.display_name : ""
                         color: themeManager.textColor; font.pixelSize: 18; font.bold: true
                         Layout.fillWidth: true; elide: Text.ElideRight }
-                    Text { text: root.prof.username ? "@" + root.prof.username : ""
+                    Text { textFormat: Text.PlainText; text: root.prof.username ? "@" + root.prof.username : ""
                         color: themeManager.textMutedColor; font.pixelSize: 13
                         Layout.fillWidth: true; elide: Text.ElideRight }
                 }
@@ -174,6 +174,7 @@ Popup {
                 Text {
                     visible: !!(root.prof.pronouns && root.prof.pronouns.length > 0)
                     text: root.prof.pronouns ? root.prof.pronouns : ""
+                    textFormat: Text.PlainText
                     color: themeManager.textFaintColor; font.pixelSize: 12
                 }
 
@@ -187,7 +188,7 @@ Popup {
                             height: 20; radius: 6; width: bt.implicitWidth + 14
                             color: Qt.rgba(Qt.color(modelData.color).r, Qt.color(modelData.color).g,
                                            Qt.color(modelData.color).b, 0.18)
-                            Text { id: bt; anchors.centerIn: parent; text: modelData.label
+                            Text { textFormat: Text.PlainText; id: bt; anchors.centerIn: parent; text: modelData.label
                                 color: Qt.color(modelData.color); font.pixelSize: 10; font.bold: true }
                         }
                     }
@@ -201,7 +202,7 @@ Popup {
                     visible: !!(root.pj.showStatus !== false && root.pj.statusText && root.pj.statusText.length > 0)
                     Rectangle { width: 8; height: 8; radius: 4; anchors.verticalCenter: parent.verticalCenter
                         color: root.pj.statusColor ? Qt.color(root.pj.statusColor) : themeManager.successColor }
-                    Text { text: root.pj.statusText ? root.pj.statusText : ""
+                    Text { textFormat: Text.PlainText; text: root.pj.statusText ? root.pj.statusText : ""
                         color: themeManager.textColor; font.pixelSize: 13
                         anchors.verticalCenter: parent.verticalCenter }
                 }
@@ -229,7 +230,7 @@ Popup {
                         Row { spacing: 6
                             AppIcon { name: "link"; size: 13; color: root.cardAccent
                                 anchors.verticalCenter: parent.verticalCenter }
-                            Text { text: modelData.label && modelData.label.length > 0 ? modelData.label : modelData.url
+                            Text { textFormat: Text.PlainText; text: modelData.label && modelData.label.length > 0 ? modelData.label : modelData.url
                                 color: root.cardAccent; font.pixelSize: 12
                                 anchors.verticalCenter: parent.verticalCenter
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
@@ -298,6 +299,7 @@ Popup {
                     visible: root.feedback.length > 0
                     Layout.fillWidth: true; wrapMode: Text.WordWrap
                     text: root.feedback
+                    textFormat: Text.PlainText
                     color: root.feedbackError ? themeManager.dangerColor : themeManager.successColor
                     font.pixelSize: 11
                 }

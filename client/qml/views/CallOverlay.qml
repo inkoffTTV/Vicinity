@@ -173,7 +173,7 @@ Popup {
                     Row {
                         id: capRow
                         anchors.centerIn: parent; spacing: 8
-                        Text { text: callEngine.peerName.length > 0 ? callEngine.peerName : "Собеседник"
+                        Text { textFormat: Text.PlainText; text: callEngine.peerName.length > 0 ? callEngine.peerName : "Собеседник"
                             anchors.verticalCenter: parent.verticalCenter
                             color: "#ffffff"; font.pixelSize: 13; font.bold: true }
                         Text { text: root.statusText
@@ -219,6 +219,7 @@ Popup {
             Item { Layout.preferredHeight: 20 }
             Text { Layout.alignment: Qt.AlignHCenter
                 text: callEngine.peerName.length > 0 ? callEngine.peerName : "Собеседник"
+                textFormat: Text.PlainText
                 color: themeManager.textColor; font.pixelSize: 20; font.bold: true }
             Text { Layout.alignment: Qt.AlignHCenter; text: root.statusText
                 color: themeManager.textMutedColor; font.pixelSize: 14 }

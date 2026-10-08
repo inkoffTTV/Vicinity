@@ -25,18 +25,33 @@ int main(int argc, char *argv[]) {
     NetworkManager networkManager;
     VoiceEngine    voiceEngine;
 
-    // Голос (серверные каналы): микрофон → WebSocket, и WebSocket → динамики
-    QObject::connect(&voiceEngine,    &VoiceEngine::frameCaptured,
+    // Голос (серверные каналы): микрофон → WebSocket (только пока в канале), и WebSocket → динамики
+    QObject::connect(&voiceEngine,    &VoiceEngine::channelFrame,
                      &networkManager, &NetworkManager::sendBinary);
     QObject::connect(&networkManager, &NetworkManager::binaryReceived,
-                     &voiceEngine,    &VoiceEngine::playFrame);
+                     &voiceEngine,    &VoiceEngine::playChannelPacket);   // v2: id отправителя + PCM
 
-    // Звонки (WebRTC): сигналинг движка → WS. ICE-серверы (пока публичные; позже свой coturn).
+    // Звонки (WebRTC): сигналинг движка → WS. ICE-серверы — GET /rtc/ice перед каждым звонком,
+    // этот STUN — запасной (старый бэкенд или сбой запроса).
     VideoEngine videoEngine;   // камера (Фаза C)
-    CallEngine callEngine(&voiceEngine, &videoEngine);
+    CallEngine callEngine(&videoEngine);
     callEngine.setIceServers({ "stun:stun.l.google.com:19302" });
     QObject::connect(&callEngine, &CallEngine::sendSignal,
                      &networkManager, &NetworkManager::sendMessage);
+    // Звук звонка: микрофон → Opus (в потоке захвата), собеседник → динамики
+    QObject::connect(&voiceEngine, &VoiceEngine::frameCaptured,
+                     &callEngine,  &CallEngine::pushMicFrame, Qt::DirectConnection);
+    QObject::connect(&callEngine,  &CallEngine::remoteAudio,
+                     &voiceEngine, &VoiceEngine::playCallFrame, Qt::DirectConnection);   // из потока сети
+    QObject::connect(&callEngine,  &CallEngine::audioActiveChanged,
+                     &voiceEngine, &VoiceEngine::setCallActive);
+
+    // Выход из аккаунта (кнопка или отозванная сессия): звонок и голосовой канал не живут без него
+    QObject::connect(&AppState::instance(), &AppState::authChanged, &callEngine, [&] {
+        if (AppState::instance().authenticated()) return;
+        callEngine.hangup();
+        voiceEngine.setChannelActive(false);
+    });
 
     QQmlApplicationEngine engine;
     engine.addImportPath("qrc:/qml");

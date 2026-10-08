@@ -134,13 +134,13 @@ Dialog {
         ColumnLayout {
             Layout.fillWidth: true; Layout.leftMargin: 24; Layout.rightMargin: 24; spacing: 5
             RowLayout { spacing: 8
-                Text { text: root.prof.display_name ? root.prof.display_name : ""
+                Text { textFormat: Text.PlainText; text: root.prof.display_name ? root.prof.display_name : ""
                     color: themeManager.textColor; font.pixelSize: 22; font.bold: true }
-                Text { text: root.prof.pronouns ? root.prof.pronouns : ""
+                Text { textFormat: Text.PlainText; text: root.prof.pronouns ? root.prof.pronouns : ""
                     visible: !!(root.prof.pronouns && root.prof.pronouns.length > 0)
                     color: themeManager.textFaintColor; font.pixelSize: 13 }
             }
-            Text { text: root.prof.username ? "@" + root.prof.username : ""
+            Text { textFormat: Text.PlainText; text: root.prof.username ? "@" + root.prof.username : ""
                 color: themeManager.textMutedColor; font.pixelSize: 14 }
             Flow { Layout.fillWidth: true; spacing: 6
                 visible: !!(root.prof.badges && root.prof.badges.length > 0)
@@ -150,7 +150,7 @@ Dialog {
                         height: 22; radius: 6; width: bt.implicitWidth + 16
                         color: Qt.rgba(Qt.color(modelData.color).r, Qt.color(modelData.color).g,
                                        Qt.color(modelData.color).b, 0.18)
-                        Text { id: bt; anchors.centerIn: parent; text: modelData.label
+                        Text { textFormat: Text.PlainText; id: bt; anchors.centerIn: parent; text: modelData.label
                             color: Qt.color(modelData.color); font.pixelSize: 11; font.bold: true }
                     }
                 }
@@ -199,7 +199,7 @@ Dialog {
                     Row { spacing: 6
                         Rectangle { width: 8; height: 8; radius: 4; anchors.verticalCenter: parent.verticalCenter
                             color: root.pj.statusColor ? Qt.color(root.pj.statusColor) : themeManager.successColor }
-                        Text { text: root.pj.statusText ? root.pj.statusText : ""
+                        Text { textFormat: Text.PlainText; text: root.pj.statusText ? root.pj.statusText : ""
                             color: themeManager.textColor; font.pixelSize: 13 } }
                 }
                 Column { width: parent.width; spacing: 4
@@ -217,7 +217,7 @@ Dialog {
                         Row { spacing: 6
                             AppIcon { name: "link"; size: 14; color: root.cardAccent
                                 anchors.verticalCenter: parent.verticalCenter }
-                            Text { text: modelData.label && modelData.label.length>0 ? modelData.label : modelData.url
+                            Text { textFormat: Text.PlainText; text: modelData.label && modelData.label.length>0 ? modelData.label : modelData.url
                                 color: root.cardAccent; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                     onClicked: Qt.openUrlExternally(modelData.url) } } }
@@ -243,7 +243,7 @@ Dialog {
                                 anchors.verticalCenter: parent.verticalCenter
                                 Text { anchors.centerIn: parent; text: modelData.name.charAt(0).toUpperCase()
                                     color: themeManager.accentColor; font.pixelSize: 15; font.bold: true } }
-                            Text { text: modelData.name; color: themeManager.textColor; font.pixelSize: 14
+                            Text { textFormat: Text.PlainText; text: modelData.name; color: themeManager.textColor; font.pixelSize: 14
                                 anchors.verticalCenter: parent.verticalCenter } }
                         MouseArea { id: msHov; anchors.fill: parent; hoverEnabled: true }
                     }
@@ -266,7 +266,7 @@ Dialog {
                             AnimatedAvatar { width: 34; height: 34; displayName: modelData.display_name
                                 source: appState.mediaUrl(modelData.avatar_path)
                                 anchors.verticalCenter: parent.verticalCenter }
-                            Text { text: modelData.display_name; color: themeManager.textColor; font.pixelSize: 14
+                            Text { textFormat: Text.PlainText; text: modelData.display_name; color: themeManager.textColor; font.pixelSize: 14
                                 anchors.verticalCenter: parent.verticalCenter } }
                         MouseArea { id: mfHov; anchors.fill: parent; hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor

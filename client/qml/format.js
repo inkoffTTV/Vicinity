@@ -10,6 +10,12 @@ function escapeHtml(s) {
         .replace(/"/g, "&quot;");
 }
 
+// Обычный текст → StyledText, который выглядит так же, как PlainText: всё экранировано,
+// переносы строк и подряд идущие пробелы сохранены (StyledText их схлопывает)
+function plainToStyled(text) {
+    return escapeHtml(text).replace(/\n/g, "<br>").replace(/ {2}/g, " &nbsp;");
+}
+
 // Базовое форматирование «обо мне»: **жирный**, *курсив*, __подчерк__, ссылки, переносы.
 function bio(text) {
     if (!text) return "";

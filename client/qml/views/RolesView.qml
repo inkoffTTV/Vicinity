@@ -181,6 +181,7 @@ Item {
                 Text {
                     visible: root.roleErr !== ""
                     text: "⚠ " + root.roleErr
+                    textFormat: Text.PlainText
                     color: themeManager.dangerColor; font.pixelSize: 11; wrapMode: Text.WordWrap
                     width: parent.width
                 }
@@ -219,10 +220,11 @@ Item {
                         width: 12; height: 12; radius: 6; color: rColor
                         anchors.verticalCenter: parent.verticalCenter
                     }
-                    Text { text: rIcon; font.pixelSize: 15; color: rColor; visible: rIcon !== ""
+                    Text { textFormat: Text.PlainText; text: rIcon; font.pixelSize: 15; color: rColor; visible: rIcon !== ""
                         anchors.verticalCenter: parent.verticalCenter }
                     Text {
                         text: rName; color: rColor; font.pixelSize: 14; font.bold: true
+                        textFormat: Text.PlainText
                         anchors.verticalCenter: parent.verticalCenter
                         width: parent.width - 160; elide: Text.ElideRight
                     }
