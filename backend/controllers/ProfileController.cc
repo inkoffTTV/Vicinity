@@ -3,7 +3,9 @@
 #include "../utils/Broadcast.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/TextUtils.h"
+#include "../utils/Tiers.h"
 #include "../utils/Uploads.h"
+#include "../models/User.h"
 #include "../../shared/crypto/common_consts.h"
 #include <trantor/utils/Logger.h>
 #include <cctype>
@@ -25,10 +27,17 @@ static std::optional<std::string> cleanDisplayName(const std::string& raw) {
     return TextUtils::cleanName(raw, Vicinity::MAX_DISPLAY_NAME_LEN, true);
 }
 
-// «О себе»: до 190 символов, переводы строк можно
-static bool validBio(const std::string& bio) {
+// «О себе»: до 190 символов (Standard и Ultra — до 400, utils/Tiers.h), переводы строк можно
+static int userTier(int64_t userId) {
+    const auto u = UserModel::findById(userId);
+    return u ? u->subscriptionTier : 0;
+}
+static bool validBio(const std::string& bio, int64_t userId) {
     return TextUtils::isValidUtf8(bio) && !TextUtils::hasControlChars(bio, true) &&
-           TextUtils::utf8Length(bio) <= Vicinity::MAX_BIO_LEN;
+           TextUtils::utf8Length(bio) <= static_cast<size_t>(Tiers::bioLimit(userTier(userId)));
+}
+static std::string bioError(int64_t userId) {
+    return "Bio must be " + std::to_string(Tiers::bioLimit(userTier(userId))) + " characters or less";
 }
 
 // Цвет профиля: #RRGGBB или пусто (без цвета). Десктоп (ThemeManager::colorToHex) присылает
@@ -84,7 +93,10 @@ void ProfileController::uploadMedia(const HttpRequestPtr& req,
     if (fieldName != "avatar" && fieldName != "banner") {
         callback(errResp("Invalid field name", k400BadRequest)); return;
     }
-    // Баннер доступен всем (ограничение по подписке снято).
+    // Баннер доступен всем; анимированный (GIF) — с подписки Standard (utils/Tiers.h)
+    if (fieldName == "banner" && file.fileContent().substr(0, 4) == "GIF8" && !Tiers::animatedBanner(userTier(user_id))) {
+        callback(errResp("Анимированный баннер — с подпиской Standard", k403Forbidden)); return;
+    }
     if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Upload, user_id)) {
         callback(errResp("Слишком часто, попробуйте позже", k429TooManyRequests)); return;
     }
@@ -121,8 +133,8 @@ void ProfileController::updateBio(const HttpRequestPtr& req,
     if (!json || !json->isObject()) { callback(errResp("Invalid JSON", k400BadRequest)); return; }
 
     std::string bio = JsonUtils::getStr(*json, "bio");
-    if (!validBio(bio)) {
-        callback(errResp("Bio must be 190 characters or less", k400BadRequest)); return;
+    if (!validBio(bio, user_id)) {
+        callback(errResp(bioError(user_id), k400BadRequest)); return;
     }
     try {
         app().getDbClient()->execSqlSync("UPDATE users SET bio = ? WHERE id = ?", bio, user_id);
@@ -177,7 +189,7 @@ void ProfileController::customize(const HttpRequestPtr& req,
     std::string displayName = JsonUtils::getStr(*json, "display_name");
     std::string bio         = JsonUtils::getStr(*json, "bio");
     std::string accent      = JsonUtils::getStr(*json, "accent_color");
-    if (!validBio(bio)) { callback(errResp("Bio must be 190 characters or less", k400BadRequest)); return; }
+    if (!validBio(bio, user_id)) { callback(errResp(bioError(user_id), k400BadRequest)); return; }
     // Цвет профиля доступен всем (платных тарифов нет), но только в формате #RRGGBB (#AARRGGBB — без альфы)
     if (!normalizeAccent(accent)) { callback(errResp("Цвет — в формате #RRGGBB", k400BadRequest)); return; }
     if (!TextUtils::trim(displayName).empty()) {

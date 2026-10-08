@@ -20,6 +20,7 @@ add_executable(VicinityServer
     controllers/RtcController.cc
     controllers/SearchController.cc
     controllers/ServerController.cc
+    controllers/SettingsController.cc
     controllers/UserController.cc
     controllers/WSController.cc
     filters/AuthFilter.cc
@@ -41,6 +42,7 @@ add_executable(VicinityServer
     utils/Messages.cc
     utils/NetUtils.cc
     utils/TextUtils.cc
+    utils/Tiers.cc
     utils/Uploads.cc
 )
 

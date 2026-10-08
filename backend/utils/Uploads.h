@@ -27,8 +27,9 @@ struct Attachment : Saved {
 Saved saveImage(const drogon::HttpFile& file, const std::string& subDir);
 
 // Вложение: картинка (по сигнатуре) — в attachments/, любой другой файл — в files/
-// (кроме типов, которые браузер может исполнить, и исполняемых файлов)
-Attachment saveAttachment(const drogon::HttpFile& file);
+// (кроме типов, которые браузер может исполнить, и исполняемых файлов). maxBytes — лимит по подписке
+// отправителя (utils/Tiers.h); 0 — общий лимит MAX_UPLOAD_SIZE
+Attachment saveAttachment(const drogon::HttpFile& file, int64_t maxBytes = 0);
 
 // Удаляет ранее загруженный файл по его URL (/uploads/...). Чужие пути игнорируются.
 void removeByUrl(const std::string& url);

@@ -2,6 +2,7 @@
 #include "../models/Cascade.h"
 #include "../models/User.h"
 #include "../managers/SessionManager.h"
+#include "../utils/Broadcast.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/NetUtils.h"
 #include "../utils/TextUtils.h"
@@ -129,6 +130,27 @@ void AdminController::setBanned(const HttpRequestPtr& req, std::function<void(co
     }
 }
 
+// POST /api/v1/admin/users/{id}/tier {tier: 0..3} — выдать или снять подписку (оплаты нет, выдаёт администратор)
+void AdminController::setTier(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb,
+                              int64_t id) {
+    if (!requireAdmin(req, cb)) return;
+    auto json = req->getJsonObject();
+    if (!json || !json->isObject() || !(*json)["tier"].isIntegral()) { cb(error("Invalid JSON", k400BadRequest)); return; }
+    const int tier = (*json)["tier"].asInt();
+    if (tier < 0 || tier > 3) { cb(error("Уровень подписки — от 0 до 3", k400BadRequest)); return; }
+    if (!UserModel::findById(id)) { cb(error("Пользователь не найден", k404NotFound)); return; }
+    try {
+        drogon::app().getDbClient()->execSqlSync("UPDATE users SET subscription_tier = ? WHERE id = ?", tier, id);
+        Json::Value resp;
+        resp["id"]   = static_cast<Json::Int64>(id);
+        resp["tier"] = tier;
+        cb(jsonResp(std::move(resp)));
+        Broadcast::userUpdated(id);   // значок у ника обновится у друзей и на общих серверах
+    } catch (const std::exception& e) {
+        cb(error(e.what(), k500InternalServerError));
+    }
+}
+
 // DELETE /api/v1/admin/users/{id} — удалить заблокированный аккаунт со всеми его сообщениями
 void AdminController::deleteUser(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb,
                                  int64_t id) {
@@ -140,11 +162,10 @@ void AdminController::deleteUser(const HttpRequestPtr& req, std::function<void(c
     if (target->developer == 1) { cb(error("Администратора удалить нельзя", k403Forbidden)); return; }
     try {
         auto db = drogon::app().getDbClient();
-        auto owned = db->execSqlSync("SELECT COUNT(*) AS n FROM servers WHERE owner_id = ?", id);
-        if (owned[0]["n"].as<int64_t>() > 0) {
-            cb(error("У него есть свои серверы — сначала удалите их", k409Conflict)); return;
-        }
         AppSessionManager::instance().deleteAllSessions(id);
+        // Его серверы удаляются вместе с ним (иначе их владелец указывал бы на несуществующий аккаунт)
+        auto owned = db->execSqlSync("SELECT id FROM servers WHERE owner_id = ?", id);
+        for (const auto& r : owned) Cascade::deleteServer(db, r["id"].as<int64_t>());
         Cascade::deleteUser(db, id);
         Json::Value resp;
         resp["status"] = "ok";

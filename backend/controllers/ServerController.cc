@@ -3,10 +3,12 @@
 #include "../managers/VoiceManager.h"
 #include "../managers/UserRateLimiter.h"
 #include "../models/Cascade.h"
+#include "../models/User.h"
 #include "../utils/Access.h"
 #include "../utils/Broadcast.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/TextUtils.h"
+#include "../utils/Tiers.h"
 #include "../utils/Uploads.h"
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/HttpResponse.h>
@@ -122,6 +124,17 @@ void ServerController::createServer(const HttpRequestPtr& req,
 
     auto db = app().getDbClient();
     try {
+        // Лимит своих серверов по подписке (utils/Tiers.h); уже созданные не трогаем
+        const auto me = UserModel::findById(userId);
+        const int limit = Tiers::maxOwnedServers(me ? me->subscriptionTier : 0);
+        if (limit >= 0) {
+            auto owned = db->execSqlSync("SELECT COUNT(*) AS n FROM servers WHERE owner_id = ?", userId);
+            if (owned[0]["n"].as<int64_t>() >= limit) {
+                cb(errResp("Можно создать не больше " + std::to_string(limit) +
+                           " своих серверов — больше с подпиской", k403Forbidden));
+                return;
+            }
+        }
         std::string code = genInviteCode();
         auto ins = db->execSqlSync(
             "INSERT INTO servers(name, owner_id, invite_code) VALUES(?, ?, ?) RETURNING id",

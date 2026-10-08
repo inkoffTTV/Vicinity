@@ -249,6 +249,13 @@ void initialize() {
     exec("CREATE INDEX IF NOT EXISTS idx_pending_signups_email ON pending_signups(email)");
     exec("CREATE INDEX IF NOT EXISTS idx_pending_signups_ip ON pending_signups(ip, created_at)");
 
+    // Настройки оформления (экран «Тема»): один JSON на пользователя, docs/API.md §0.6
+    exec("CREATE TABLE IF NOT EXISTS user_settings ("
+         "user_id INTEGER PRIMARY KEY,"
+         "appearance TEXT DEFAULT NULL,"
+         "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
+
     // Адреса, с которых регистрация запрещена (админ-панель: «заблокировать IP»)
     exec("CREATE TABLE IF NOT EXISTS blocked_ips ("
          "ip TEXT PRIMARY KEY,"
