@@ -1,6 +1,7 @@
 #include "AppState.h"
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QSettings>
 #include <QUrl>
 #include <QGuiApplication>
