@@ -16,10 +16,6 @@ export function Friends({ onMenu }: { onMenu: () => void }) {
   const toast = useStore((s) => s.toast);
   const [tab, setTab] = useState<Tab>('online');
 
-  useEffect(() => {
-    void refreshFriends();
-  }, [refreshFriends]);
-
   const act = async (fn: () => Promise<unknown>, ok?: string) => {
     try {
       await fn();
@@ -91,12 +87,13 @@ export function Friends({ onMenu }: { onMenu: () => void }) {
               row(
                 f,
                 <>
-                  <button className="icon-btn" title="Написать" onClick={() => openDmWith(f.id)}>
+                  <button className="icon-btn" title="Написать" aria-label="Написать" onClick={() => openDmWith(f.id)}>
                     💬
                   </button>
                   <button
                     className="icon-btn"
                     title="Удалить из друзей"
+                    aria-label="Удалить из друзей"
                     onClick={() => confirm(`Удалить ${f.display_name} из друзей?`) && act(() => api.friendRemove(f.id))}
                   >
                     ✕
@@ -148,21 +145,24 @@ function AddFriend({ onAdd }: { onAdd: (u: UserSummary) => void }) {
   const [searched, setSearched] = useState(false);
 
   useEffect(() => {
-    if (!q.trim()) {
+    const query = q.trim();
+    if (!query) {
       setResults([]);
       setSearched(false);
       return;
     }
+    // Ответ на устаревший запрос (пользователь уже печатает дальше) не должен перетереть свежий
+    let current = true;
     const t = window.setTimeout(() => {
-      api.searchUsers(q.trim()).then(
-        (r) => {
-          setResults(r);
-          setSearched(true);
-        },
-        () => setResults([]),
+      api.searchUsers(query).then(
+        (r) => current && (setResults(r), setSearched(true)),
+        () => current && (setResults([]), setSearched(true)),
       );
     }, 300);
-    return () => window.clearTimeout(t);
+    return () => {
+      current = false;
+      window.clearTimeout(t);
+    };
   }, [q]);
 
   return (

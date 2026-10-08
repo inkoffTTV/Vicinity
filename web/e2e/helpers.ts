@@ -1,4 +1,4 @@
-import { Browser, BrowserContext, expect, Page } from '@playwright/test';
+import { Browser, BrowserContext, expect, Page, WebSocketRoute } from '@playwright/test';
 import { deflateSync } from 'node:zlib';
 
 let seq = 0;
@@ -39,6 +39,26 @@ export async function registerUser(
   await expect(page.locator('.user-panel')).toBeVisible();
   await expect(page.locator('.user-panel')).toContainText('В сети');
   return { page, context, username, displayName };
+}
+
+/** Войти существующим пользователем на экране входа (после выхода или в новой вкладке). */
+export async function loginAs(page: Page, username: string) {
+  await page.locator('input[autocomplete=username]').fill(username);
+  await page.locator('input[type=password]').fill('password123');
+  await page.getByRole('button', { name: 'Войти' }).click();
+  await expect(page.locator('.user-panel')).toContainText('В сети');
+}
+
+/** Зарегистрироваться на уже открытом экране входа (та же вкладка, что у прежнего пользователя). */
+export async function registerHere(page: Page, displayName: string): Promise<string> {
+  const username = uniqueName(displayName.toLowerCase().replace(/[^a-z]/g, '') || 'user');
+  await page.getByRole('button', { name: 'Нет аккаунта? Зарегистрироваться' }).click();
+  await page.locator('input[autocomplete=username]').fill(username);
+  await page.locator('label:has-text("Отображаемое имя") input').fill(displayName);
+  await page.locator('input[type=password]').fill('password123');
+  await page.getByRole('button', { name: 'Зарегистрироваться' }).click();
+  await expect(page.locator('.user-panel')).toContainText('В сети');
+  return username;
 }
 
 export function pageErrors(page: Page): string[] {
@@ -88,6 +108,64 @@ export async function joinServer(u: User, code: string, name: string) {
   await u.page.locator('.modal input').nth(1).fill(code);
   await u.page.locator('.modal').getByRole('button', { name: 'Вступить' }).click();
   await expect(u.page.locator('.side-head', { hasText: name })).toBeVisible();
+}
+
+/** Создать беседу и открыть её. */
+export async function createGroup(u: User, name: string) {
+  await u.page.locator('.rail-item.home').click();
+  await u.page.getByRole('button', { name: 'Создать беседу' }).click();
+  await u.page.locator('.modal input').fill(name);
+  await u.page.locator('.modal').getByRole('button', { name: 'Создать' }).click();
+  await expect(u.page.locator('.chat-title', { hasText: name })).toBeVisible();
+}
+
+/** Управление WebSocket страницы через перехват Playwright: обрыв и «зависшее» соединение. */
+export interface SocketControl {
+  /** Сколько раз страница подключалась к /ws */
+  connections(): number;
+  /** Сервер закрывает текущее соединение */
+  drop(): Promise<void>;
+  /** Текущее соединение перестаёт пропускать кадры в обе стороны, но не закрывается (как при смене сети) */
+  stall(): void;
+  /** Доставить странице событие «от сервера» (типы, которые старый бэкенд ещё не рассылает) */
+  inject(ev: Record<string, unknown>): void;
+}
+
+/** Включить перехват WebSocket и переподключить страницу через него. */
+export async function controlSocket(u: User): Promise<SocketControl> {
+  let current: WebSocketRoute | null = null;
+  let count = 0;
+  const stalled = new Set<WebSocketRoute>();
+  await u.context.routeWebSocket(/\/ws(\?|$)/, (ws) => {
+    count += 1;
+    current = ws;
+    const server = ws.connectToServer();
+    ws.onMessage((m) => {
+      if (!stalled.has(ws)) server.send(m);
+    });
+    server.onMessage((m) => {
+      if (!stalled.has(ws)) ws.send(m);
+    });
+  });
+  await u.page.reload();
+  await expect(u.page.locator('.user-panel')).toContainText('В сети');
+  return {
+    connections: () => count,
+    drop: async () => {
+      await current?.close();
+    },
+    stall: () => {
+      if (current) stalled.add(current);
+    },
+    inject: (ev) => current?.send(JSON.stringify(ev)),
+  };
+}
+
+/** Токен сессии из localStorage страницы (для прямых запросов к API от имени пользователя). */
+export async function tokenOf(u: User): Promise<string> {
+  const token = await u.page.evaluate(() => localStorage.getItem('vicinity.token'));
+  expect(token).toBeTruthy();
+  return token!;
 }
 
 /** Маленький валидный PNG (сплошной цвет) для тестов загрузки. */

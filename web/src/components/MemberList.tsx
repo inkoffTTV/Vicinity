@@ -1,4 +1,3 @@
-import { api, ApiError } from '../lib/api';
 import { useStore } from '../lib/store';
 import { Avatar } from './Avatar';
 
@@ -8,8 +7,7 @@ export function MemberList({ serverId }: { serverId: number }) {
   const me = useStore((s) => s.me)!;
   const server = useStore((s) => s.servers.find((x) => x.id === serverId));
   const showProfile = useStore((s) => s.showProfile);
-  const refreshServer = useStore((s) => s.refreshServer);
-  const toast = useStore((s) => s.toast);
+  const kickMember = useStore((s) => s.kickMember);
 
   const isOnline = (id: number, fallback?: string) => {
     const p = presence[id] ?? fallback;
@@ -19,14 +17,8 @@ export function MemberList({ serverId }: { serverId: number }) {
   const offline = members.filter((m) => !isOnline(m.id, m.presence));
   const amOwner = server?.owner_id === me.user_id;
 
-  const kick = async (id: number, name: string) => {
-    if (!confirm(`Удалить ${name} с сервера?`)) return;
-    try {
-      await api.kick(serverId, id);
-      await refreshServer(serverId);
-    } catch (e) {
-      toast(e instanceof ApiError ? e.message : 'Ошибка', 'error');
-    }
+  const kick = (id: number, name: string) => {
+    if (confirm(`Удалить ${name} с сервера?`)) void kickMember(serverId, id);
   };
 
   const section = (title: string, list: typeof members, dim: boolean) =>
@@ -47,7 +39,12 @@ export function MemberList({ serverId }: { serverId: number }) {
                 {m.is_owner && <span title="Владелец">👑</span>}
               </button>
               {amOwner && !m.is_owner && (
-                <button className="icon-btn small kick" title="Удалить с сервера" onClick={() => kick(m.id, m.display_name)}>
+                <button
+                  className="icon-btn small kick"
+                  title="Удалить с сервера"
+                  aria-label={`Удалить ${m.display_name} с сервера`}
+                  onClick={() => kick(m.id, m.display_name)}
+                >
                   ✕
                 </button>
               )}
@@ -58,7 +55,7 @@ export function MemberList({ serverId }: { serverId: number }) {
     );
 
   return (
-    <aside className="members">
+    <aside className="members" aria-label="Участники сервера">
       {section('В сети', online, false)}
       {section('Не в сети', offline, true)}
     </aside>

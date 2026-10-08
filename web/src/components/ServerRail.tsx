@@ -23,6 +23,7 @@ export function ServerRail() {
       <button
         className={`rail-item home${homeActive ? ' active' : ''}`}
         title="Личные сообщения"
+        aria-label="Личные сообщения"
         onClick={() => open({ kind: 'friends' })}
       >
         <img src="/favicon.svg" alt="" width={28} height={28} />
@@ -37,6 +38,8 @@ export function ServerRail() {
             key={srv.id}
             className={`rail-item${active ? ' active' : ''}`}
             title={srv.name}
+            aria-label={srv.name}
+            aria-current={active ? 'page' : undefined}
             onClick={() => open({ kind: 'server', serverId: srv.id, channelId: null })}
           >
             {srv.icon ? <img src={srv.icon} alt="" /> : <span>{initials(srv.name)}</span>}
@@ -44,7 +47,12 @@ export function ServerRail() {
           </button>
         );
       })}
-      <button className="rail-item add" title="Создать или вступить в сервер" onClick={() => setAdding(true)}>
+      <button
+        className="rail-item add"
+        title="Создать или вступить в сервер"
+        aria-label="Создать или вступить в сервер"
+        onClick={() => setAdding(true)}
+      >
         +
       </button>
       {adding && <AddServerDialog onClose={() => setAdding(false)} />}
@@ -68,8 +76,11 @@ function AddServerDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const go = async (fn: () => Promise<number>) => {
+    if (busy) return;
+    setBusy(true);
     setError('');
     try {
       const id = await fn();
@@ -78,11 +89,13 @@ function AddServerDialog({ onClose }: { onClose: () => void }) {
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Ошибка');
+      setBusy(false);
     }
   };
 
   const create = (e: FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) return;
     void go(async () => {
       const r = await api.createServer(name.trim());
       toast(`Сервер создан. Код приглашения: ${r.invite_code}`);
@@ -91,7 +104,8 @@ function AddServerDialog({ onClose }: { onClose: () => void }) {
   };
   const join = (e: FormEvent) => {
     e.preventDefault();
-    void go(async () => (await api.joinByCode(code)).server_id);
+    if (!code.trim()) return;
+    void go(async () => (await api.joinByCode(code.trim())).server_id);
   };
 
   return (
@@ -101,7 +115,7 @@ function AddServerDialog({ onClose }: { onClose: () => void }) {
           Создать новый сервер
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={64} placeholder="Название" />
         </label>
-        <button className="btn primary" disabled={!name.trim()}>
+        <button className="btn primary" disabled={busy || !name.trim()}>
           Создать
         </button>
       </form>
@@ -111,7 +125,7 @@ function AddServerDialog({ onClose }: { onClose: () => void }) {
           Вступить по коду приглашения
           <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Например, AB3XK9" />
         </label>
-        <button className="btn" disabled={!code.trim()}>
+        <button className="btn" disabled={busy || !code.trim()}>
           Вступить
         </button>
       </form>

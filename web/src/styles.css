@@ -75,6 +75,10 @@ button {
 button:focus:not(:focus-visible) {
   outline: none;
 }
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 
 button:disabled {
   cursor: default;
@@ -271,6 +275,19 @@ label select {
   font-size: 28px;
   font-weight: 700;
   color: var(--text-3);
+}
+.splash.unreachable {
+  padding: 16px;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--text);
+}
+.unreachable strong {
+  font-size: 20px;
+}
+.unreachable .stack-row {
+  justify-content: center;
+  margin-top: 8px;
 }
 
 .auth-screen {
@@ -670,6 +687,9 @@ button.side-head:hover {
   text-align: center;
   padding: 0 0 12px;
 }
+.history-note .link-btn {
+  font-size: 13px;
+}
 
 .day-sep {
   display: flex;
@@ -703,8 +723,21 @@ button.side-head:hover {
   padding-bottom: 1px;
 }
 .msg:hover,
+.msg:focus-within,
 .msg.editing {
   background: rgba(0, 0, 0, 0.06);
+}
+/* Своё сообщение ещё не подтверждено сервером / не отправилось */
+.msg.pending .msg-body {
+  opacity: 0.55;
+}
+.msg.failed .msg-text,
+.msg.failed .attachment {
+  opacity: 0.55;
+}
+.msg-failed {
+  color: #fa777c;
+  margin-top: 2px;
 }
 
 .msg-gutter {
@@ -719,7 +752,8 @@ button.side-head:hover {
   width: 100%;
   padding-top: 3px;
 }
-.msg:hover .msg-time-hover {
+.msg:hover .msg-time-hover,
+.msg:focus-within .msg-time-hover {
   display: block;
 }
 
@@ -787,21 +821,32 @@ button.side-head:hover {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
+/* Панель скрыта прозрачностью, а не display:none — кнопки остаются в порядке Tab
+   и появляются, когда фокус внутри сообщения */
 .msg-actions {
   position: absolute;
   right: 16px;
   top: -14px;
-  display: none;
+  display: flex;
   gap: 2px;
   padding: 2px;
   background: var(--bg-side);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  pointer-events: none;
 }
-.msg:hover .msg-actions,
+.msg:focus-within .msg-actions,
 .msg-actions.show {
-  display: flex;
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: hover) {
+  .msg:hover .msg-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .emoji-picker {
@@ -906,10 +951,13 @@ button.side-head:hover {
   color: var(--text-2);
 }
 .member .kick {
-  display: none;
+  opacity: 0;
+  pointer-events: none;
 }
-.member:hover .kick {
-  display: inline-flex;
+.member:hover .kick,
+.member:focus-within .kick {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ── Друзья ── */
@@ -1310,11 +1358,21 @@ button.side-head:hover {
 }
 
 @media (hover: none) {
-  /* На тач-устройствах действия над сообщением видны по тапу */
-  .msg:hover .msg-actions {
-    display: none;
+  /* На тач-экране наведения нет — кнопка удаления участника видна всегда */
+  .member .kick {
+    opacity: 1;
+    pointer-events: auto;
   }
-  .msg-actions.show {
-    display: flex;
+}
+
+@media (pointer: coarse) {
+  /* iOS Safari увеличивает страницу при фокусе на поле со шрифтом меньше 16px */
+  input,
+  textarea,
+  select,
+  label input,
+  label textarea,
+  label select {
+    font-size: 16px;
   }
 }

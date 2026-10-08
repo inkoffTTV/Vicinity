@@ -13,6 +13,7 @@ import { IncomingCall } from './components/IncomingCall';
 
 export default function App() {
   const booting = useStore((s) => s.booting);
+  const unreachable = useStore((s) => s.unreachable);
   const me = useStore((s) => s.me);
   const boot = useStore((s) => s.boot);
   const view = useStore((s) => s.view);
@@ -35,6 +36,7 @@ export default function App() {
   }, [unreadTotal]);
 
   if (booting) return <div className="splash">Vicinity</div>;
+  if (!me && unreachable) return <Unreachable />;
   if (!me)
     return (
       <>
@@ -66,6 +68,28 @@ export default function App() {
       {settingsOpen && <Settings />}
       <IncomingCall />
       <Toasts />
+    </div>
+  );
+}
+
+// Сессия сохранена, но сервер не отвечает (нет сети, перезапуск за nginx) — ждём, а не выходим
+function Unreachable() {
+  const retryBoot = useStore((s) => s.retryBoot);
+  const logout = useStore((s) => s.logout);
+  return (
+    <div className="splash unreachable" role="alert">
+      <div className="stack center">
+        <strong>Нет связи с сервером</strong>
+        <span className="muted small">Повторяем попытку подключения…</span>
+        <div className="stack-row">
+          <button className="btn primary" onClick={retryBoot}>
+            Повторить сейчас
+          </button>
+          <button className="btn" onClick={() => void logout()}>
+            Выйти
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

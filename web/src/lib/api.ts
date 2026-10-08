@@ -44,6 +44,17 @@ export interface Message {
   edited: boolean;
   attachment: string;
   reactions: Reaction[];
+  /** Эхо клиентского nonce (новый сервер присылает его в new_message и ответе на отправку) */
+  nonce?: string;
+  /** Только у своих ещё не подтверждённых сервером сообщений */
+  local?: 'sending' | 'failed';
+}
+
+export interface MessagePage {
+  /** По возрастанию id */
+  messages: Message[];
+  /** Есть ли более старые; null — сервер не сообщает (старая версия без постраничной загрузки) */
+  hasMore: boolean | null;
 }
 
 export interface Server {
@@ -213,12 +224,30 @@ export const api = {
     post(`/channels/${channelId}/members`, { user_id }),
 
   // ── Сообщения ──
-  messages: (channelId: number) =>
-    get<{ messages: Omit<Message, 'channel_id'>[] }>(`/channels/${channelId}/messages`).then((r) =>
-      r.messages.map((m) => ({ ...m, channel_id: channelId })).reverse(),
-    ),
-  send: (channelId: number, text: string, attachment = '') =>
-    post<{ id: number; created_at: string }>(`/channels/${channelId}/messages`, { text, attachment }),
+  messages: (channelId: number, opts: { before?: number; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.limit) q.set('limit', String(opts.limit));
+    if (opts.before) q.set('before', String(opts.before));
+    const qs = q.toString();
+    return get<{ messages: Omit<Message, 'channel_id'>[]; has_more?: boolean }>(
+      `/channels/${channelId}/messages${qs ? `?${qs}` : ''}`,
+    ).then(
+      (r): MessagePage => ({
+        // Старый сервер сортирует по времени и игнорирует before — порядок и границу задаём сами
+        messages: r.messages
+          .filter((m) => !opts.before || m.id < opts.before)
+          .map((m) => ({ ...m, channel_id: channelId }))
+          .sort((a, b) => a.id - b.id),
+        hasMore: typeof r.has_more === 'boolean' ? r.has_more : null,
+      }),
+    );
+  },
+  send: (channelId: number, text: string, attachment: string, nonce: string) =>
+    post<{ id: number; created_at: string; nonce?: string }>(`/channels/${channelId}/messages`, {
+      text,
+      attachment,
+      nonce,
+    }),
   edit: (channelId: number, mid: number, text: string) =>
     post(`/channels/${channelId}/messages/${mid}/edit`, { text }),
   remove: (channelId: number, mid: number) => del(`/channels/${channelId}/messages/${mid}`),

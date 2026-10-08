@@ -55,7 +55,7 @@ function HomeSide() {
 
         <div className="side-section">
           Беседы
-          <button className="icon-btn small" title="Создать беседу" onClick={() => setCreating(true)}>
+          <button className="icon-btn small" title="Создать беседу" aria-label="Создать беседу" onClick={() => setCreating(true)}>
             +
           </button>
         </div>
@@ -81,8 +81,11 @@ function CreateGroupDialog({ onClose }: { onClose: () => void }) {
   const open = useStore((s) => s.open);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (busy || !name.trim()) return;
+    setBusy(true);
     try {
       const r = await api.createGroup(name.trim());
       await refreshDms();
@@ -90,6 +93,7 @@ function CreateGroupDialog({ onClose }: { onClose: () => void }) {
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Ошибка');
+      setBusy(false);
     }
   };
   return (
@@ -100,7 +104,7 @@ function CreateGroupDialog({ onClose }: { onClose: () => void }) {
           <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={64} />
         </label>
         {error && <div className="form-error">{error}</div>}
-        <button className="btn primary" disabled={!name.trim()}>
+        <button className="btn primary" disabled={busy || !name.trim()}>
           Создать
         </button>
       </form>
@@ -137,7 +141,7 @@ function ServerSide({ serverId }: { serverId: number }) {
 
   return (
     <>
-      <button className="side-head clickable" onClick={() => setMenu((v) => !v)}>
+      <button className="side-head clickable" onClick={() => setMenu((v) => !v)} aria-haspopup="true" aria-expanded={menu}>
         <strong className="ellipsis">{server.name}</strong>
         <span>{menu ? '✕' : '▾'}</span>
       </button>
@@ -186,14 +190,18 @@ function AddChannelDialog({ serverId, voice, onClose }: { serverId: number; voic
   const refreshServer = useStore((s) => s.refreshServer);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (busy || !name.trim()) return;
+    setBusy(true);
     try {
       await api.createServerChannel(serverId, name.trim(), voice);
       await refreshServer(serverId);
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Ошибка');
+      setBusy(false);
     }
   };
   return (
@@ -204,7 +212,7 @@ function AddChannelDialog({ serverId, voice, onClose }: { serverId: number; voic
           <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={64} />
         </label>
         {error && <div className="form-error">{error}</div>}
-        <button className="btn primary" disabled={!name.trim()}>
+        <button className="btn primary" disabled={busy || !name.trim()}>
           Создать
         </button>
       </form>
@@ -239,14 +247,14 @@ function UserPanel() {
           <button onClick={() => (showProfile(me.user_id), setMenu(false))}>👤 Мой профиль</button>
         </div>
       )}
-      <button className="user-panel-me" onClick={() => setMenu((v) => !v)} title="Статус">
+      <button className="user-panel-me" onClick={() => setMenu((v) => !v)} title="Статус" aria-haspopup="true" aria-expanded={menu}>
         <Avatar name={me.display_name} src={me.avatar_path} id={me.user_id} size={34} presence={connected ? me.presence : 'offline'} />
         <span className="user-panel-names">
           <span className="ellipsis">{me.display_name}</span>
           <span className="muted small ellipsis">{connected ? PRESENCE_LABEL[me.presence] ?? '' : 'Подключение…'}</span>
         </span>
       </button>
-      <button className="icon-btn" title="Настройки" onClick={() => setSettingsOpen(true)}>
+      <button className="icon-btn" title="Настройки" aria-label="Настройки" onClick={() => setSettingsOpen(true)}>
         ⚙
       </button>
     </div>
