@@ -1,5 +1,7 @@
 #include "RoleController.h"
 #include "../models/User.h"
+#include "../utils/JsonUtils.h"
+#include "../utils/TextUtils.h"
 #include <drogon/HttpResponse.h>
 
 using namespace drogon;
@@ -52,15 +54,17 @@ void RoleController::createRole(const HttpRequestPtr& req,
         { cb(errResp("Only developers can create roles", k403Forbidden)); return; }
 
     auto json = req->getJsonObject();
-    if (!json) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
+    if (!json || !json->isObject()) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
 
-    std::string name      = (*json)["name"].asString();
-    std::string color     = (*json).get("color",      "#888888").asString();
-    int         isPremium = (*json).get("is_premium", 0).asInt();
-    std::string icon      = (*json).get("icon",       "").asString();
+    auto        name      = TextUtils::cleanName(JsonUtils::getStr(*json, "name"), 32);
+    std::string color     = JsonUtils::getStr(*json, "color", "#888888");
+    int         isPremium = static_cast<int>(JsonUtils::getInt(*json, "is_premium"));
+    std::string icon      = JsonUtils::getStr(*json, "icon");
 
-    if (name.empty() || name.size() > 32)
+    if (!name)
         { cb(errResp("Role name must be 1-32 characters", k400BadRequest)); return; }
+    if (!TextUtils::isHexColor(color))
+        { cb(errResp("Color must be #RRGGBB", k400BadRequest)); return; }
     if (isPremium > user->subscriptionTier)
         { cb(errResp("Your subscription tier is insufficient", k403Forbidden)); return; }
     if (!icon.empty() && user->subscriptionTier < 1)
@@ -68,14 +72,14 @@ void RoleController::createRole(const HttpRequestPtr& req,
 
     auto db = app().getDbClient();
     try {
-        db->execSqlSync(
-            "INSERT INTO roles(name, color, is_premium, icon, created_by) VALUES(?,?,?,?,?)",
-            name, color, isPremium, icon, userId);
-        auto res = db->execSqlSync("SELECT last_insert_rowid() AS id");
+        // id — из того же запроса (last_insert_rowid() отдельным запросом ловит чужие вставки)
+        auto res = db->execSqlSync(
+            "INSERT INTO roles(name, color, is_premium, icon, created_by) VALUES(?,?,?,?,?) RETURNING id",
+            *name, color, isPremium, icon, userId);
         int64_t roleId = res[0]["id"].as<int64_t>();
 
         Json::Value resp;
-        resp["id"] = roleId; resp["name"] = name;
+        resp["id"] = roleId; resp["name"] = *name;
         resp["color"] = color; resp["is_premium"] = isPremium; resp["icon"] = icon;
         cb(jsonResp(resp, k201Created));
     } catch (const std::exception& e) {
@@ -109,14 +113,15 @@ void RoleController::myRoles(const HttpRequestPtr& req,
     }
 }
 
-// Можно управлять ролями другого, если ты владелец сервера, где он состоит (или это ты сам).
-static bool canManageRoles(const std::shared_ptr<drogon::orm::DbClient>& db,
-                           int64_t self, int64_t target) {
+// Роли глобальные (видны во всех серверах), поэтому чужими ролями управляют только
+// разработчики (developer = 1, они же создают роли). Себе роль из каталога берёт/снимает
+// каждый — это функция «Взять роль» в десктопе, уровень подписки проверяется отдельно.
+// Владелец сервера чужие роли не трогает: добавить человека на свой сервер может любой,
+// и через это раньше можно было снять/выдать роль кому угодно.
+static bool canManageRoles(int64_t self, int64_t target) {
     if (self == target) return true;
-    auto r = db->execSqlSync(
-        "SELECT 1 FROM servers s JOIN server_members sm ON sm.server_id = s.id "
-        "WHERE s.owner_id = ? AND sm.user_id = ? LIMIT 1", self, target);
-    return !r.empty();
+    auto me = UserModel::findById(self);
+    return me && me->developer == 1;
 }
 
 void RoleController::assignRole(const HttpRequestPtr& req,
@@ -127,9 +132,8 @@ void RoleController::assignRole(const HttpRequestPtr& req,
     // Цель: user_id из тела (для управления чужими ролями) либо сам
     int64_t userId = selfId;
     auto json = req->getJsonObject();
-    if (json && (*json).isMember("user_id") && (*json)["user_id"].asInt64() != 0)
-        userId = (*json)["user_id"].asInt64();
-    if (!canManageRoles(db, selfId, userId)) {
+    if (json && JsonUtils::getInt(*json, "user_id") > 0) userId = JsonUtils::getInt(*json, "user_id");
+    if (!canManageRoles(selfId, userId)) {
         cb(errResp("Нет прав назначать роль этому пользователю", k403Forbidden)); return;
     }
     auto user = UserModel::findById(userId);
@@ -160,7 +164,7 @@ void RoleController::unassignRole(const HttpRequestPtr& req,
     int64_t userId = selfId;
     std::string qp = req->getParameter("user_id");   // DELETE: цель через query-параметр
     if (!qp.empty()) { try { userId = std::stoll(qp); } catch (...) {} }
-    if (!canManageRoles(db, selfId, userId)) {
+    if (!canManageRoles(selfId, userId)) {
         cb(errResp("Нет прав снимать роль у этого пользователя", k403Forbidden)); return;
     }
     try {

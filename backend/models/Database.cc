@@ -140,6 +140,16 @@ void initialize() {
          "FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE,"
          "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
 
+    // Индексы под частые выборки: история канала, «мои» беседы/серверы/сессии,
+    // реакции сообщения, входящие заявки в друзья
+    exec("CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id)");
+    exec("CREATE INDEX IF NOT EXISTS idx_channel_members_user ON channel_members(user_id)");
+    exec("CREATE INDEX IF NOT EXISTS idx_server_members_user ON server_members(user_id)");
+    exec("CREATE INDEX IF NOT EXISTS idx_channels_server ON channels(server_id)");
+    exec("CREATE INDEX IF NOT EXISTS idx_reactions_message ON reactions(message_id)");
+    exec("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)");
+    exec("CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships(addressee_id)");
+
     LOG_INFO << "Database initialized";
 }
 

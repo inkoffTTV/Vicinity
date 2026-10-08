@@ -16,5 +16,6 @@ private:
         std::chrono::steady_clock::time_point windowStart = std::chrono::steady_clock::now();
     };
     std::unordered_map<std::string, Client> clients_;
+    std::chrono::steady_clock::time_point lastPrune_ = std::chrono::steady_clock::now();
     std::mutex mutex_;
 };

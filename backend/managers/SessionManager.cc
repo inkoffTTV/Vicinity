@@ -1,4 +1,5 @@
 #include "SessionManager.h"
+#include "WSManager.h"
 #include "../utils/CryptoUtils.h"
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/drogon.h>
@@ -40,9 +41,25 @@ std::optional<SessionInfo> AppSessionManager::validate(const std::string& token)
 
 void AppSessionManager::deleteSession(const std::string& token) {
     auto db = drogon::app().getDbClient();
+    const std::string tokenHash = CryptoUtils::sha256Hex(token);
     try {
-        db->execSqlSync("DELETE FROM sessions WHERE token = ?", CryptoUtils::sha256Hex(token));
+        db->execSqlSync("DELETE FROM sessions WHERE token = ?", tokenHash);
     } catch (const std::exception& e) {
         LOG_WARN << "deleteSession: " << e.what();
+    }
+    // Иначе уже открытый сокет продолжал бы получать события после выхода
+    WSManager::instance().closeSession(tokenHash);
+}
+
+void AppSessionManager::closeExpiredSessions() {
+    auto db = drogon::app().getDbClient();
+    try {
+        db->execSqlSync("DELETE FROM sessions WHERE expires_at <= datetime('now')");
+        for (const auto& hash : WSManager::instance().sessionHashes()) {
+            auto r = db->execSqlSync("SELECT 1 FROM sessions WHERE token = ?", hash);
+            if (r.empty()) WSManager::instance().closeSession(hash);
+        }
+    } catch (const std::exception& e) {
+        LOG_WARN << "closeExpiredSessions: " << e.what();
     }
 }

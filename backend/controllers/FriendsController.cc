@@ -1,5 +1,7 @@
 #include "FriendsController.h"
-#include "../managers/WSManager.h"
+#include "../managers/UserRateLimiter.h"
+#include "../utils/Broadcast.h"
+#include "../utils/JsonUtils.h"
 #include "../utils/PresenceUtil.h"
 #include <drogon/HttpResponse.h>
 
@@ -21,8 +23,7 @@ static void notify(int64_t userId, const std::string& action, int64_t fromId) {
     ev["type"]    = "friend_event";
     ev["action"]  = action;
     ev["user_id"] = static_cast<Json::Int64>(fromId);
-    Json::FastWriter fw;
-    WSManager::instance().sendToUser(userId, fw.write(ev));
+    Broadcast::toUser(userId, ev);
 }
 
 static Json::Value userSummary(const Row& row) {
@@ -81,9 +82,12 @@ void FriendsController::request(const HttpRequestPtr& req,
                                std::function<void(const HttpResponsePtr&)>&& cb) {
     int64_t self = req->attributes()->get<int64_t>("user_id");
     auto json = req->getJsonObject();
-    if (!json) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
-    int64_t target = (*json)["user_id"].asInt64();
-    if (target == 0 || target == self) { cb(errResp("Неверный пользователь", k400BadRequest)); return; }
+    if (!json || !json->isObject()) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
+    int64_t target = JsonUtils::getInt(*json, "user_id");
+    if (target <= 0 || target == self) { cb(errResp("Неверный пользователь", k400BadRequest)); return; }
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::FriendRequest, self)) {
+        cb(errResp("Слишком много заявок, попробуйте позже", k429TooManyRequests)); return;
+    }
 
     auto db = app().getDbClient();
     try {
@@ -126,9 +130,9 @@ void FriendsController::respond(const HttpRequestPtr& req,
                                std::function<void(const HttpResponsePtr&)>&& cb) {
     int64_t self = req->attributes()->get<int64_t>("user_id");
     auto json = req->getJsonObject();
-    if (!json) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
-    int64_t other  = (*json)["user_id"].asInt64();
-    bool    accept = (*json).get("accept", false).asBool();
+    if (!json || !json->isObject()) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
+    int64_t other  = JsonUtils::getInt(*json, "user_id");
+    bool    accept = JsonUtils::getBool(*json, "accept");
 
     auto db = app().getDbClient();
     try {

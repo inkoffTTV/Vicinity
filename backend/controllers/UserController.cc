@@ -1,6 +1,7 @@
 #include "UserController.h"
 #include "../models/User.h"
 #include "../utils/PresenceUtil.h"
+#include "../utils/JsonUtils.h"
 #include <drogon/HttpResponse.h>
 
 using namespace drogon;
@@ -134,10 +135,10 @@ void UserController::startDm(const HttpRequestPtr& req,
                             std::function<void(const HttpResponsePtr&)>&& cb) {
     int64_t selfId = req->attributes()->get<int64_t>("user_id");
     auto json = req->getJsonObject();
-    if (!json) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
+    if (!json || !json->isObject()) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
 
-    int64_t targetId = (*json)["user_id"].asInt64();
-    if (targetId == 0 || targetId == selfId) {
+    int64_t targetId = JsonUtils::getInt(*json, "user_id");
+    if (targetId <= 0 || targetId == selfId) {
         cb(errResp("Invalid target user", k400BadRequest)); return;
     }
 
@@ -146,12 +147,15 @@ void UserController::startDm(const HttpRequestPtr& req,
         auto target = UserModel::findById(targetId);
         if (!target) { cb(errResp("User not found", k404NotFound)); return; }
 
-        // Find an existing dm channel shared by exactly these two users
+        // Существующая личка ровно этих двоих: канал с третьим участником (подсунутый
+        // кем-то «dm») не подходит — иначе переписка шла бы через чужой канал
         auto existing = db->execSqlSync(
             "SELECT c.id FROM channels c "
             "JOIN channel_members m1 ON c.id = m1.channel_id AND m1.user_id = ? "
             "JOIN channel_members m2 ON c.id = m2.channel_id AND m2.user_id = ? "
-            "WHERE c.type = 'dm' LIMIT 1",
+            "WHERE c.type = 'dm' "
+            "  AND (SELECT COUNT(*) FROM channel_members WHERE channel_id = c.id) = 2 "
+            "ORDER BY c.id LIMIT 1",
             selfId, targetId);
 
         int64_t channelId;
@@ -186,12 +190,13 @@ void UserController::listDms(const HttpRequestPtr& req,
     try {
         auto result = db->execSqlSync(
             "SELECT c.id AS channel_id, u.id AS user_id, u.username, u.display_name, u.avatar_path, "
-            "       (SELECT MAX(created_at) FROM messages WHERE channel_id = c.id) AS last_msg "
+            "       (SELECT MAX(id) FROM messages WHERE channel_id = c.id) AS last_msg "
             "FROM channels c "
             "JOIN channel_members me    ON c.id = me.channel_id    AND me.user_id = ? "
             "JOIN channel_members other ON c.id = other.channel_id AND other.user_id != ? "
             "JOIN users u ON u.id = other.user_id "
             "WHERE c.type = 'dm' "
+            "  AND (SELECT COUNT(*) FROM channel_members WHERE channel_id = c.id) = 2 "
             "ORDER BY last_msg DESC, c.created_at DESC",   // самые свежие беседы — сверху
             selfId, selfId);
         Json::Value arr(Json::arrayValue);

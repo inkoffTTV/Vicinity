@@ -45,10 +45,11 @@ int64_t create(const std::string& username,
                const std::string& passwordHash,
                const std::string& displayName) {
     auto db = drogon::app().getDbClient();
-    db->execSqlSync(
-        "INSERT INTO users(username, password_hash, display_name) VALUES(?, ?, ?)",
+    // id берём из того же запроса: отдельный last_insert_rowid() может вернуть
+    // rowid чужой вставки, выполненной между двумя запросами из другого потока
+    auto res = db->execSqlSync(
+        "INSERT INTO users(username, password_hash, display_name) VALUES(?, ?, ?) RETURNING id",
         username, passwordHash, displayName);
-    auto res = db->execSqlSync("SELECT last_insert_rowid() AS id");
     return res[0]["id"].as<int64_t>();
 }
 

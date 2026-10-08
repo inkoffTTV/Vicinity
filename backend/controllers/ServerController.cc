@@ -1,5 +1,12 @@
 #include "ServerController.h"
 #include "../managers/WSManager.h"
+#include "../managers/VoiceManager.h"
+#include "../managers/UserRateLimiter.h"
+#include "../utils/Access.h"
+#include "../utils/Broadcast.h"
+#include "../utils/JsonUtils.h"
+#include "../utils/TextUtils.h"
+#include "../../shared/crypto/common_consts.h"
 #include <drogon/HttpResponse.h>
 #include <random>
 #include <cctype>
@@ -27,12 +34,17 @@ static HttpResponsePtr errResp(const std::string& msg, HttpStatusCode code) {
     return jsonResp(std::move(v), code);
 }
 
-// Является ли пользователь участником сервера
-static bool isMember(const std::shared_ptr<DbClient>& db, int64_t serverId, int64_t userId) {
-    auto r = db->execSqlSync(
-        "SELECT 1 FROM server_members WHERE server_id = ? AND user_id = ? LIMIT 1",
-        serverId, userId);
-    return !r.empty();
+static HttpResponsePtr tooManyRequests() {
+    return errResp("Слишком часто, попробуйте позже", k429TooManyRequests);
+}
+
+// Состав сервера изменился: {type: server_member_joined|server_member_left, server_id, user_id}
+static void memberEvent(const char* type, int64_t serverId, int64_t userId) {
+    Json::Value ev;
+    ev["type"]      = type;
+    ev["server_id"] = static_cast<Json::Int64>(serverId);
+    ev["user_id"]   = static_cast<Json::Int64>(userId);
+    Broadcast::toServer(serverId, ev);
 }
 
 // POST /api/v1/servers  {name}
@@ -42,8 +54,8 @@ void ServerController::createServer(const HttpRequestPtr& req,
     auto json = req->getJsonObject();
     if (!json) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
 
-    std::string name = (*json)["name"].asString();
-    if (name.empty() || name.size() > 64) {
+    auto name = TextUtils::cleanName(JsonUtils::getStr(*json, "name"), Vicinity::MAX_NAME_LEN);
+    if (!name) {
         cb(errResp("Server name must be 1-64 characters", k400BadRequest)); return;
     }
 
@@ -52,7 +64,7 @@ void ServerController::createServer(const HttpRequestPtr& req,
         std::string code = genInviteCode();
         auto ins = db->execSqlSync(
             "INSERT INTO servers(name, owner_id, invite_code) VALUES(?, ?, ?) RETURNING id",
-            name, userId, code);
+            *name, userId, code);
         int64_t serverId = ins[0]["id"].as<int64_t>();
         db->execSqlSync("INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?)",
                         serverId, userId);
@@ -66,7 +78,7 @@ void ServerController::createServer(const HttpRequestPtr& req,
 
         Json::Value resp;
         resp["server_id"]   = serverId;
-        resp["name"]        = name;
+        resp["name"]        = *name;
         resp["invite_code"] = code;
         cb(jsonResp(resp, k201Created));
     } catch (const std::exception& e) {
@@ -101,7 +113,9 @@ void ServerController::listServers(const HttpRequestPtr& req,
     }
 }
 
-// POST /api/v1/servers/{id}/join — вступить в сервер (открыто всем)
+// POST /api/v1/servers/{id}/join — раньше пускал в любой сервер по id в обход кода приглашения.
+// Маршрут оставлен для старых десктопов (AppState::joinServer): участнику отвечает «joined»,
+// остальным — 403, вступить можно только по коду (/servers/join).
 void ServerController::joinServer(const HttpRequestPtr& req,
                                   std::function<void(const HttpResponsePtr&)>&& cb,
                                   int64_t serverId) {
@@ -110,8 +124,9 @@ void ServerController::joinServer(const HttpRequestPtr& req,
     try {
         auto s = db->execSqlSync("SELECT id FROM servers WHERE id = ?", serverId);
         if (s.empty()) { cb(errResp("Server not found", k404NotFound)); return; }
-        db->execSqlSync("INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?)",
-                        serverId, userId);
+        if (!Access::isServerMember(db, serverId, userId)) {
+            cb(errResp("Вступить можно только по коду приглашения", k403Forbidden)); return;
+        }
         Json::Value resp; resp["status"] = "joined"; resp["server_id"] = serverId;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
@@ -126,11 +141,15 @@ void ServerController::joinByCode(const HttpRequestPtr& req,
     auto json = req->getJsonObject();
     if (!json) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
 
-    std::string code = (*json)["code"].asString();
+    std::string code = JsonUtils::getStr(*json, "code");
     // нормализуем: убрать пробелы, в верхний регистр
     std::string norm;
     for (char c : code) if (!isspace((unsigned char)c)) norm += (char)toupper((unsigned char)c);
     if (norm.empty()) { cb(errResp("Введите код приглашения", k400BadRequest)); return; }
+    // Лимит попыток — против перебора кодов
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::JoinByCode, userId)) {
+        cb(tooManyRequests()); return;
+    }
 
     auto db = app().getDbClient();
     try {
@@ -138,8 +157,10 @@ void ServerController::joinByCode(const HttpRequestPtr& req,
             "SELECT id, name FROM servers WHERE invite_code = ? LIMIT 1", norm);
         if (s.empty()) { cb(errResp("Сервер с таким кодом не найден", k404NotFound)); return; }
         int64_t serverId = s[0]["id"].as<int64_t>();
-        db->execSqlSync("INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?)",
-                        serverId, userId);
+        auto ins = db->execSqlSync(
+            "INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?) RETURNING user_id",
+            serverId, userId);
+        if (!ins.empty()) memberEvent("server_member_joined", serverId, userId);
         Json::Value resp;
         resp["server_id"] = serverId;
         resp["name"]      = s[0]["name"].as<std::string>();
@@ -156,29 +177,30 @@ void ServerController::addMember(const HttpRequestPtr& req,
     int64_t self = req->attributes()->get<int64_t>("user_id");
     auto json = req->getJsonObject();
     if (!json) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
-    int64_t target = (*json)["user_id"].asInt64();
-    if (target == 0) { cb(errResp("Неверный пользователь", k400BadRequest)); return; }
+    int64_t target = JsonUtils::getInt(*json, "user_id");
+    if (target <= 0) { cb(errResp("Неверный пользователь", k400BadRequest)); return; }
 
     auto db = app().getDbClient();
     try {
         auto s = db->execSqlSync("SELECT name FROM servers WHERE id = ?", serverId);
         if (s.empty()) { cb(errResp("Сервер не найден", k404NotFound)); return; }
-        if (!isMember(db, serverId, self)) {
+        if (!Access::isServerMember(db, serverId, self)) {
             cb(errResp("Вы не участник этого сервера", k403Forbidden)); return;
         }
         auto u = db->execSqlSync("SELECT id FROM users WHERE id = ?", target);
         if (u.empty()) { cb(errResp("Пользователь не найден", k404NotFound)); return; }
 
-        db->execSqlSync("INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?)",
-                        serverId, target);
+        auto ins = db->execSqlSync(
+            "INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?) RETURNING user_id",
+            serverId, target);
+        if (!ins.empty()) memberEvent("server_member_joined", serverId, target);
 
         // Живое уведомление добавленному пользователю — обновить список серверов
         Json::Value ev;
         ev["type"]      = "server_added";
         ev["server_id"] = static_cast<Json::Int64>(serverId);
         ev["name"]      = s[0]["name"].as<std::string>();
-        Json::FastWriter fw;
-        WSManager::instance().sendToUser(target, fw.write(ev));
+        Broadcast::toUser(target, ev);
 
         Json::Value resp; resp["status"] = "added"; resp["server_id"] = static_cast<Json::Int64>(serverId);
         cb(jsonResp(resp));
@@ -195,26 +217,34 @@ void ServerController::createServerChannel(const HttpRequestPtr& req,
     auto json = req->getJsonObject();
     if (!json) { cb(errResp("Invalid JSON", k400BadRequest)); return; }
 
-    std::string name    = (*json)["name"].asString();
-    int         isVoice = (*json).get("is_voice", 0).asInt() ? 1 : 0;
-    if (name.empty() || name.size() > 64) {
+    auto name    = TextUtils::cleanName(JsonUtils::getStr(*json, "name"), Vicinity::MAX_NAME_LEN);
+    int  isVoice = JsonUtils::getBool(*json, "is_voice") ? 1 : 0;
+    if (!name) {
         cb(errResp("Channel name must be 1-64 characters", k400BadRequest)); return;
     }
 
     auto db = app().getDbClient();
     try {
-        if (!isMember(db, serverId, userId)) {
+        if (!Access::isServerMember(db, serverId, userId)) {
             cb(errResp("Not a member of this server", k403Forbidden)); return;
+        }
+        if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::ChannelCreate, userId)) {
+            cb(tooManyRequests()); return;
         }
         auto ins = db->execSqlSync(
             "INSERT INTO channels(type, name, owner_id, server_id, is_voice) "
             "VALUES('channel', ?, ?, ?, ?) RETURNING id",
-            name, userId, serverId, isVoice);
+            *name, userId, serverId, isVoice);
         int64_t channelId = ins[0]["id"].as<int64_t>();
+
+        Json::Value ev;
+        ev["type"]      = "server_channels_changed";
+        ev["server_id"] = static_cast<Json::Int64>(serverId);
+        Broadcast::toServer(serverId, ev);
 
         Json::Value resp;
         resp["channel_id"] = channelId;
-        resp["name"]       = name;
+        resp["name"]       = *name;
         resp["is_voice"]   = isVoice;
         cb(jsonResp(resp, k201Created));
     } catch (const std::exception& e) {
@@ -226,8 +256,12 @@ void ServerController::createServerChannel(const HttpRequestPtr& req,
 void ServerController::listServerChannels(const HttpRequestPtr& req,
                                           std::function<void(const HttpResponsePtr&)>&& cb,
                                           int64_t serverId) {
+    int64_t self = req->attributes()->get<int64_t>("user_id");
     auto db = app().getDbClient();
     try {
+        if (!Access::isServerMember(db, serverId, self)) {
+            cb(errResp("Вы не участник этого сервера", k403Forbidden)); return;
+        }
         auto result = db->execSqlSync(
             "SELECT id, name, is_voice FROM channels WHERE server_id = ? "
             "ORDER BY is_voice ASC, id ASC", serverId);
@@ -252,7 +286,7 @@ void ServerController::listMembers(const HttpRequestPtr& req,
     int64_t self = req->attributes()->get<int64_t>("user_id");
     auto db = app().getDbClient();
     try {
-        if (!isMember(db, serverId, self)) {
+        if (!Access::isServerMember(db, serverId, self)) {
             cb(errResp("Вы не участник этого сервера", k403Forbidden)); return;
         }
         auto rows = db->execSqlSync(
@@ -320,16 +354,29 @@ void ServerController::removeMember(const HttpRequestPtr& req,
         if (self != ownerId)     { cb(errResp("Только владелец может удалять участников", k403Forbidden)); return; }
         if (targetId == ownerId) { cb(errResp("Нельзя удалить владельца сервера", k400BadRequest)); return; }
 
-        db->execSqlSync("DELETE FROM server_members WHERE server_id = ? AND user_id = ?",
-                        serverId, targetId);
+        auto del = db->execSqlSync(
+            "DELETE FROM server_members WHERE server_id = ? AND user_id = ? RETURNING user_id",
+            serverId, targetId);
+
+        // Сидел в голосовом канале этого сервера — выкидываем: без членства нет и голоса
+        int64_t voiceCh = VoiceManager::instance().channelOf(targetId);
+        if (voiceCh != 0) {
+            auto vc = db->execSqlSync("SELECT 1 FROM channels WHERE id = ? AND server_id = ?",
+                                      voiceCh, serverId);
+            if (!vc.empty() && VoiceManager::instance().leave(targetId) == voiceCh) {
+                Broadcast::voiceState(voiceCh);
+                // Самому исключённому — тоже, чтобы его клиент перестал считать себя в канале
+                WSManager::instance().sendToUser(targetId, Broadcast::voiceStatePayload(voiceCh));
+            }
+        }
 
         // Уведомить кикнутого — его клиент уберёт сервер из списка
         Json::Value ev;
         ev["type"]      = "server_removed";
         ev["server_id"] = static_cast<Json::Int64>(serverId);
         ev["name"]      = s[0]["name"].as<std::string>();
-        Json::FastWriter fw;
-        WSManager::instance().sendToUser(targetId, fw.write(ev));
+        Broadcast::toUser(targetId, ev);
+        if (!del.empty()) memberEvent("server_member_left", serverId, targetId);
 
         Json::Value resp; resp["status"] = "removed";
         cb(jsonResp(resp));

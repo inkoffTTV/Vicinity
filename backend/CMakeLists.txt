@@ -14,18 +14,25 @@ add_executable(VicinityServer
     controllers/FriendsController.cc
     controllers/ProfileController.cc
     controllers/RoleController.cc
+    controllers/RtcController.cc
     controllers/ServerController.cc
     controllers/UserController.cc
     controllers/WSController.cc
     filters/AuthFilter.cc
     filters/RateLimitFilter.cc
     managers/SessionManager.cc
+    managers/UserRateLimiter.cc
     managers/WSManager.cc
     managers/VoiceManager.cc
     models/Database.cc
     models/User.cc
+    utils/Access.cc
+    utils/Broadcast.cc
     utils/CryptoUtils.cc
     utils/FileSystem.cc
+    utils/NetUtils.cc
+    utils/TextUtils.cc
+    utils/Uploads.cc
 )
 
 target_include_directories(VicinityServer PRIVATE

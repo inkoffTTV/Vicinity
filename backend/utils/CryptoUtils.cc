@@ -2,6 +2,7 @@
 #include <openssl/sha.h>
 #include <openssl/rand.h>
 #include <openssl/evp.h>
+#include <openssl/hmac.h>
 #include <sstream>
 #include <iomanip>
 #include <vector>
@@ -31,7 +32,7 @@ static std::vector<unsigned char> fromHex(const std::string& hex) {
     return out;
 }
 
-static std::string randomHex(int bytes) {
+std::string randomHex(int bytes) {
     std::vector<unsigned char> buf(bytes);
     if (RAND_bytes(buf.data(), bytes) != 1)
         throw std::runtime_error("RAND_bytes failed");
@@ -98,6 +99,17 @@ bool needsRehash(const std::string& stored) {
 
 std::string generateToken() {
     return randomHex(32); // 64 hex chars
+}
+
+std::string hmacSha1Base64(const std::string& key, const std::string& data) {
+    unsigned char mac[EVP_MAX_MD_SIZE];
+    unsigned int macLen = 0;
+    if (!HMAC(EVP_sha1(), key.data(), static_cast<int>(key.size()),
+              reinterpret_cast<const unsigned char*>(data.data()), data.size(), mac, &macLen))
+        throw std::runtime_error("HMAC failed");
+    std::string out(4 * ((macLen + 2) / 3), '\0');
+    EVP_EncodeBlock(reinterpret_cast<unsigned char*>(&out[0]), mac, static_cast<int>(macLen));
+    return out;
 }
 
 } // namespace CryptoUtils

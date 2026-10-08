@@ -10,5 +10,8 @@ namespace CryptoUtils {
     bool needsRehash(const std::string& stored);
 
     std::string generateToken(); // 64-символьный hex случайный токен (256 бит)
+    std::string randomHex(int bytes); // криптостойкая случайная hex-строка (2*bytes символов)
     std::string sha256Hex(const std::string& input); // для хранения токенов сессий в виде хэша
+    // base64(HMAC-SHA1(key, data)) — пароль временной учётки coturn (use-auth-secret)
+    std::string hmacSha1Base64(const std::string& key, const std::string& data);
 }

@@ -18,8 +18,23 @@
         "threads_num": 4,
         "client_max_body_size": "20M",
         "log_level": "WARN",
-        "upload_path": "/data/uploads",
-        "document_root": "/data",
-        "static_files_route": "^/uploads/.*"
+        "document_root": "/data/uploads/",
+        "upload_path": ".",
+        "locations": [
+            {
+                "uri_prefix": "/uploads/",
+                "alias": "./",
+                "allow_all": true,
+                "is_recursive": true
+            }
+        ]
+    },
+    "custom_config": {
+        "trusted_proxies": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"],
+        "rtc": {
+            "stun": ["stun:stun.l.google.com:19302"],
+            "turn": [],
+            "turn_secret": ""
+        }
     }
 }

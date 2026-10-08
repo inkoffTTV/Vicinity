@@ -1,8 +1,9 @@
 #include "AuthController.h"
 #include "../models/User.h"
 #include "../managers/SessionManager.h"
-#include "../managers/SessionManager.h"
 #include "../utils/CryptoUtils.h"
+#include "../utils/JsonUtils.h"
+#include "../utils/TextUtils.h"
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/HttpResponse.h>
 #include <drogon/drogon.h>
@@ -32,11 +33,10 @@ static HttpResponsePtr error(const std::string& msg, HttpStatusCode code) {
 void AuthController::registerUser(const HttpRequestPtr& req,
                                   std::function<void(const HttpResponsePtr&)>&& cb) {
     auto json = req->getJsonObject();
-    if (!json) { cb(error("Invalid JSON", k400BadRequest)); return; }
+    if (!json || !json->isObject()) { cb(error("Invalid JSON", k400BadRequest)); return; }
 
-    std::string username    = (*json)["username"].asString();
-    std::string password    = (*json)["password"].asString();
-    std::string displayName = (*json).get("display_name", username).asString();
+    std::string username = JsonUtils::getStr(*json, "username");
+    std::string password = JsonUtils::getStr(*json, "password");
 
     if (username.size() < Vicinity::MIN_USERNAME_LEN ||
         username.size() > Vicinity::MAX_USERNAME_LEN) {
@@ -48,28 +48,45 @@ void AuthController::registerUser(const HttpRequestPtr& req,
     if (password.size() < Vicinity::MIN_PASSWORD_LEN) {
         cb(error("Password must be at least 8 characters", k400BadRequest)); return;
     }
+    // Имя: без управляющих символов, до 32 символов (длинное обрезается по границе символа);
+    // не задано или пустое — берём логин
+    std::string displayName = username;
+    const std::string rawName = JsonUtils::getStr(*json, "display_name");
+    if (!TextUtils::trim(rawName).empty()) {
+        auto clean = TextUtils::cleanName(rawName, Vicinity::MAX_DISPLAY_NAME_LEN, true);
+        if (!clean) { cb(error("Invalid display name", k400BadRequest)); return; }
+        displayName = *clean;
+    }
     if (UserModel::findByUsername(username)) {
         cb(error("Username already taken", k409Conflict)); return;
     }
 
-    std::string hash = CryptoUtils::hashPassword(password);
-    int64_t id = UserModel::create(username, hash, displayName);
-    std::string token = AppSessionManager::instance().createSession(id);
+    try {
+        std::string hash = CryptoUtils::hashPassword(password);
+        int64_t id = UserModel::create(username, hash, displayName);
+        std::string token = AppSessionManager::instance().createSession(id);
 
-    Json::Value resp;
-    resp["token"]        = token;
-    resp["user_id"]      = static_cast<Json::Int64>(id);
-    resp["display_name"] = displayName;
-    cb(jsonResp(std::move(resp), k201Created));
+        Json::Value resp;
+        resp["token"]        = token;
+        resp["user_id"]      = static_cast<Json::Int64>(id);
+        resp["display_name"] = displayName;
+        cb(jsonResp(std::move(resp), k201Created));
+    } catch (const drogon::orm::DrogonDbException& e) {
+        // Параллельная регистрация того же логина: проверка выше уже прошла, сработал UNIQUE
+        if (UserModel::findByUsername(username)) { cb(error("Username already taken", k409Conflict)); return; }
+        cb(error(e.base().what(), k500InternalServerError));
+    } catch (const std::exception& e) {
+        cb(error(e.what(), k500InternalServerError));
+    }
 }
 
 void AuthController::login(const HttpRequestPtr& req,
                            std::function<void(const HttpResponsePtr&)>&& cb) {
     auto json = req->getJsonObject();
-    if (!json) { cb(error("Invalid JSON", k400BadRequest)); return; }
+    if (!json || !json->isObject()) { cb(error("Invalid JSON", k400BadRequest)); return; }
 
-    std::string username = (*json)["username"].asString();
-    std::string password = (*json)["password"].asString();
+    std::string username = JsonUtils::getStr(*json, "username");
+    std::string password = JsonUtils::getStr(*json, "password");
 
     auto user = UserModel::findByUsername(username);
     if (!user || !CryptoUtils::verifyPassword(password, user->passwordHash)) {
@@ -88,7 +105,12 @@ void AuthController::login(const HttpRequestPtr& req,
         } catch (...) { /* апгрейд best-effort, на вход не влияет */ }
     }
 
-    std::string token = AppSessionManager::instance().createSession(user->id);
+    std::string token;
+    try {
+        token = AppSessionManager::instance().createSession(user->id);
+    } catch (const std::exception& e) {
+        cb(error(e.what(), k500InternalServerError)); return;
+    }
 
     Json::Value resp;
     resp["token"]             = token;

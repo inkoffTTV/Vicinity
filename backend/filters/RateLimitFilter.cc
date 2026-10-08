@@ -1,10 +1,17 @@
 #include "RateLimitFilter.h"
+#include "../utils/NetUtils.h"
 #include "../../shared/crypto/common_consts.h"
-#include <drogon/HttpResponse.h>
+#include <drogon/drogon.h>
 
-// Адрес из локальной/докер-сети — это наш reverse-proxy (nginx веб-клиента)
-static bool isPrivatePeer(const trantor::InetAddress& a) {
-    return a.isLoopbackIp() || a.isIntranetIp();
+// Прокси, которым верим заголовок X-Real-IP: custom_config.trusted_proxies (список подсетей).
+// По умолчанию — никому (даже loopback: через туннель весь интернет приходит с 127.0.0.1).
+static const std::vector<NetUtils::Cidr>& trustedProxies() {
+    static const std::vector<NetUtils::Cidr> list = [] {
+        const Json::Value& cfg = drogon::app().getCustomConfig();
+        return cfg.isObject() ? NetUtils::parseCidrList(cfg["trusted_proxies"])
+                              : std::vector<NetUtils::Cidr>{};
+    }();
+    return list;
 }
 
 void RateLimitFilter::doFilter(const drogon::HttpRequestPtr& req,
@@ -12,25 +19,31 @@ void RateLimitFilter::doFilter(const drogon::HttpRequestPtr& req,
                                drogon::FilterChainCallback&& fccb) {
     std::string ip = req->peerAddr().toIp();
     // За nginx все веб-клиенты приходят с одного адреса — берём реальный IP из X-Real-IP,
-    // но только если запрос пришёл из приватной сети (снаружи заголовок подделывается).
+    // но только от доверенного прокси (иначе заголовок подделывается).
     const std::string& realIp = req->getHeader("X-Real-IP");
-    if (!realIp.empty() && isPrivatePeer(req->peerAddr())) ip = realIp;
+    if (!realIp.empty() && NetUtils::contains(trustedProxies(), req->peerAddr())) ip = realIp;
     auto now = std::chrono::steady_clock::now();
+    const auto window = std::chrono::seconds(Vicinity::RATE_LIMIT_WINDOW_SEC);
 
     std::lock_guard<std::mutex> lock(mutex_);
-    auto& c = clients_[ip];
-    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - c.windowStart).count();
+    // Раз в окно выбрасываем клиентов с истёкшим окном — карта не растёт бесконечно
+    if (now - lastPrune_ >= window) {
+        lastPrune_ = now;
+        for (auto it = clients_.begin(); it != clients_.end();)
+            it = (now - it->second.windowStart >= window) ? clients_.erase(it) : std::next(it);
+    }
 
-    if (elapsed >= Vicinity::RATE_LIMIT_WINDOW_SEC) {
+    auto& c = clients_[ip];
+    if (now - c.windowStart >= window) {
         c.count = 0;
         c.windowStart = now;
     }
 
     if (++c.count > Vicinity::RATE_LIMIT_REQUESTS) {
-        auto resp = drogon::HttpResponse::newHttpResponse();
+        Json::Value body;
+        body["error"] = "Too many requests";
+        auto resp = drogon::HttpResponse::newHttpJsonResponse(body);
         resp->setStatusCode(drogon::k429TooManyRequests);
-        resp->setBody(R"({"error":"Too many requests"})");
-        resp->setContentTypeCode(drogon::CT_APPLICATION_JSON);
         fcb(resp);
         return;
     }

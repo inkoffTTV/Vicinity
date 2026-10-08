@@ -20,8 +20,23 @@
         "log_level": "DEBUG",
         "log_path": "./log",
         "log_file": "vicinity",
-        "upload_path": "./uploads",
-        "document_root": ".",
-        "static_files_route": "^/uploads/.*"
+        "document_root": "./uploads/",
+        "upload_path": ".",
+        "locations": [
+            {
+                "uri_prefix": "/uploads/",
+                "alias": "./",
+                "allow_all": true,
+                "is_recursive": true
+            }
+        ]
+    },
+    "custom_config": {
+        "trusted_proxies": [],
+        "rtc": {
+            "stun": ["stun:stun.l.google.com:19302"],
+            "turn": [],
+            "turn_secret": ""
+        }
     }
 }

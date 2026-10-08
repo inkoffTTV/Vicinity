@@ -21,9 +21,9 @@ void AuthFilter::doFilter(const drogon::HttpRequestPtr& req,
             return;
         }
     }
-    auto resp = drogon::HttpResponse::newHttpResponse();
+    Json::Value body;
+    body["error"] = "Unauthorized";
+    auto resp = drogon::HttpResponse::newHttpJsonResponse(body);
     resp->setStatusCode(drogon::k401Unauthorized);
-    resp->setBody(R"({"error":"Unauthorized"})");
-    resp->setContentTypeCode(drogon::CT_APPLICATION_JSON);
     fcb(resp);
 }
