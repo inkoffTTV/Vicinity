@@ -68,10 +68,10 @@ static Json::Value load(int64_t userId, bool* stored = nullptr) {
     auto rows = app().getDbClient()->execSqlSync("SELECT appearance FROM user_settings WHERE user_id = ?", userId);
     if (rows.empty() || rows[0]["appearance"].isNull()) return out;
     if (stored) *stored = true;
-    Json::Value stored;
-    if (!JsonUtils::parse(rows[0]["appearance"].as<std::string>(), stored) || !stored.isObject()) return out;
+    Json::Value saved;
+    if (!JsonUtils::parse(rows[0]["appearance"].as<std::string>(), saved) || !saved.isObject()) return out;
     for (const auto& key : out.getMemberNames())
-        if (stored.isMember(key)) out[key] = stored[key];
+        if (saved.isMember(key)) out[key] = saved[key];
     return out;
 }
 
