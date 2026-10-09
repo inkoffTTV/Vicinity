@@ -3,6 +3,7 @@
 #include "../utils/Broadcast.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/TextUtils.h"
+#include "../utils/ProfileExt.h"
 #include "../utils/Tiers.h"
 #include "../utils/Uploads.h"
 #include "../models/User.h"
@@ -163,6 +164,36 @@ void ProfileController::clearMedia(const HttpRequestPtr& req,
         callback(HttpResponse::newHttpJsonResponse(resp));
         Broadcast::userUpdated(user_id);
     } catch (const std::exception& e) { callback(errResp(e.what(), k500InternalServerError)); }
+}
+
+// POST /api/v1/profile/extras {badge_server, frame, effect, name_style, connections, widgets} — расширенный
+// профиль целиком (docs/API.md §10.1). Украшение не по подписке — 403.
+void ProfileController::updateExtras(const HttpRequestPtr& req,
+                                     std::function<void(const HttpResponsePtr&)>&& callback) {
+    int64_t user_id = req->attributes()->get<int64_t>("user_id");
+    auto json = req->getJsonObject();
+    if (!json || !json->isObject()) { callback(errResp("Invalid JSON", k400BadRequest)); return; }
+    try {
+        auto db = app().getDbClient();
+        Json::Value servers(Json::arrayValue);
+        for (const auto& r : db->execSqlSync("SELECT server_id FROM server_members WHERE user_id = ?", user_id))
+            servers.append(static_cast<Json::Int64>(r["server_id"].as<int64_t>()));
+        Json::Value clean;
+        std::string error;
+        int code = 400;
+        if (!ProfileExt::sanitize(*json, userTier(user_id), servers, clean, error, code)) {
+            callback(errResp(error, code == 403 ? k403Forbidden : k400BadRequest));
+            return;
+        }
+        Json::StreamWriterBuilder w;
+        w["indentation"] = "";
+        std::string text = Json::writeString(w, clean);
+        db->execSqlSync("UPDATE users SET profile_ext = ? WHERE id = ?", text, user_id);
+        callback(HttpResponse::newHttpJsonResponse(clean));
+        Broadcast::userUpdated(user_id);
+    } catch (const std::exception& e) {
+        callback(errResp(e.what(), k500InternalServerError));
+    }
 }
 
 void ProfileController::customize(const HttpRequestPtr& req,

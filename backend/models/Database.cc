@@ -228,6 +228,8 @@ void initialize() {
     exec("ALTER TABLE users ADD COLUMN email TEXT DEFAULT NULL");
     exec("ALTER TABLE users ADD COLUMN signup_ip TEXT DEFAULT NULL");
     exec("ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0");
+    // Расширенный профиль сайта (бейджик, украшения, подключения, виджеты) — utils/ProfileExt.h
+    exec("ALTER TABLE users ADD COLUMN profile_ext TEXT DEFAULT NULL");
     exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL");
     exec("CREATE INDEX IF NOT EXISTS idx_users_signup_ip ON users(signup_ip, created_at)");
 

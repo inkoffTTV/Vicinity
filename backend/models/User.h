@@ -18,6 +18,7 @@ struct User {
     std::string presence = "online";
     std::string email;       // нормализованная почта ("" — не привязана)
     std::string signupIp;
+    std::string profileExt;  // JSON расширенного профиля (utils/ProfileExt.h)
     int         subscriptionTier = 0;
     int         developer        = 0;
     int         banned           = 0;

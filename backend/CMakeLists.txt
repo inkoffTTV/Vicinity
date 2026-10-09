@@ -14,6 +14,7 @@ add_executable(VicinityServer
     controllers/ChannelController.cc
     controllers/ChatController.cc
     controllers/FriendsController.cc
+    controllers/GamesController.cc
     controllers/ProfileController.cc
     controllers/ReadController.cc
     controllers/RoleController.cc
@@ -41,6 +42,7 @@ add_executable(VicinityServer
     utils/Mailer.cc
     utils/Messages.cc
     utils/NetUtils.cc
+    utils/ProfileExt.cc
     utils/TextUtils.cc
     utils/Tiers.cc
     utils/Uploads.cc
