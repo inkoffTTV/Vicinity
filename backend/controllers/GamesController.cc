@@ -64,7 +64,8 @@ void GamesController::search(const HttpRequestPtr& req, std::function<void(const
     steamReq->setPath("/api/storesearch/");
     steamReq->setParameter("term", q);
     steamReq->setParameter("l", "russian");
-    steamReq->setParameter("cc", "RU");
+    // Регион US: с RU магазин скрывает игры, которые в России не продаются (GTA и др.), — а в профиле нужны все
+    steamReq->setParameter("cc", "US");
     // client захвачен в колбэк: иначе он уничтожится раньше ответа
     client->sendRequest(
         steamReq,
