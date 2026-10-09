@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface Props {
   title?: string;
@@ -26,7 +27,9 @@ export function Modal({ title, onClose, children, wide, bare, className, label }
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  // В корень страницы: окна открываются и из панелей (настройки сервера из боковой панели) — так
+  // ни transform, ни filter, ни overflow родителя не сожмут и не обрежут окно
+  return createPortal(
     <div ref={ref} className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         className={`modal${wide ? ' wide' : ''}${bare ? ' bare' : ''}${className ? ` ${className}` : ''}`}
@@ -44,6 +47,7 @@ export function Modal({ title, onClose, children, wide, bare, className, label }
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

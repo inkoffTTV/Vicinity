@@ -391,19 +391,20 @@ select {
   }
 }
 
-/* Появление интерфейса после входа: панели по очереди */
+/* Появление интерфейса после входа: панели по очереди. fill-mode backwards — после анимации на панели
+   не остаётся transform (иначе она стала бы «рамкой» для окон внутри неё) */
 .app > .nav .rail {
-  animation: vc-rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: vc-rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 .app > .nav .sidebar {
-  animation: vc-rise 0.35s 0.05s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: vc-rise 0.35s 0.05s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 .app > .main {
-  animation: vc-rise 0.35s 0.1s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: vc-rise 0.35s 0.1s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 .app > .members,
 .app > .group-panel {
-  animation: vc-rise 0.35s 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: vc-rise 0.35s 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 /* Новое сообщение */
 .msg.fresh {
@@ -416,10 +417,10 @@ select {
   animation: vc-pop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .side-scroll .side-item {
-  animation: vc-slide-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: vc-slide-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 .splash {
-  animation: vc-fade 0.4s ease-out both;
+  animation: vc-fade 0.4s ease-out backwards;
 }
 
 /* ── Экран входа ── */
@@ -446,7 +447,7 @@ select {
   flex-direction: column;
   justify-content: space-between;
   gap: 32px;
-  animation: vc-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: vc-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 .auth-brand {
   display: flex;
@@ -494,7 +495,7 @@ select {
   gap: 12px;
   align-items: flex-start;
   line-height: 1.45;
-  animation: vc-slide-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: vc-slide-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 .auth-perks li:nth-child(1) { animation-delay: 0.15s; }
 .auth-perks li:nth-child(2) { animation-delay: 0.22s; }
@@ -525,7 +526,7 @@ select {
   border-radius: 24px;
   background: var(--bg-panel);
   box-shadow: none;
-  animation: vc-pop 0.4s 0.08s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: vc-pop 0.4s 0.08s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 .auth-card .btn.primary {
   height: 48px;
