@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { api, ApiError, Member, normalizeExt, Profile } from '../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { api, ApiError, Member, normalizeExt, Profile, ProfileExt } from '../lib/api';
 import { useCall } from '../lib/call';
 import { useAppearance } from '../lib/prefs';
 import { useStore } from '../lib/store';
@@ -41,6 +41,20 @@ export function ProfileModal({ userId }: { userId: number }) {
   }, [userId]);
 
   const close = () => showProfile(null);
+
+  // Своя доска редактируется прямо в профиле: изменения сохраняются сразу
+  // (запрос — через полсекунды после последнего изменения: текст комментария не уходит по букве)
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const saveExt = (next: ProfileExt) => {
+    setP((cur) => (cur ? { ...cur, profile_ext: next } : cur));
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      api.saveProfileExt(next).catch((e) => {
+        toast(e instanceof ApiError ? e.message : 'Не удалось сохранить', 'error');
+        void load();
+      });
+    }, 500);
+  };
 
   const friendAction = async (fn: () => Promise<unknown>) => {
     try {
@@ -191,7 +205,11 @@ export function ProfileModal({ userId }: { userId: number }) {
               : undefined
           }
         />
-        <ProfileBoard ext={ext} activity={activity} />
+        {self ? (
+          <ProfileBoard ext={ext} editable onChange={saveExt} activity={activity} />
+        ) : (
+          <ProfileBoard ext={ext} activity={activity} />
+        )}
       </div>
     </Modal>
   );

@@ -14,6 +14,7 @@
   --bg-input: #1e222b;
   --bg-raised: #1e222b;
   --bg-modal: #181b22;
+  --bg-card: #1b1e26;
   --bg-hover: rgba(255, 255, 255, 0.05);
   --bg-active: rgba(255, 255, 255, 0.09);
   --border: rgba(255, 255, 255, 0.07);
@@ -44,6 +45,7 @@
   --bg-input: #2c2d33;
   --bg-raised: #2c2d33;
   --bg-modal: #26272c;
+  --bg-card: #2a2b31;
   --bg-hover: rgba(255, 255, 255, 0.05);
   --bg-active: rgba(255, 255, 255, 0.09);
   --border: rgba(255, 255, 255, 0.08);
@@ -62,6 +64,7 @@
   --bg-input: #16171a;
   --bg-raised: #16171a;
   --bg-modal: #0f1012;
+  --bg-card: #141518;
   --bg-hover: rgba(255, 255, 255, 0.06);
   --bg-active: rgba(255, 255, 255, 0.1);
   --border: rgba(255, 255, 255, 0.08);
@@ -81,6 +84,7 @@
   --bg-input: #f0f2f5;
   --bg-raised: #f4f5f8;
   --bg-modal: #ffffff;
+  --bg-card: #f4f5f8;
   --bg-hover: rgba(15, 20, 30, 0.05);
   --bg-active: rgba(15, 20, 30, 0.09);
   --border: rgba(15, 20, 30, 0.09);
@@ -103,22 +107,24 @@
   --bg-ground: var(--theme-tint, #0e1015);
 }
 :root[data-gradient][data-theme='dark'] {
-  --bg-rail: rgba(10, 12, 18, 0.74);
-  --bg-side: rgba(10, 12, 18, 0.74);
-  --bg-main: rgba(10, 12, 18, 0.78);
-  --bg-panel: rgba(10, 12, 18, 0.76);
+  --bg-rail: rgba(8, 10, 14, 0.5);
+  --bg-side: rgba(8, 10, 14, 0.5);
+  --bg-main: rgba(8, 10, 14, 0.56);
+  --bg-panel: rgba(8, 10, 14, 0.52);
   --bg-input: rgba(255, 255, 255, 0.07);
   --bg-raised: rgba(255, 255, 255, 0.06);
-  --bg-modal: rgba(16, 18, 26, 0.94);
+  --bg-modal: rgba(16, 18, 26, 0.96);
+  --bg-card: #171a22;
 }
 :root[data-gradient][data-theme='light'] {
-  --bg-rail: rgba(255, 255, 255, 0.78);
-  --bg-side: rgba(255, 255, 255, 0.78);
-  --bg-main: rgba(255, 255, 255, 0.84);
-  --bg-panel: rgba(255, 255, 255, 0.82);
+  --bg-rail: rgba(255, 255, 255, 0.6);
+  --bg-side: rgba(255, 255, 255, 0.6);
+  --bg-main: rgba(255, 255, 255, 0.68);
+  --bg-panel: rgba(255, 255, 255, 0.64);
   --bg-input: rgba(255, 255, 255, 0.75);
   --bg-raised: rgba(255, 255, 255, 0.6);
-  --bg-modal: rgba(255, 255, 255, 0.96);
+  --bg-modal: rgba(255, 255, 255, 0.97);
+  --bg-card: #f4f5f8;
 }
 
 /* Высокий контраст: текст ярче, границы заметнее */
