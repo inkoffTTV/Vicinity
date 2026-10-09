@@ -3335,3 +3335,81 @@ kbd {
     font-size: max(16px, var(--chat-font));
   }
 }
+
+/* ── Иконки (components/Icon.tsx) ── */
+
+.ico {
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+  transition: transform 0.18s cubic-bezier(0.3, 1.6, 0.6, 1), color 0.15s, opacity 0.15s;
+}
+button:hover > .ico,
+button:focus-visible > .ico {
+  transform: scale(1.12);
+}
+button:active > .ico {
+  transform: scale(0.88);
+  transition-duration: 0.06s;
+}
+/* Шестерёнка поворачивается при наведении */
+button:hover > .ico.anim-spin,
+button:focus-visible > .ico.anim-spin {
+  transform: rotate(75deg) scale(1.05);
+  transition-duration: 0.45s;
+}
+/* Трубка покачивается при наведении; на входящем звонке — постоянно */
+button:hover > .ico.anim-ring,
+.ico.anim-ring.always {
+  animation: ico-ring 0.9s ease-in-out infinite;
+}
+@keyframes ico-ring {
+  0%, 50%, 100% { transform: rotate(0); }
+  10%, 30% { transform: rotate(-14deg); }
+  20%, 40% { transform: rotate(14deg); }
+}
+button:hover > .ico.anim-wiggle {
+  animation: ico-wiggle 0.5s ease-in-out;
+}
+@keyframes ico-wiggle {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-10deg) scale(1.08); }
+  75% { transform: rotate(10deg) scale(1.08); }
+}
+button:hover > .ico.anim-bounce {
+  animation: ico-bounce 0.45s cubic-bezier(0.3, 1.6, 0.6, 1);
+}
+@keyframes ico-bounce {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-3px) scale(1.08); }
+}
+/* Смена состояния (вкл/выкл) — короткий «щелчок»: элемент перерисовывается с новым key */
+.ico.anim-pop {
+  animation: ico-pop 0.28s cubic-bezier(0.3, 1.6, 0.6, 1);
+}
+@keyframes ico-pop {
+  0% { transform: scale(0.6); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.ico.anim-pulse {
+  animation: ico-pulse 1.4s ease-in-out infinite;
+}
+@keyframes ico-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.9); }
+}
+/* «В эфире» — красная точка/иконка мягко пульсирует */
+.ico.anim-live {
+  color: var(--dnd);
+  animation: ico-pulse 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ico,
+  .ico[class*='anim-'],
+  button:hover > .ico {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
