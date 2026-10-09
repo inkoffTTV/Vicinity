@@ -899,3 +899,8 @@ select {
 .popover.menu button {
   border-radius: 8px;
 }
+
+/* Уведомления — на сплошном фоне (в цветовой теме --bg-raised полупрозрачный) */
+.toast {
+  background: var(--bg-modal);
+}
