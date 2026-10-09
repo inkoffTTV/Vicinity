@@ -857,3 +857,19 @@ select {
   padding: 6px 8px;
   font-size: 13px;
 }
+
+/* Логотип уже есть в левой колонке — в карточке входа вместо него заголовок */
+.auth-hero ~ .auth-side .auth-logo {
+  display: none;
+}
+.auth-hero ~ .auth-side .auth-card > p.muted.center {
+  margin: 0;
+  color: var(--text);
+  font-family: 'Unbounded', 'Onest', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: left;
+}
+.link-btn {
+  color: var(--link, var(--accent));
+}
