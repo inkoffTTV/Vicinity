@@ -261,6 +261,30 @@ GET `/search?q=<строка ≥2 символов>&channel_id=N` или `&serve
 При изменении имени/аватара/баннера/цвета/статуса друзьям и участникам общих серверов уходит
 `{"type":"user_updated","user_id":U,"display_name":"...","avatar_path":"...","accent_color":"..."}`.
 
+### 10.1 Расширенный профиль **[new]**
+
+POST `/profile/extras` — расширенный профиль целиком → сохранённый объект. В GET `/users/{id}/profile` — `profile_ext`
+(украшения без подписки владельца — `null`) и `badge` `{id, name, icon}` выбранного сервера. Отдельно от `profile_json`:
+его десктоп перезаписывает своими ключами. Статус и цвет баннера по-прежнему в `profile_json` (`statusText`, `banner.color`).
+
+| Поле | |
+|---|---|
+| `badge_server` | null | id сервера, где пользователь состоит (иначе 400) |
+| `frame` | null | `neon`, `gold`, `ice` (Basic), `fire` (Standard), `rainbow` (Ultra) |
+| `effect` | null | `stars`, `aurora`, `snow`, `glint` (Ultra) |
+| `name_style` | null | `gradient`, `neon`, `metal`, `flame` (Standard), `aurora` (Ultra) |
+| `connections` | до 10 × `{type, name ≤ 40, url: "" | https://…}`, type: steam, spotify, epic, xbox, playstation, battlenet, twitch, youtube, github, telegram, vk, website |
+| `widgets` | `{favorite_game: null | {appid, name, note ≤ 120, tags ≤ 6 из списка}, games: ≤ 20 × {appid, name}, wishlist: ≤ 20 × {appid, name}, order: ["favorite_game" | "games"]}` |
+
+Украшение без нужной подписки — **403**. `cover` у игр сервер ставит сам: `/api/v1/games/{appid}/cover`.
+
+### 10.2 Игры **[new]**
+
+- GET `/games/search?q=` → `{games: [{appid, name, cover}]}` — до 10 игр из магазина Steam (запрос идёт с сервера,
+  ответы кэшируются на час; лимит — как у поиска).
+- GET `/games/{appid}/cover` (без токена — для `<img>`) → 302 на `/uploads/games/{appid}.jpg`; при первом запросе
+  сервер скачивает обложку Steam (вертикальную, иначе горизонтальную). Нет обложки — 404, занято — 503.
+
 ## 11. Голос **[new]**
 - Несколько WS-подключений одного пользователя работают одновременно (десктоп + вкладки браузера):
   события уходят во все подключения; пользователь «в сети», пока открыто хотя бы одно;

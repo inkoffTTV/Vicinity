@@ -13,6 +13,7 @@ import '@fontsource/onest/700.css';
 import '@fontsource/unbounded/700.css';
 import './styles.css';
 import './theme.css';
+import './profile.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

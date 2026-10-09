@@ -23,6 +23,7 @@ import { InviteCard } from './components/InviteCard';
 import { CallOverlay } from './components/CallOverlay';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { SearchPanel } from './components/Search';
+import { ProfileStudio, useProfileStudio } from './components/profile/ProfileStudio';
 
 export default function App() {
   const booting = useStore((s) => s.booting);
@@ -32,6 +33,7 @@ export default function App() {
   const view = useStore((s) => s.view);
   const profileUserId = useStore((s) => s.profileUserId);
   const settingsOpen = useStore((s) => s.settingsOpen);
+  const studioOpen = useProfileStudio((s) => s.open);
   const inVoice = useVoice((s) => s.channelId !== null);
   const searchOpen = useSearch((s) => s.open);
   const inviteCode = useInvite((s) => s.code);
@@ -104,6 +106,7 @@ export default function App() {
       )}
       {profileUserId !== null && <ProfileModal userId={profileUserId} />}
       {settingsOpen && <Settings />}
+      {studioOpen && <ProfileStudio />}
       {inviteCode && <InviteCard code={inviteCode} />}
       {switcher && <QuickSwitcher onClose={closeSwitcher} />}
       <UserMenu />

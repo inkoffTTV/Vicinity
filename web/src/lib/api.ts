@@ -317,6 +317,70 @@ export interface Profile {
   friendship_status: string;
   mutual_servers: { id: number; name: string }[];
   mutual_friends: UserSummary[];
+  /** Расширенный профиль сайта — нет у старых серверов */
+  profile_ext?: Partial<ProfileExt>;
+  /** Сервер-бейджик (выбран в профиле) */
+  badge?: { id: number; name: string; icon: string } | null;
+}
+
+/** Игра из каталога Steam: обложку отдаёт наш сервер (/api/v1/games/{appid}/cover) */
+export interface Game {
+  appid: number;
+  name: string;
+  cover: string;
+}
+
+export interface FavoriteGame extends Game {
+  note: string;
+  tags: string[];
+}
+
+export interface Connection {
+  type: string;
+  name: string;
+  url: string;
+}
+
+/** Расширенный профиль (POST /profile/extras, docs/API.md §10.1) */
+export interface ProfileExt {
+  badge_server: number | null;
+  frame: string | null;
+  effect: string | null;
+  name_style: string | null;
+  connections: Connection[];
+  widgets: {
+    favorite_game: FavoriteGame | null;
+    games: Game[];
+    wishlist: Game[];
+    order: ('favorite_game' | 'games')[];
+  };
+}
+
+export const EMPTY_EXT: ProfileExt = {
+  badge_server: null,
+  frame: null,
+  effect: null,
+  name_style: null,
+  connections: [],
+  widgets: { favorite_game: null, games: [], wishlist: [], order: [] },
+};
+
+/** Расширенный профиль с сервера → полный объект (недостающее — пустое) */
+export function normalizeExt(e: Partial<ProfileExt> | undefined | null): ProfileExt {
+  const w: Partial<ProfileExt['widgets']> = e?.widgets ?? {};
+  return {
+    badge_server: e?.badge_server ?? null,
+    frame: e?.frame ?? null,
+    effect: e?.effect ?? null,
+    name_style: e?.name_style ?? null,
+    connections: Array.isArray(e?.connections) ? e!.connections : [],
+    widgets: {
+      favorite_game: w.favorite_game ?? null,
+      games: Array.isArray(w.games) ? w.games : [],
+      wishlist: Array.isArray(w.wishlist) ? w.wishlist : [],
+      order: Array.isArray(w.order) ? w.order : [],
+    },
+  };
 }
 
 export class ApiError extends Error {
@@ -550,6 +614,8 @@ export const api = {
     return request<{ file_url: string }>('POST', '/profile/upload', fd);
   },
   clearMedia: (field: 'avatar' | 'banner') => post('/profile/clear_media', { field }),
+  saveProfileExt: (ext: ProfileExt) => post<ProfileExt>('/profile/extras', ext),
+  searchGames: (q: string) => get<{ games: Game[] }>(`/games/search?q=${encodeURIComponent(q)}`).then((r) => r.games),
 
   // ── Ответы, прочитанное, поиск, закрепы, участники бесед (docs/API.md §2–§7) ──
   messagesAround: (channelId: number, around: number, limit = 50) =>

@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
-import { api, ApiError, Member, parseTs, Profile } from '../lib/api';
+import { api, ApiError, Member, normalizeExt, Profile } from '../lib/api';
 import { useCall } from '../lib/call';
 import { useAppearance } from '../lib/prefs';
 import { useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
-import { Markdown } from './Markdown';
 import { Modal } from './Modal';
 import { RoleChips } from './RoleChips';
 import { ServerIcon } from './ServerRail';
+import { cardFromProfile } from './profile/cardData';
+import { ProfileBoard } from './profile/ProfileBoard';
+import { ProfileCard } from './profile/ProfileCard';
+import { useProfileStudio } from './profile/ProfileStudio';
 
 const NO_ROLES: Member['roles'] = [];
 
@@ -18,7 +21,7 @@ export function ProfileModal({ userId }: { userId: number }) {
   const showProfile = useStore((s) => s.showProfile);
   const openDmWith = useStore((s) => s.openDmWith);
   const refreshFriends = useStore((s) => s.refreshFriends);
-  const setSettingsOpen = useStore((s) => s.setSettingsOpen);
+  const openStudio = useProfileStudio((s) => s.show);
   const livePresence = useStore((s) => s.presence[userId]);
   const toast = useStore((s) => s.toast);
   const open = useStore((s) => s.open);
@@ -58,143 +61,137 @@ export function ProfileModal({ userId }: { userId: number }) {
     );
 
   const presence = p.friendship_status === 'self' ? p.presence : livePresence ?? p.presence;
-  const theirs = !applyMine || p.friendship_status === 'self';
-  const accent = (theirs && p.accent_color) || 'var(--theme-gradient, var(--accent))';
+  const ext = normalizeExt(p.profile_ext);
+  const self = p.friendship_status === 'self';
+  const card = cardFromProfile(p, ext, presence);
+  // «Применить тему к профилям других пользователей» — чужая карточка в моих цветах
+  if (applyMine && !self) {
+    card.banner_path = '';
+    card.banner_color = 'var(--theme-gradient, var(--accent))';
+  }
+
+  const actions = self ? (
+    <button
+      className="btn primary"
+      onClick={() => {
+        close();
+        openStudio();
+      }}
+    >
+      Редактировать профиль
+    </button>
+  ) : (
+    <>
+      <button className="btn primary" onClick={() => openDmWith(p.id)}>
+        Сообщение
+      </button>
+      {p.friendship_status === 'none' && (
+        <button className="btn" onClick={() => friendAction(() => api.friendRequest(p.id))}>
+          Добавить в друзья
+        </button>
+      )}
+      {p.friendship_status === 'pending_out' && (
+        <button className="btn" onClick={() => friendAction(() => api.friendRemove(p.id))}>
+          Отменить заявку
+        </button>
+      )}
+      {p.friendship_status === 'pending_in' && (
+        <button className="btn" onClick={() => friendAction(() => api.friendRespond(p.id, true))}>
+          Принять заявку
+        </button>
+      )}
+      {p.friendship_status === 'friends' && (
+        <button
+          className="btn ok"
+          disabled={!callIdle}
+          onClick={() => {
+            close();
+            void startCall(p.id, p.display_name);
+          }}
+        >
+          Позвонить
+        </button>
+      )}
+      {p.friendship_status === 'friends' && (
+        <button className="btn" onClick={() => friendAction(() => api.friendRemove(p.id))}>
+          Удалить из друзей
+        </button>
+      )}
+    </>
+  );
+
+  const activity = (
+    <div className="pactivity">
+      <section className="widget">
+        <strong>Сейчас</strong>
+        <p className="muted">
+          {PRESENCE_LABEL[presence] ?? ''}
+          {card.status_text && <> · {card.status_text}</>}
+        </p>
+      </section>
+      {roles.length > 0 && (
+        <section className="widget">
+          <strong>Роли</strong>
+          <RoleChips roles={roles} />
+        </section>
+      )}
+      {p.mutual_servers.length > 0 && (
+        <section className="widget">
+          <strong>{self ? 'Серверы' : 'Общие серверы'} — {p.mutual_servers.length}</strong>
+          <div className="profile-links">
+            {p.mutual_servers.map((s) => (
+              <button
+                key={s.id}
+                className="profile-link"
+                onClick={() => {
+                  close();
+                  open({ kind: 'server', serverId: s.id, channelId: null });
+                }}
+              >
+                <span className="profile-link-icon">
+                  <ServerIcon name={s.name} icon={servers.find((x) => x.id === s.id)?.icon ?? ''} />
+                </span>
+                <span className="ellipsis">{s.name}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {p.mutual_friends.length > 0 && (
+        <section className="widget">
+          <strong>Общие друзья — {p.mutual_friends.length}</strong>
+          <div className="profile-links">
+            {p.mutual_friends.map((f) => (
+              <button key={f.id} className="profile-link" onClick={() => showProfile(f.id)} {...userMenuProps(f.id)}>
+                <Avatar name={f.display_name} src={f.avatar_path} id={f.id} size={20} />
+                <span className="ellipsis">{f.display_name}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
 
   return (
-    <Modal onClose={close} bare>
-      <div className="profile-card">
-        <div
-          className="profile-banner"
-          style={theirs && p.banner_path ? { backgroundImage: `url("${p.banner_path}")` } : { background: accent }}
-        />
-        <div className="profile-avatar">
-          <Avatar name={p.display_name} src={p.avatar_path} id={p.id} size={88} presence={presence} />
-        </div>
+    <Modal onClose={close} bare label={`Профиль ${p.display_name}`}>
+      <div className="profile-view">
         <button className="icon-btn profile-close" onClick={close} aria-label="Закрыть">
           ✕
         </button>
-        <div className="profile-content">
-          <h2>{p.display_name}</h2>
-          <div className="muted">
-            @{p.username}
-            {p.pronouns && <> · {p.pronouns}</>}
-          </div>
-          <div className="small muted">{PRESENCE_LABEL[presence] ?? ''}</div>
-          {p.badges.length > 0 && (
-            <div className="badges">
-              {p.badges.map((b) => (
-                <span key={b.id} className="pill" style={{ borderColor: b.color, color: b.color }}>
-                  {b.label}
-                </span>
-              ))}
-            </div>
-          )}
-          {p.bio && (
-            <section>
-              <h4>О себе</h4>
-              <div className="bio">
-                <Markdown text={p.bio} />
-              </div>
-            </section>
-          )}
-          <section>
-            <h4>В Vicinity с</h4>
-            <p>{parseTs(p.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-          </section>
-          {roles.length > 0 && (
-            <section>
-              <h4>Роли</h4>
-              <RoleChips roles={roles} />
-            </section>
-          )}
-          {p.mutual_servers.length > 0 && p.friendship_status !== 'self' && (
-            <section>
-              <h4>Общие серверы — {p.mutual_servers.length}</h4>
-              <div className="profile-links">
-                {p.mutual_servers.map((s) => (
-                  <button
-                    key={s.id}
-                    className="profile-link"
-                    onClick={() => {
-                      close();
-                      open({ kind: 'server', serverId: s.id, channelId: null });
-                    }}
-                  >
-                    <span className="profile-link-icon">
-                      <ServerIcon name={s.name} icon={servers.find((x) => x.id === s.id)?.icon ?? ''} />
-                    </span>
-                    <span className="ellipsis">{s.name}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-          {p.mutual_friends.length > 0 && (
-            <section>
-              <h4>Общие друзья — {p.mutual_friends.length}</h4>
-              <div className="profile-links">
-                {p.mutual_friends.map((f) => (
-                  <button key={f.id} className="profile-link" onClick={() => showProfile(f.id)} {...userMenuProps(f.id)}>
-                    <Avatar name={f.display_name} src={f.avatar_path} id={f.id} size={20} />
-                    <span className="ellipsis">{f.display_name}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-          <div className="profile-actions">
-            {p.friendship_status === 'self' ? (
-              <button
-                className="btn primary"
-                onClick={() => {
+        <ProfileCard
+          d={card}
+          actions={actions}
+          onBadge={
+            card.badge
+              ? () => {
                   close();
-                  setSettingsOpen(true);
-                }}
-              >
-                Редактировать профиль
-              </button>
-            ) : (
-              <>
-                <button className="btn primary" onClick={() => openDmWith(p.id)}>
-                  Написать
-                </button>
-                {p.friendship_status === 'none' && (
-                  <button className="btn" onClick={() => friendAction(() => api.friendRequest(p.id))}>
-                    Добавить в друзья
-                  </button>
-                )}
-                {p.friendship_status === 'pending_out' && (
-                  <button className="btn" onClick={() => friendAction(() => api.friendRemove(p.id))}>
-                    Отменить заявку
-                  </button>
-                )}
-                {p.friendship_status === 'pending_in' && (
-                  <button className="btn" onClick={() => friendAction(() => api.friendRespond(p.id, true))}>
-                    Принять заявку
-                  </button>
-                )}
-                {p.friendship_status === 'friends' && (
-                  <button
-                    className="btn ok"
-                    disabled={!callIdle}
-                    onClick={() => {
-                      close();
-                      void startCall(p.id, p.display_name);
-                    }}
-                  >
-                    📞 Позвонить
-                  </button>
-                )}
-                {p.friendship_status === 'friends' && (
-                  <button className="btn" onClick={() => friendAction(() => api.friendRemove(p.id))}>
-                    Удалить из друзей
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+                  open({ kind: 'server', serverId: card.badge!.id, channelId: null });
+                }
+              : undefined
+          }
+        />
+        <ProfileBoard ext={ext} activity={activity} />
       </div>
     </Modal>
   );

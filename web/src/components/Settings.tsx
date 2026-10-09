@@ -11,6 +11,7 @@ import { AudioSettingsPanel } from './AudioSettings';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { Modal } from './Modal';
 import { Toggle } from './SettingControls';
+import { useProfileStudio } from './profile/ProfileStudio';
 import { AccessibilityTab, SubscriptionTab, ThemeTab } from './ThemeSettings';
 
 type Tab = 'profile' | 'account' | 'theme' | 'accessibility' | 'subscription' | 'notifications' | 'voice' | 'admin';
@@ -131,6 +132,22 @@ function ProfileTab({ onClose }: { onClose: () => void }) {
 
   return (
     <form onSubmit={save} className="settings">
+      <section className="settings-card studio-cta">
+        <div className="grow">
+          <strong>Редактор профиля</strong>
+          <span className="muted small">Карточка, рамка аватара, эффекты, стиль ника, подключения и любимые игры</span>
+        </div>
+        <button
+          type="button"
+          className="btn primary"
+          onClick={() => {
+            onClose();
+            useProfileStudio.getState().show();
+          }}
+        >
+          Открыть редактор
+        </button>
+      </section>
       <div className="settings-media">
         <div
           className="settings-banner"
