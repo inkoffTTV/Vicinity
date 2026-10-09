@@ -887,3 +887,15 @@ select {
   max-width: 960px;
   height: min(820px, calc(100vh - 32px));
 }
+
+/* Меню и палитра эмодзи открываются и из окон (профиль, настройки) — они должны быть выше окон (z-index 100),
+   но ниже уведомлений (200); фон сплошной, чтобы в цветовых темах не просвечивали */
+.popover,
+.emoji-panel {
+  z-index: 170;
+  background: var(--bg-modal);
+  border-radius: 12px;
+}
+.popover.menu button {
+  border-radius: 8px;
+}
