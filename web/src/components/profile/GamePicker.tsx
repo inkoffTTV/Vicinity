@@ -63,12 +63,24 @@ export function GamePicker({ title, exclude, onPick, onClose }: { title: string;
   );
 }
 
-/** Обложка игры; не загрузилась — плитка с названием */
+/** Обложка игры. Сервер скачивает обложку при первом запросе и может ответить «занят» —
+ *  тогда пробуем ещё дважды; не вышло — плитка с названием */
 export function GameCover({ game, small }: { game: { name: string; cover: string }; small?: boolean }) {
+  const [attempt, setAttempt] = useState(0);
   const [broken, setBroken] = useState(false);
+  const onError = () => {
+    if (attempt >= 2) return setBroken(true);
+    setTimeout(() => setAttempt((a) => a + 1), 1200 * (attempt + 1));
+  };
   return broken ? (
     <span className={`game-cover fallback${small ? ' small' : ''}`}>{game.name}</span>
   ) : (
-    <img className={`game-cover${small ? ' small' : ''}`} src={game.cover} alt={game.name} loading="lazy" onError={() => setBroken(true)} />
+    <img
+      className={`game-cover${small ? ' small' : ''}`}
+      src={attempt ? `${game.cover}?r=${attempt}` : game.cover}
+      alt={game.name}
+      loading="lazy"
+      onError={onError}
+    />
   );
 }

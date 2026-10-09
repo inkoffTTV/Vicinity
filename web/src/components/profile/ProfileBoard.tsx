@@ -170,8 +170,8 @@ export function ProfileBoard({
                   </div>
                   {editable && (
                     <div className="stack-row">
-                      <button type="button" className="icon-btn small" aria-label="Добавить игру" disabled={w.games.length >= 20} onClick={() => setPicker('games')}>
-                        ＋
+                      <button type="button" className="btn small" disabled={w.games.length >= 20} onClick={() => setPicker('games')}>
+                        ＋ Игра
                       </button>
                       <button type="button" className="icon-btn small" aria-label="Убрать виджет" onClick={() => removeWidget(id)}>
                         ✕
@@ -197,8 +197,8 @@ export function ProfileBoard({
                 <span className="muted small">Игры, которые хочется получить или попробовать</span>
               </div>
               {editable && (
-                <button type="button" className="icon-btn small" aria-label="Добавить игру" disabled={w.wishlist.length >= 20} onClick={() => setPicker('wishlist')}>
-                  ＋
+                <button type="button" className="btn small" disabled={w.wishlist.length >= 20} onClick={() => setPicker('wishlist')}>
+                  ＋ Игра
                 </button>
               )}
             </div>

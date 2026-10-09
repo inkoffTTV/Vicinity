@@ -11,7 +11,7 @@ public:
     METHOD_LIST_BEGIN
     ADD_METHOD_TO(GamesController::search, "/api/v1/games/search",        Get, Options, "AuthFilter");
     // Без фильтров: <img> не умеет передавать токен, а общий RateLimitFilter делит лимит со входом.
-    // Защита — внутри: не больше 4 скачиваний одновременно и запоминание несуществующих обложек.
+    // Защита — внутри: не больше 12 скачиваний одновременно и запоминание несуществующих обложек.
     ADD_METHOD_TO(GamesController::cover,  "/api/v1/games/{appid}/cover", Get, Options);
     METHOD_LIST_END
 

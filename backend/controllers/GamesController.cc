@@ -167,7 +167,7 @@ void GamesController::cover(const HttpRequestPtr&, std::function<void(const Http
         std::lock_guard<std::mutex> lock(missingMutex);
         if (missingCovers.count(appid)) { cb(error("Обложка не найдена", k404NotFound)); return; }
     }
-    if (downloads.fetch_add(1) >= 4) {
+    if (downloads.fetch_add(1) >= 12) {
         downloads.fetch_sub(1);
         auto busy = error("Попробуйте ещё раз через секунду", k503ServiceUnavailable);
         busy->addHeader("Retry-After", "1");
