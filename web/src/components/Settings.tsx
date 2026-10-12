@@ -7,6 +7,7 @@ import { usePlan } from '../lib/plan';
 import { useStore } from '../lib/store';
 import { AdminPanel } from './AdminPanel';
 import { VoiceScreen } from './settings/VoiceScreen';
+import { AppIconScreen } from './settings/AppIconScreen';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
@@ -15,7 +16,7 @@ import { useProfileStudio } from './profile/ProfileStudio';
 import { AccessibilityTab, SubscriptionTab, ThemeTab } from './ThemeSettings';
 import { AccountScreen } from './settings/AccountScreen';
 
-type Tab = 'account' | 'profile' | 'theme' | 'voice' | 'notifications' | 'hotkeys' | 'accessibility' | 'subscription' | 'admin';
+type Tab = 'account' | 'profile' | 'theme' | 'appicon' | 'voice' | 'notifications' | 'hotkeys' | 'accessibility' | 'subscription' | 'admin';
 
 interface NavItem {
   id: Tab;
@@ -37,6 +38,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Приложение',
     items: [
       { id: 'theme', label: 'Внешний вид', keywords: 'тема светлая тёмная графит чёрная цвет оформление' },
+      { id: 'appicon', label: 'Значок приложения', keywords: 'иконка значок вкладка favicon лого' },
       { id: 'voice', label: 'Голос и видео', keywords: 'микрофон динамик звук камера громкость' },
       { id: 'notifications', label: 'Уведомления', keywords: 'звук оповещения упоминания' },
       { id: 'hotkeys', label: 'Горячие клавиши', keywords: 'клавиатура сочетания ctrl alt' },
@@ -127,6 +129,7 @@ export function Settings() {
             {tab === 'account' && <AccountScreen onEditProfile={() => go('profile')} />}
             {tab === 'profile' && <ProfileTab onClose={close} />}
             {tab === 'theme' && <ThemeTab goTo={(t) => go(t === 'accessibility' ? 'accessibility' : 'subscription')} />}
+            {tab === 'appicon' && <AppIconScreen goSubscription={() => go('subscription')} />}
             {tab === 'voice' && <VoiceScreen />}
             {tab === 'notifications' && <NotificationsTab />}
             {tab === 'hotkeys' && <HotkeysScreen />}

@@ -5,6 +5,7 @@
 #include <drogon/drogon.h>
 #include <cctype>
 #include <initializer_list>
+#include <map>
 #include <set>
 
 using namespace drogon;
@@ -35,6 +36,17 @@ static const std::set<std::string>& colorThemeIds() {
     return ids;
 }
 
+// Значки приложения и нужная подписка (как web/src/lib/appIcon.ts): 0 — всем, 2 — Standard, 3 — Ultra
+static const std::map<std::string, int>& appIcons() {
+    static const std::map<std::string, int> m = {
+        {"classic", 0}, {"night", 0},
+        {"mono-light", 2}, {"mono-dark", 2}, {"neon", 2}, {"sunset", 2}, {"ocean", 2}, {"lavender", 2},
+        {"graphite", 2}, {"terminal", 2}, {"camo", 2}, {"newyear", 2}, {"halloween", 2},
+        {"aurora", 3}, {"pixel", 3}, {"glass", 3}, {"retro", 3}, {"fuchsia", 3}, {"gold", 3}, {"confetti", 3},
+    };
+    return m;
+}
+
 static bool isHexColor(const std::string& s) {
     if (s.size() != 7 || s[0] != '#') return false;
     for (size_t i = 1; i < s.size(); ++i)
@@ -58,6 +70,7 @@ static Json::Value defaults() {
     v["reduce_motion"]     = false;
     v["saturation"]        = 100;
     v["high_contrast"]     = false;
+    v["app_icon"]          = "classic";
     return v;
 }
 
@@ -80,6 +93,10 @@ static Json::Value load(int64_t userId, bool* stored = nullptr) {
 static Json::Value withAccess(Json::Value v, int tier, bool stored = true) {
     if (!Tiers::colorThemes(tier)) v["color_theme"] = Json::nullValue;
     if (!Tiers::customTheme(tier)) v["custom_theme"] = Json::nullValue;
+    {
+        const auto it = appIcons().find(v["app_icon"].isString() ? v["app_icon"].asString() : std::string());
+        if (it == appIcons().end() || it->second > Tiers::clamp(tier)) v["app_icon"] = "classic";
+    }
     Json::Value out;
     out["settings"] = v;
     out["access"]["color_themes"] = Tiers::colorThemes(tier);
@@ -156,6 +173,19 @@ void SettingsController::patchAppearance(const HttpRequestPtr& req, std::functio
             v["saturation"] = in["saturation"].asInt();
         }
 
+        if (in.isMember("app_icon")) {
+            if (!in["app_icon"].isString()) { bad("app_icon"); return; }
+            const auto it = appIcons().find(in["app_icon"].asString());
+            if (it == appIcons().end()) { bad("app_icon"); return; }
+            if (it->second > Tiers::clamp(tier)) {
+                Json::Value e;
+                e["error"]         = it->second >= 3 ? "Этот значок — с подпиской Ultra" : "Этот значок — с подпиской Standard";
+                e["required_tier"] = it->second;
+                cb(jsonResp(std::move(e), k403Forbidden));
+                return;
+            }
+            v["app_icon"] = it->first;
+        }
         if (in.isMember("color_theme")) {
             const Json::Value& ct = in["color_theme"];
             if (ct.isNull()) v["color_theme"] = Json::nullValue;

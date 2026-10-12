@@ -2,7 +2,10 @@
 // Сервер сам проверяет подписку для цветовых тем (Standard) и своей темы (Ultra): 403 — тема не сохраняется.
 import { create } from 'zustand';
 import { ApiError, AppearanceSettings, api } from './api';
+import { appIconById, DEFAULT_APP_ICON } from './appIcon';
 import { Appearance, pick, sanitize, useAppearance } from './prefs';
+
+const iconAllowed = (id: string, tier: number) => appIconById(id).tier <= tier;
 
 /** Что из премиум-оформления доступно этому аккаунту */
 export const useThemeAccess = create<{ colorThemes: boolean; customTheme: boolean; tier: number; loaded: boolean }>(
@@ -24,6 +27,7 @@ export function toServer(a: Appearance): AppearanceSettings {
     reduce_motion: a.reducedMotion,
     saturation: a.saturation,
     high_contrast: a.highContrast,
+    app_icon: a.appIcon,
   };
 }
 
@@ -42,6 +46,7 @@ function fromServer(s: AppearanceSettings): Appearance {
     reducedMotion: s.reduce_motion,
     saturation: s.saturation,
     highContrast: s.high_contrast,
+    appIcon: s.app_icon,
   });
 }
 
@@ -62,7 +67,8 @@ async function push(a: Appearance) {
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) {
       // Подписки на тему нет (её сняли или запрос подменён) — убираем тему у себя
-      useAppearance.getState().set({ colorTheme: null, customTheme: null });
+      const icon = useAppearance.getState().appIcon;
+      useAppearance.getState().set({ colorTheme: null, customTheme: null, appIcon: iconAllowed(icon, useThemeAccess.getState().tier) ? icon : DEFAULT_APP_ICON });
       onError?.(e.message);
     }
   }
@@ -87,13 +93,18 @@ export async function startAppearanceSync(toastError: (msg: string) => void) {
       // (кроме тем, на которые нет подписки)
       if (!r.access.color_themes && local.colorTheme) local.set({ colorTheme: null });
       if (!r.access.custom_theme && local.customTheme) local.set({ customTheme: null });
+      if (!iconAllowed(local.appIcon, r.access.tier)) local.set({ appIcon: DEFAULT_APP_ICON });
       if (local.syncDevices) void push(pick(useAppearance.getState()));
     } else if (r.settings.sync_devices) {
       const server = fromServer(r.settings);
       lastSent = JSON.stringify(toServer(server));
       useAppearance.getState().replace(server);
-    } else if ((!r.access.color_themes && local.colorTheme) || (!r.access.custom_theme && local.customTheme)) {
-      local.set({ colorTheme: r.access.color_themes ? local.colorTheme : null, customTheme: r.access.custom_theme ? local.customTheme : null });
+    } else if ((!r.access.color_themes && local.colorTheme) || (!r.access.custom_theme && local.customTheme) || !iconAllowed(local.appIcon, r.access.tier)) {
+      local.set({
+        colorTheme: r.access.color_themes ? local.colorTheme : null,
+        customTheme: r.access.custom_theme ? local.customTheme : null,
+        appIcon: iconAllowed(local.appIcon, r.access.tier) ? local.appIcon : DEFAULT_APP_ICON,
+      });
     }
   } catch {
     /* старый сервер без /settings/appearance — оформление только в этом браузере */

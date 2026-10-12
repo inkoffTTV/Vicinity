@@ -2,6 +2,7 @@
 // Хранится в localStorage и применяется атрибутами/переменными на <html> (CSS — styles.css, theme.css)
 // до первой отрисовки. С «Синхронизировать тему на моих устройствах» ещё и на сервере (lib/appearanceSync.ts).
 import { create } from 'zustand';
+import { APP_ICONS, applyFavicon, DEFAULT_APP_ICON } from './appIcon';
 import { accentForTheme, BaseTheme, ColorTheme, CustomTheme, gradientCss, themeById } from './themes';
 
 export type FontSize = 's' | 'm' | 'l';
@@ -30,6 +31,8 @@ export interface Appearance {
   /** Насыщенность цветов, % */
   saturation: number;
   highContrast: boolean;
+  /** Значок приложения (lib/appIcon.ts): базовые — всем, остальные со Standard/Ultra */
+  appIcon: string;
 }
 
 /** Временный предпросмотр темы (клик по цветовой теме без подписки) — не сохраняется */
@@ -67,6 +70,7 @@ export const DEFAULTS: Appearance = {
   reducedMotion: false,
   saturation: 100,
   highContrast: false,
+  appIcon: DEFAULT_APP_ICON,
 };
 const HEX = /^#[0-9a-f]{6}$/i;
 const BASES: BaseTheme[] = ['light', 'dark', 'graphite', 'black'];
@@ -104,6 +108,7 @@ export function sanitize(raw: any): Appearance {
     reducedMotion: src.reducedMotion === true,
     saturation: Number.isFinite(src.saturation) ? Math.max(0, Math.min(100, Math.round(src.saturation))) : 100,
     highContrast: src.highContrast === true,
+    appIcon: APP_ICONS.some((i) => i.id === src.appIcon) ? src.appIcon : DEFAULT_APP_ICON,
   };
 }
 
@@ -209,6 +214,7 @@ function apply(s: State) {
   // Цвет строки состояния мобильного браузера и окна установленного приложения
   const bar = { light: '#e9ecf1', dark: '#0e1015', graphite: '#1a1b1f', black: '#000000' }[base];
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bar);
+  applyFavicon(s.appIcon);
 }
 
 export const useAppearance = create<State>((set, get) => ({

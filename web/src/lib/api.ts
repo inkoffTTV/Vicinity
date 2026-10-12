@@ -69,6 +69,8 @@ export interface AppearanceSettings {
   reduce_motion: boolean;
   saturation: number;
   high_contrast: boolean;
+  /** Нет у старых серверов */
+  app_icon?: string;
 }
 
 export interface AppearanceResponse {
