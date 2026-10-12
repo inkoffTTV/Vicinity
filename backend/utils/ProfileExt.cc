@@ -182,6 +182,18 @@ bool sanitize(const Json::Value& in, int tier, const Json::Value& memberServerId
     }
     code = 400;
 
+    // Тема профиля: два цвета карточки (верх и низ) — со Standard
+    out["profile_theme"] = Json::nullValue;
+    if (in["profile_theme"].isObject()) {
+        const Json::Value& pt = in["profile_theme"];
+        if (!pt["top"].isString() || !pt["bottom"].isString() || !isHex(pt["top"].asString()) || !isHex(pt["bottom"].asString())) {
+            error = "Некорректная тема профиля"; code = 400; return false;
+        }
+        if (Tiers::clamp(tier) < 2) { error = "Тема профиля — с подпиской Standard"; code = 403; return false; }
+        out["profile_theme"]["top"]    = lower(pt["top"].asString());
+        out["profile_theme"]["bottom"] = lower(pt["bottom"].asString());
+    }
+
     // Подключённые аккаунты: до 10, имя до 40 символов, ссылка — только https://
     out["connections"] = Json::Value(Json::arrayValue);
     const Json::Value& conns = in["connections"];
@@ -252,6 +264,7 @@ Json::Value forDisplay(const std::string& stored, int tier) {
     };
     drop("frame", frames());
     drop("effect", effects());
+    if (v.isMember("profile_theme") && Tiers::clamp(tier) < 2) v["profile_theme"] = Json::nullValue;
     // Стиль ника — только если подписка его ещё позволяет
     if (v.isMember("name_style")) {
         Json::StreamWriterBuilder w;

@@ -12,6 +12,7 @@ import { Attachment } from './Attachment';
 import { Avatar } from './Avatar';
 import { EmojiPicker } from './EmojiPicker';
 import { Icon } from './Icon';
+import { ServerTag } from './ServerTag';
 import { Markdown } from './Markdown';
 
 /** Ник подписчика: цветом профиля (Basic+), градиентом (Ultra) — utils/Tiers.h на сервере */
@@ -138,6 +139,7 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
               >
                 {msg.author_name}
               </button>
+              {msg.author_badge && <ServerTag tag={msg.author_badge.tag} icon={msg.author_badge.icon} serverId={msg.author_badge.server_id} small />}
               <span className="msg-time" title={time.toLocaleString('ru-RU')}>
                 {formatTime(time)}
               </span>

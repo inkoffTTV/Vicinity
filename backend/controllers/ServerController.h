@@ -8,6 +8,7 @@ public:
     METHOD_LIST_BEGIN
     ADD_METHOD_TO(ServerController::createServer,        "/api/v1/servers",                 Post, Options, "AuthFilter");
     ADD_METHOD_TO(ServerController::listServers,         "/api/v1/servers",                 Get,  Options, "AuthFilter");
+    ADD_METHOD_TO(ServerController::card,                "/api/v1/servers/{id}/card",       Get,  Options, "AuthFilter");
     ADD_METHOD_TO(ServerController::joinServer,          "/api/v1/servers/{id}/join",       Post, Options, "AuthFilter");
     ADD_METHOD_TO(ServerController::joinByCode,          "/api/v1/servers/join",            Post, Options, "AuthFilter");
     ADD_METHOD_TO(ServerController::createServerChannel, "/api/v1/servers/{id}/channels",   Post, Options, "AuthFilter");
@@ -27,6 +28,7 @@ public:
 
     void createServer       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void listServers        (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void card               (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
     void joinServer         (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
     void joinByCode         (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void createServerChannel(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);

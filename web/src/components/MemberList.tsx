@@ -3,6 +3,7 @@ import { useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
+import { ServerTag } from './ServerTag';
 import { OwnerCrown, RoleChips } from './RoleChips';
 import { nameCss, parseNameStyle } from '../lib/nameStyle';
 
@@ -49,6 +50,7 @@ export function MemberList({ serverId }: { serverId: number }) {
                     <span className="ellipsis" style={memberNameStyle(m.name_style) ?? (topRole ? { color: topRole.color } : undefined)}>
                       {m.display_name}
                     </span>
+                    {m.badge && <ServerTag tag={m.badge.tag} icon={m.badge.icon} small />}
                     {m.is_owner && <OwnerCrown />}
                   </span>
                   <RoleChips roles={m.roles} />

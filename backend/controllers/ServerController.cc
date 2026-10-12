@@ -9,7 +9,9 @@
 #include "../utils/JsonUtils.h"
 #include "../utils/TextUtils.h"
 #include "../utils/ProfileExt.h"
+#include "../utils/Messages.h"
 #include "../utils/Tiers.h"
+#include <set>
 #include "../utils/Uploads.h"
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/HttpResponse.h>
@@ -97,12 +99,53 @@ static HttpResponsePtr ownerOnly(const DbClientPtr& db, int64_t serverId, int64_
 
 // {server_id, name, icon} сервера; с type — событие server_updated участникам
 static Json::Value serverInfo(const DbClientPtr& db, int64_t serverId) {
-    auto r = db->execSqlSync("SELECT name, icon FROM servers WHERE id = ?", serverId);
+    auto r = db->execSqlSync("SELECT name, icon, tag, tag_icon, description FROM servers WHERE id = ?", serverId);
     Json::Value v;
-    v["server_id"] = static_cast<Json::Int64>(serverId);
-    v["name"]      = r.empty() ? "" : r[0]["name"].as<std::string>();
-    v["icon"]      = r.empty() || r[0]["icon"].isNull() ? "" : r[0]["icon"].as<std::string>();
+    v["server_id"]   = static_cast<Json::Int64>(serverId);
+    v["name"]        = r.empty() ? "" : r[0]["name"].as<std::string>();
+    v["icon"]        = r.empty() || r[0]["icon"].isNull() ? "" : r[0]["icon"].as<std::string>();
+    v["tag"]         = r.empty() || r[0]["tag"].isNull() ? "" : r[0]["tag"].as<std::string>();
+    v["tag_icon"]    = r.empty() || r[0]["tag_icon"].isNull() ? "" : r[0]["tag_icon"].as<std::string>();
+    v["description"] = r.empty() || r[0]["description"].isNull() ? "" : r[0]["description"].as<std::string>();
     return v;
+}
+
+// Значки тега сервера (как они выглядят — web/src/lib/serverTag.ts)
+static const std::set<std::string>& tagIcons() {
+    static const std::set<std::string> s = {"zap", "crosshair", "shield", "terminal", "star", "flame", "heart",
+                                            "gamepad", "music", "moon", "leaf", "crown"};
+    return s;
+}
+
+// Тег: 2–4 буквы (латиница/кириллица) или цифры, в верхнем регистре; "" — убрать тег
+static bool cleanTag(const std::string& raw, std::string& out) {
+    out.clear();
+    const std::string t = TextUtils::trim(raw);
+    if (t.empty()) return true;
+    if (!TextUtils::isValidUtf8(t)) return false;
+    const size_t len = TextUtils::utf8Length(t);
+    if (len < 2 || len > 4) return false;
+    for (size_t i = 0; i < t.size();) {
+        const unsigned char c = static_cast<unsigned char>(t[i]);
+        if (c < 0x80) {
+            if (!std::isalnum(c)) return false;
+            out += static_cast<char>(std::toupper(c));
+            ++i;
+        } else if (c == 0xD0 || c == 0xD1) {
+            // Кириллица: а–я → А–Я (D0 B0..D0 BF → D0 90..D0 9F; D1 80..D1 8F → D0 A0..D0 AF; ё → Ё)
+            if (i + 1 >= t.size()) return false;
+            const unsigned char d = static_cast<unsigned char>(t[i + 1]);
+            if (c == 0xD0 && d >= 0xB0 && d <= 0xBF) { out += static_cast<char>(0xD0); out += static_cast<char>(d - 0x20); }
+            else if (c == 0xD1 && d >= 0x80 && d <= 0x8F) { out += static_cast<char>(0xD0); out += static_cast<char>(d + 0x20); }
+            else if (c == 0xD1 && d == 0x91) { out += static_cast<char>(0xD0); out += static_cast<char>(0x81); }
+            else if (c == 0xD0 && ((d >= 0x90 && d <= 0xAF) || d == 0x81)) { out += static_cast<char>(c); out += static_cast<char>(d); }
+            else return false;
+            i += 2;
+        } else {
+            return false;
+        }
+    }
+    return true;
 }
 
 static void serverUpdated(const Json::Value& info) {
@@ -168,7 +211,7 @@ void ServerController::listServers(const HttpRequestPtr& req,
     auto db = app().getDbClient();
     try {
         auto result = db->execSqlSync(
-            "SELECT s.id, s.name, s.icon, s.owner_id, s.invite_code FROM servers s "
+            "SELECT s.id, s.name, s.icon, s.owner_id, s.invite_code, s.tag, s.tag_icon, s.description FROM servers s "
             "JOIN server_members m ON s.id = m.server_id "
             "WHERE m.user_id = ? ORDER BY s.id ASC", userId);
         Json::Value arr(Json::arrayValue);
@@ -179,6 +222,9 @@ void ServerController::listServers(const HttpRequestPtr& req,
             s["icon"]        = row["icon"].isNull() ? "" : row["icon"].as<std::string>();
             s["owner_id"]    = row["owner_id"].as<int64_t>();
             s["invite_code"] = row["invite_code"].isNull() ? "" : row["invite_code"].as<std::string>();
+            s["tag"]         = row["tag"].isNull() ? "" : row["tag"].as<std::string>();
+            s["tag_icon"]    = row["tag_icon"].isNull() ? "" : row["tag_icon"].as<std::string>();
+            s["description"] = row["description"].isNull() ? "" : row["description"].as<std::string>();
             arr.append(s);
         }
         Json::Value resp; resp["servers"] = arr;
@@ -191,16 +237,46 @@ void ServerController::listServers(const HttpRequestPtr& req,
 // POST /api/v1/servers/{id}/join — раньше пускал в любой сервер по id в обход кода приглашения.
 // Маршрут оставлен для старых десктопов (AppState::joinServer): участнику отвечает «joined»,
 // остальным — 403, вступить можно только по коду (/servers/join).
+// GET /api/v1/servers/{id}/card — мини-карточка по бейджику: {server_id, name, icon, tag, tag_icon, description,
+// members, online, is_member}. Чужим — только серверы с тегом (владелец открыл их тегом).
+void ServerController::card(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t serverId) {
+    const int64_t userId = req->attributes()->get<int64_t>("user_id");
+    auto db = app().getDbClient();
+    try {
+        Json::Value v = serverInfo(db, serverId);
+        const bool member = Access::isServerMember(db, serverId, userId);
+        if (v["name"].asString().empty() || (!member && v["tag"].asString().empty())) {
+            cb(errResp("Сервер не найден", k404NotFound)); return;
+        }
+        auto ids = db->execSqlSync("SELECT user_id FROM server_members WHERE server_id = ?", serverId);
+        int online = 0;
+        for (const auto& r : ids)
+            if (WSManager::instance().isOnline(r["user_id"].as<int64_t>())) ++online;
+        v["members"]   = static_cast<Json::Int64>(ids.size());
+        v["online"]    = online;
+        v["is_member"] = member;
+        cb(jsonResp(v));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
 void ServerController::joinServer(const HttpRequestPtr& req,
                                   std::function<void(const HttpResponsePtr&)>&& cb,
                                   int64_t serverId) {
     int64_t userId = req->attributes()->get<int64_t>("user_id");
     auto db = app().getDbClient();
     try {
-        auto s = db->execSqlSync("SELECT id FROM servers WHERE id = ?", serverId);
+        auto s = db->execSqlSync("SELECT id, tag FROM servers WHERE id = ?", serverId);
         if (s.empty()) { cb(errResp("Server not found", k404NotFound)); return; }
         if (!Access::isServerMember(db, serverId, userId)) {
-            cb(errResp("Вступить можно только по коду приглашения", k403Forbidden)); return;
+            // Сервер с тегом открыт: в него вступают по бейджику участника; без тега — только по приглашению
+            if (s[0]["tag"].isNull()) { cb(errResp("Вступить можно только по коду приглашения", k403Forbidden)); return; }
+            if (Access::isBanned(db, serverId, userId)) { cb(errResp("Вы заблокированы на этом сервере", k403Forbidden)); return; }
+            if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::JoinByCode, userId)) { cb(tooManyRequests()); return; }
+            auto ins = db->execSqlSync("INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?) RETURNING user_id",
+                                       serverId, userId);
+            if (!ins.empty()) memberEvent("server_member_joined", serverId, userId);
         }
         Json::Value resp; resp["status"] = "joined"; resp["server_id"] = serverId;
         cb(jsonResp(resp));
@@ -372,7 +448,10 @@ void ServerController::listMembers(const HttpRequestPtr& req,
         }
         auto rows = db->execSqlSync(
             "SELECT u.id, u.username, u.display_name, u.avatar_path, u.presence, "
-            "       u.developer, u.subscription_tier, s.owner_id, json_extract(u.profile_ext, '$.name_style') AS name_style "
+            "       u.developer, u.subscription_tier, s.owner_id, json_extract(u.profile_ext, '$.name_style') AS name_style, "
+            "(SELECT bs.id || '|' || bs.tag || '|' || IFNULL(bs.tag_icon, '') FROM servers bs "
+            " JOIN server_members bm ON bm.server_id = bs.id AND bm.user_id = u.id "
+            " WHERE bs.id = json_extract(u.profile_ext, '$.badge_server') AND bs.tag IS NOT NULL) AS badge "
             "FROM server_members sm "
             "JOIN users u   ON u.id = sm.user_id "
             "JOIN servers s ON s.id = sm.server_id "
@@ -412,6 +491,7 @@ void ServerController::listMembers(const HttpRequestPtr& req,
             m["is_owner"]     = (r["owner_id"].as<int64_t>() == uid);
             m["developer"]    = r["developer"].isNull() ? 0 : r["developer"].as<int>();
             m["tier"]         = r["subscription_tier"].isNull() ? 0 : r["subscription_tier"].as<int>();
+            m["badge"]        = Messages::badgeFromString(r["badge"].isNull() ? std::string() : r["badge"].as<std::string>());
             m["name_style"]   = ProfileExt::nameStyleFromJson(r["name_style"].isNull() ? std::string() : r["name_style"].as<std::string>(),
                                                               m["tier"].asInt());
             m["roles"]        = rolesByUser.count(uid) ? rolesByUser[uid] : Json::Value(Json::arrayValue);
@@ -512,6 +592,21 @@ void ServerController::updateServer(const HttpRequestPtr& req,
     auto db = app().getDbClient();
     try {
         if (auto err = ownerOnly(db, serverId, self)) { cb(err); return; }
+        if (json->isMember("tag")) {
+            std::string tag;
+            if (!cleanTag(JsonUtils::getStr(*json, "tag"), tag)) {
+                cb(errResp("Тег — от 2 до 4 букв или цифр", k400BadRequest)); return;
+            }
+            std::string icon = JsonUtils::getStr(*json, "tag_icon");
+            if (!tagIcons().count(icon)) icon = "zap";
+            db->execSqlSync("UPDATE servers SET tag = NULLIF(?, ''), tag_icon = ? WHERE id = ?", tag, icon, serverId);
+        }
+        if (json->isMember("description")) {
+            std::string d = JsonUtils::getStr(*json, "description");
+            if (!TextUtils::isValidUtf8(d) || TextUtils::hasControlChars(d, true)) { cb(errResp("Некорректное описание", k400BadRequest)); return; }
+            d = TextUtils::trim(TextUtils::utf8Truncate(d, 190));
+            db->execSqlSync("UPDATE servers SET description = NULLIF(?, '') WHERE id = ?", d, serverId);
+        }
         db->execSqlSync("UPDATE servers SET name = ? WHERE id = ?", *name, serverId);
         const Json::Value info = serverInfo(db, serverId);
         serverUpdated(info);

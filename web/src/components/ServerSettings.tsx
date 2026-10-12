@@ -9,6 +9,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
 import { OwnerCrown, RoleChips } from './RoleChips';
+import { ServerTag, TAG_ICONS } from './ServerTag';
 import { ServerIcon } from './ServerRail';
 
 export type ServerTab = 'overview' | 'invites' | 'members' | 'bans' | 'danger';
@@ -82,17 +83,27 @@ function Overview({ serverId }: { serverId: number }) {
   const patchServer = useStore((s) => s.patchServer);
   const toast = useStore((s) => s.toast);
   const [name, setName] = useState(server.name);
+  const [tag, setTag] = useState(server.tag ?? '');
+  const [tagIconId, setTagIconId] = useState(server.tag_icon || 'zap');
+  const [description, setDescription] = useState(server.description ?? '');
   const [busy, setBusy] = useState(false);
+  const dirty =
+    name.trim() !== server.name ||
+    tag.trim().toUpperCase() !== (server.tag ?? '') ||
+    (tag.trim() !== '' && tagIconId !== (server.tag_icon || 'zap')) ||
+    description.trim() !== (server.description ?? '');
+  const tagOk = tag.trim() === '' || /^[A-Za-z0-9А-Яа-яЁё]{2,4}$/.test(tag.trim());
 
   const rename = async (e: FormEvent) => {
     e.preventDefault();
-    if (busy || !name.trim() || name.trim() === server.name) return;
+    if (busy || !name.trim() || !dirty || !tagOk) return;
     setBusy(true);
     try {
-      const r = await api.renameServer(serverId, name.trim());
-      patchServer(serverId, { name: r.name, icon: r.icon });
+      const r = await api.updateServer(serverId, { name: name.trim(), tag: tag.trim(), tag_icon: tagIconId, description: description.trim() });
+      patchServer(serverId, { name: r.name, icon: r.icon, tag: r.tag ?? '', tag_icon: r.tag_icon ?? '', description: r.description ?? '' });
       setName(r.name);
-      toast('Название сервера изменено');
+      setTag(r.tag ?? '');
+      toast('Сервер сохранён');
     } catch (err) {
       toast(errText(err), 'error');
     } finally {
@@ -143,9 +154,36 @@ function Overview({ serverId }: { serverId: number }) {
           Название сервера
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={64} required />
         </label>
+        <label>
+          Описание <span className="muted small">{description.length}/190</span>
+          <textarea value={description} maxLength={190} rows={2} placeholder="Чем живёт сервер — видно в карточке по тегу" onChange={(e) => setDescription(e.target.value)} />
+        </label>
+        <div className="server-tag-edit">
+          <label>
+            Тег сервера
+            <input value={tag} maxLength={4} placeholder="DIVE" onChange={(e) => setTag(e.target.value.toUpperCase())} className={tagOk ? '' : 'invalid'} />
+          </label>
+          <div className="server-tag-icons" role="radiogroup" aria-label="Значок тега">
+            {TAG_ICONS.map((t) => (
+              <button key={t.id} type="button" role="radio" aria-checked={tagIconId === t.id} aria-label={t.name} title={t.name} className={tagIconId === t.id ? 'on' : ''} onClick={() => setTagIconId(t.id)}>
+                <Icon icon={t.icon} size={16} />
+              </button>
+            ))}
+          </div>
+          {tag.trim() && tagOk && (
+            <span className="server-tag-preview">
+              Так выглядит у ника: <strong>{server.name}</strong> <ServerTag tag={tag.trim().toUpperCase()} icon={tagIconId} />
+            </span>
+          )}
+          <span className="muted small">
+            {tagOk
+              ? 'От 2 до 4 букв или цифр. Участники смогут показывать тег у своего ника, а сервер с тегом станет открытым: по нажатию на тег в него можно вступить без приглашения.'
+              : 'Тег — от 2 до 4 букв или цифр, без пробелов'}
+          </span>
+        </div>
         <div className="row end">
           <div className="grow" />
-          <button className="btn primary" disabled={busy || !name.trim() || name.trim() === server.name}>
+          <button className="btn primary" disabled={busy || !name.trim() || !dirty || !tagOk}>
             Сохранить
           </button>
         </div>

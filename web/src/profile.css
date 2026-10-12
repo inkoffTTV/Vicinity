@@ -1226,3 +1226,408 @@
     flex-basis: 100%;
   }
 }
+
+/* ---------- Тег сервера у ника (макет 6) ---------- */
+.server-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font: 700 11px/1 'Unbounded', 'Onest', sans-serif;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  vertical-align: middle;
+  flex: none;
+}
+.server-tag.small {
+  height: 16px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+button.server-tag {
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+button.server-tag:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.member-name .server-tag {
+  margin-left: 4px;
+}
+
+.server-card {
+  width: 280px;
+  padding: 0;
+  overflow: hidden;
+}
+.server-card-banner {
+  height: 56px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 55%, var(--bg-panel)), var(--bg-panel));
+}
+.server-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+.server-card-body.muted {
+  padding: 16px;
+}
+.server-card-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-top: -28px;
+  border-radius: 16px;
+  border: 4px solid var(--bg-modal);
+  background: var(--bg-input);
+  color: var(--accent);
+  overflow: hidden;
+}
+.server-card-icon > * {
+  width: 100%;
+  height: 100%;
+}
+.server-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 16px;
+}
+.server-card-stats {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.server-card-stats .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  background: var(--ok);
+}
+.server-card-stats .dot.muted-dot {
+  background: var(--text-3);
+}
+.server-card-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+/* Настройки сервера: тег */
+.server-tag-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.server-tag-edit input {
+  max-width: 120px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.server-tag-edit input.invalid {
+  border-color: var(--danger);
+}
+.server-tag-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.server-tag-icons button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.server-tag-icons button:hover {
+  color: var(--text);
+}
+.server-tag-icons button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-input));
+}
+.server-tag-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* Студия профиля: выбор тега */
+.studio-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.studio-badges button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: var(--bg-input);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.studio-badges button:hover {
+  border-color: var(--border);
+}
+.studio-badges button.on {
+  border-color: var(--accent);
+}
+.studio-badge-name {
+  min-width: 0;
+  font-size: 13px;
+}
+
+/* ---------- Тема профиля (макет 11): градиент карточки и подложка с контрастом ≥ 4,5 ---------- */
+.pcard.themed {
+  background: linear-gradient(180deg, var(--pt-top), var(--pt-bottom));
+  color: var(--pt-fg);
+}
+.pcard.themed .pcard-banner:not([style]) {
+  background: transparent;
+}
+.pcard.themed .pcard-avatar {
+  background: transparent;
+}
+.pcard.themed .pcard-avatar .presence-dot {
+  border-color: var(--pt-top);
+}
+.pcard.themed .pcard-status {
+  background: var(--pt-panel);
+  border-color: var(--pt-divider);
+  color: var(--pt-fg);
+}
+.pcard.themed .pcard-body {
+  margin: 8px 10px 10px;
+  border-radius: 16px;
+  background: var(--pt-panel);
+}
+.pcard.themed .pcard-sub,
+.pcard.themed .pcard-presence,
+.pcard.themed .pcard-body section h4,
+.pcard.themed .muted {
+  color: var(--pt-fg2);
+}
+.pcard.themed .pcard-body section + section {
+  border-top: 1px solid var(--pt-divider);
+  padding-top: 6px;
+}
+.pcard.themed .server-tag,
+.pcard.themed .pcard-guild {
+  background: var(--pt-tag-bg);
+  border-color: var(--pt-tag-border);
+  color: var(--pt-fg);
+}
+.pcard.themed .btn {
+  background: var(--pt-tag-bg);
+  border-color: var(--pt-tag-border);
+  color: var(--pt-fg);
+}
+.pcard.themed .btn.primary {
+  background: var(--pt-btn-bg);
+  border-color: transparent;
+  color: var(--pt-btn-fg);
+}
+.pcard.themed .icon-btn {
+  color: var(--pt-fg);
+}
+.pcard.themed a {
+  color: inherit;
+}
+
+/* Редактор темы */
+.pte {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pte-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pte-strip {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  border-radius: 14px;
+}
+.pte-dot {
+  min-width: 64px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pte-dot.on {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.pte-presets {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+.pte-presets button {
+  aspect-ratio: 1;
+  min-width: 0;
+  border-radius: 10px;
+  border: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.pte-presets button:hover {
+  transform: translateY(-2px);
+}
+.pte-presets button.on {
+  box-shadow: 0 0 0 2px var(--bg-modal), 0 0 0 4px var(--accent);
+}
+.pte-contrast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.pte-contrast-badge {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0e1015;
+  background: var(--ok);
+}
+.pte-contrast.warn .pte-contrast-badge {
+  background: var(--idle);
+}
+.pte .btn.small {
+  align-self: flex-start;
+}
+
+/* Свой выбор цвета */
+.cpick {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  animation: vc-pop 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.cpick-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.cpick-sv {
+  position: relative;
+  height: 140px;
+  border-radius: 10px;
+  touch-action: none;
+  cursor: crosshair;
+}
+.cpick-sv::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(to top, #000, rgba(0, 0, 0, 0)), linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
+}
+.cpick-hue {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  touch-action: none;
+  cursor: pointer;
+}
+.cpick-knob {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.cpick-hue .cpick-knob {
+  top: 50%;
+}
+.cpick-sv:focus-visible,
+.cpick-hue:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+.cpick-hex {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.cpick-hex input {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.04em;
+}
+.cpick-swatch {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+.cpick-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cpick-recent > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cpick-recent button {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  cursor: pointer;
+}

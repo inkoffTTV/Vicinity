@@ -3,10 +3,12 @@ import { ReactNode } from 'react';
 import { Connection, Presence } from '../../lib/api';
 import { connectionType } from '../../lib/cosmetics';
 import { NameStyle, nameCss } from '../../lib/nameStyle';
+import { ProfileTheme, themeSurface } from '../../lib/profileTheme';
 import { Avatar, PRESENCE_LABEL } from '../Avatar';
 import { Markdown } from '../Markdown';
 import { ServerIcon } from '../ServerRail';
 import { Icon } from '../Icon';
+import { ServerTag } from '../ServerTag';
 
 export interface CardData {
   id: number;
@@ -22,11 +24,13 @@ export interface CardData {
   bio: string;
   created_at: Date;
   badges: { id: string; label: string; color: string }[];
-  badge: { id: number; name: string; icon: string } | null;
+  badge: { id: number; name: string; icon: string; tag?: string; tag_icon?: string } | null;
   connections: Connection[];
   frame: string | null;
   effect: string | null;
   name_style: NameStyle | null;
+  /** Тема профиля: градиент карточки, подложка и цвет текста по контрасту */
+  theme?: ProfileTheme | null;
 }
 
 /** Ссылка подключённого аккаунта: своя или по имени (Twitch, GitHub, Telegram…) */
@@ -47,10 +51,14 @@ export function ConnectionTile({ type }: { type: string }) {
 /** Карточка профиля: баннер, аватар с рамкой, статус, имя в выбранном стиле, бейджи, о себе, подключения */
 export function ProfileCard({ d, actions, onBadge }: { d: CardData; actions?: ReactNode; onBadge?: () => void }) {
   return (
-    <article className={`pcard${d.effect ? ` effect-${d.effect}` : ''}`} aria-label={`Профиль ${d.display_name}`}>
+    <article
+      className={`pcard${d.effect ? ` effect-${d.effect}` : ''}${d.theme ? ` themed${themeSurface(d.theme).light ? ' light' : ''}` : ''}`}
+      style={d.theme ? themeSurface(d.theme).vars : undefined}
+      aria-label={`Профиль ${d.display_name}`}
+    >
       <div
         className="pcard-banner"
-        style={d.banner_path ? { backgroundImage: `url("${d.banner_path}")` } : { background: d.banner_color }}
+        style={d.banner_path ? { backgroundImage: `url("${d.banner_path}")` } : d.theme ? undefined : { background: d.banner_color }}
       />
       {d.effect && <div className={`pcard-effect fx-${d.effect}`} aria-hidden="true" />}
       <div className="pcard-head">
@@ -68,7 +76,9 @@ export function ProfileCard({ d, actions, onBadge }: { d: CardData; actions?: Re
         <div className="pcard-sub">
           <span>@{d.username}</span>
           {d.pronouns && <span>• {d.pronouns}</span>}
-          {d.badge && (
+          {d.badge?.tag ? (
+            <ServerTag tag={d.badge.tag} icon={d.badge.tag_icon} serverId={onBadge ? d.badge.id : undefined} />
+          ) : d.badge && (
             <button type="button" className="pcard-guild" onClick={onBadge} title={d.badge.name} disabled={!onBadge}>
               <span className="pcard-guild-icon">
                 <ServerIcon name={d.badge.name} icon={d.badge.icon} />

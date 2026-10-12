@@ -139,13 +139,15 @@ void UserController::profile(const HttpRequestPtr& req,
     if (badgeId.isIntegral()) {
         try {
             auto r = db->execSqlSync(
-                "SELECT s.id, s.name, s.icon FROM servers s JOIN server_members m ON m.server_id = s.id AND m.user_id = ? "
+                "SELECT s.id, s.name, s.icon, s.tag, s.tag_icon FROM servers s JOIN server_members m ON m.server_id = s.id AND m.user_id = ? "
                 "WHERE s.id = ?", id, badgeId.asInt64());
             if (!r.empty()) {
                 Json::Value b;
                 b["id"]   = static_cast<Json::Int64>(r[0]["id"].as<int64_t>());
                 b["name"] = r[0]["name"].as<std::string>();
                 b["icon"] = r[0]["icon"].isNull() ? std::string() : r[0]["icon"].as<std::string>();
+                b["tag"]      = r[0]["tag"].isNull() ? std::string() : r[0]["tag"].as<std::string>();
+                b["tag_icon"] = r[0]["tag_icon"].isNull() ? std::string() : r[0]["tag_icon"].as<std::string>();
                 resp["badge"] = b;
             }
         } catch (...) {}

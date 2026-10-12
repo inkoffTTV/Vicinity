@@ -665,7 +665,14 @@ export const useStore = create<State>((set, get) => {
         set({
           servers: s.servers.map((x) =>
             x.id === ev.server_id
-              ? { ...x, name: typeof ev.name === 'string' ? ev.name : x.name, icon: typeof ev.icon === 'string' ? ev.icon : x.icon }
+              ? {
+                  ...x,
+                  name: typeof ev.name === 'string' ? ev.name : x.name,
+                  icon: typeof ev.icon === 'string' ? ev.icon : x.icon,
+                  tag: typeof ev.tag === 'string' ? ev.tag : x.tag,
+                  tag_icon: typeof ev.tag_icon === 'string' ? ev.tag_icon : x.tag_icon,
+                  description: typeof ev.description === 'string' ? ev.description : x.description,
+                }
               : x,
           ),
         });

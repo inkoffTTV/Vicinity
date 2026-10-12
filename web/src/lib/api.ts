@@ -2,6 +2,7 @@
 // Веб-клиент отдаётся с того же origin, что и API, поэтому пути относительные.
 
 import { NameStyle, parseNameStyle } from './nameStyle';
+import { parseProfileTheme, ProfileTheme } from './profileTheme';
 
 export type Presence = 'online' | 'idle' | 'dnd' | 'invisible' | 'offline';
 
@@ -159,6 +160,7 @@ export interface Message {
   author_accent?: string;
   /** Стиль ника автора (lib/nameStyle.ts) — нет у старых серверов */
   author_style?: unknown;
+  author_badge?: Badge | null;
   text: string;
   created_at: string;
   edited: boolean;
@@ -238,6 +240,30 @@ export interface Server {
   icon: string;
   owner_id: number;
   invite_code: string;
+  /** Тег сервера (до 4 символов) — бейджик у ника участников; нет у старых серверов */
+  tag?: string;
+  tag_icon?: string;
+  description?: string;
+}
+
+/** Бейджик у ника: тег выбранного сервера */
+export interface Badge {
+  server_id: number;
+  tag: string;
+  icon: string;
+}
+
+/** Мини-карточка сервера по бейджику (GET /servers/{id}/card) */
+export interface ServerCard {
+  server_id: number;
+  name: string;
+  icon: string;
+  tag: string;
+  tag_icon: string;
+  description: string;
+  members: number;
+  online: number;
+  is_member: boolean;
 }
 
 export interface ServerChannel {
@@ -252,6 +278,7 @@ export interface Member extends UserSummary {
   tier: number;
   /** Стиль ника — нет у старых серверов */
   name_style?: unknown;
+  badge?: Badge | null;
   roles: { name: string; color: string }[];
 }
 
@@ -322,6 +349,9 @@ export interface ServerUpdate {
   server_id: number;
   name: string;
   icon: string;
+  tag?: string;
+  tag_icon?: string;
+  description?: string;
 }
 
 export interface Profile {
@@ -347,7 +377,7 @@ export interface Profile {
   /** Расширенный профиль сайта — нет у старых серверов */
   profile_ext?: Partial<ProfileExt>;
   /** Сервер-бейджик (выбран в профиле) */
-  badge?: { id: number; name: string; icon: string } | null;
+  badge?: { id: number; name: string; icon: string; tag?: string; tag_icon?: string } | null;
 }
 
 /** Игра из каталога Steam: обложку отдаёт наш сервер (/api/v1/games/{appid}/cover) */
@@ -375,6 +405,8 @@ export interface ProfileExt {
   effect: string | null;
   /** Стиль ника (lib/nameStyle.ts) */
   name_style: NameStyle | null;
+  /** Тема профиля — два цвета карточки (lib/profileTheme.ts), со Standard */
+  profile_theme: ProfileTheme | null;
   connections: Connection[];
   widgets: {
     favorite_game: FavoriteGame | null;
@@ -389,6 +421,7 @@ export const EMPTY_EXT: ProfileExt = {
   frame: null,
   effect: null,
   name_style: null,
+  profile_theme: null,
   connections: [],
   widgets: { favorite_game: null, games: [], wishlist: [], order: [] },
 };
@@ -401,6 +434,7 @@ export function normalizeExt(e: Partial<ProfileExt> | undefined | null): Profile
     frame: e?.frame ?? null,
     effect: e?.effect ?? null,
     name_style: parseNameStyle(e?.name_style),
+    profile_theme: parseProfileTheme(e?.profile_theme),
     connections: Array.isArray(e?.connections) ? e!.connections : [],
     widgets: {
       favorite_game: w.favorite_game ?? null,
@@ -622,6 +656,11 @@ export const api = {
   addServerMember: (id: number, user_id: number) => post(`/servers/${id}/members`, { user_id }),
   kick: (id: number, uid: number) => del(`/servers/${id}/members/${uid}`),
   renameServer: (id: number, name: string) => post<ServerUpdate>(`/servers/${id}/update`, { name }),
+  /** Название, тег, значок тега и описание (поля, которых нет, не меняются) */
+  updateServer: (id: number, fields: { name: string; tag?: string; tag_icon?: string; description?: string }) =>
+    post<ServerUpdate>(`/servers/${id}/update`, fields),
+  serverCard: (id: number) => get<ServerCard>(`/servers/${id}/card`),
+  joinServer: (id: number) => post<{ status: string; server_id: number }>(`/servers/${id}/join`),
   uploadServerIcon: (id: number, file: File) => {
     const fd = new FormData();
     fd.append('file', file, file.name);

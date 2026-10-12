@@ -71,6 +71,7 @@ export function ProfileModal({ userId }: { userId: number }) {
   if (applyMine && !self) {
     card.banner_path = '';
     card.banner_color = 'var(--theme-gradient, var(--accent))';
+    card.theme = null;
   }
 
   const actions = (

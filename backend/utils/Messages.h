@@ -19,6 +19,9 @@ extern const std::string kLastColumns;
 extern const std::string kLastJoin;
 
 // Сообщение из строки выборки kColumns; reactions — пустой массив (см. attachReactions)
+// Бейджик («id|ТЕГ|значок» из запроса) → {server_id, tag, icon} или null
+Json::Value badgeFromString(const std::string& s);
+
 Json::Value fromRow(const drogon::orm::Row& row);
 // {id, author_id, author_name, text, attachment, created_at} из строки с kLastColumns; null — сообщений нет
 Json::Value lastFromRow(const drogon::orm::Row& row);

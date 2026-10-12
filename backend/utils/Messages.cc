@@ -13,6 +13,9 @@ const std::string kColumns =
     "m.id, m.channel_id, m.author_id, u.display_name AS author_name, u.avatar_path AS author_avatar, "
     "u.subscription_tier AS author_tier, u.accent_color AS author_accent, "
     "json_extract(u.profile_ext, '$.name_style') AS author_style, "
+    "(SELECT bs.id || '|' || bs.tag || '|' || IFNULL(bs.tag_icon, '') FROM servers bs "
+    "JOIN server_members bm ON bm.server_id = bs.id AND bm.user_id = u.id "
+    "WHERE bs.id = json_extract(u.profile_ext, '$.badge_server') AND bs.tag IS NOT NULL) AS author_badge, "
     "m.text, m.created_at, m.edited, m.attachment, m.attachment_name, m.attachment_size, "
     "m.attachment_type, m.reply_to, "
     "rm.id AS reply_id, rm.author_id AS reply_author_id, ru.display_name AS reply_author_name, "
@@ -35,6 +38,17 @@ static std::string str(const drogon::orm::Row& row, const char* col) {
     return row[col].isNull() ? std::string() : row[col].as<std::string>();
 }
 
+Json::Value badgeFromString(const std::string& s) {
+    if (s.empty()) return Json::nullValue;
+    const auto a = s.find('|'), b = s.find('|', a + 1);
+    if (a == std::string::npos || b == std::string::npos) return Json::nullValue;
+    Json::Value v;
+    try { v["server_id"] = static_cast<Json::Int64>(std::stoll(s.substr(0, a))); } catch (...) { return Json::nullValue; }
+    v["tag"]  = s.substr(a + 1, b - a - 1);
+    v["icon"] = s.substr(b + 1);
+    return v;
+}
+
 static Json::Int64 int64(const drogon::orm::Row& row, const char* col) {
     return row[col].isNull() ? 0 : static_cast<Json::Int64>(row[col].as<int64_t>());
 }
@@ -50,6 +64,7 @@ Json::Value fromRow(const drogon::orm::Row& row) {
     msg["author_tier"]   = row["author_tier"].isNull() ? 0 : row["author_tier"].as<int>();
     msg["author_accent"] = str(row, "author_accent");
     msg["author_style"]  = ProfileExt::nameStyleFromJson(str(row, "author_style"), msg["author_tier"].asInt());
+    msg["author_badge"]  = badgeFromString(str(row, "author_badge"));
     msg["text"]          = str(row, "text");
     msg["created_at"]    = str(row, "created_at");
     msg["edited"]        = row["edited"].as<int>() != 0;

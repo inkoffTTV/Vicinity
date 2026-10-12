@@ -51,5 +51,6 @@ export function cardFromProfile(p: Profile, ext: ProfileExt, presence: Profile['
     frame: ext.frame,
     effect: ext.effect,
     name_style: ext.name_style,
+    theme: ext.profile_theme,
   };
 }

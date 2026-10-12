@@ -11,8 +11,10 @@ import { Avatar } from '../Avatar';
 import { Modal } from '../Modal';
 import { bannerColorOf, parseProfileJson, statusOf } from './cardData';
 import { NameStyleEditor } from './NameStyleEditor';
+import { ProfileThemeEditor } from './ProfileThemeEditor';
 import { ProfileBoard } from './ProfileBoard';
 import { ConnectionTile, ProfileCard } from './ProfileCard';
+import { ServerTag } from '../ServerTag';
 import { Icon } from '../Icon';
 
 /** Открыт ли редактор профиля (из своей карточки и из Настройки → Профиль) */
@@ -136,6 +138,7 @@ export function ProfileStudio() {
 
   const save = async () => {
     if (locked.length) return toast(`«${locked[0].name}» — с подпиской ${TIER_NAME[locked[0].tier]}`, 'error');
+    if (ext.profile_theme && tier < 2) return toast('Тема профиля — с подпиской Standard', 'error');
     setBusy(true);
     try {
       // Общие с десктопом поля profile_json (статус, цвет баннера) — остальные его ключи сохраняем как есть
@@ -179,11 +182,12 @@ export function ProfileStudio() {
     bio,
     created_at: profile ? parseTs(profile.created_at) : new Date(),
     badges: profile?.badges ?? [],
-    badge: badge ? { id: badge.id, name: badge.name, icon: badge.icon ?? '' } : null,
+    badge: badge ? { id: badge.id, name: badge.name, icon: badge.icon ?? '', tag: badge.tag, tag_icon: badge.tag_icon } : null,
     connections: ext.connections,
     frame: ext.frame,
     effect: ext.effect,
     name_style: ext.name_style,
+    theme: ext.profile_theme,
   };
 
   return (
@@ -193,15 +197,24 @@ export function ProfileStudio() {
           <div className="studio-title">Мой профиль</div>
 
           <Section title="Бейджик">
-            <select value={ext.badge_server ?? ''} onChange={(e) => editExt({ ...ext, badge_server: e.target.value ? Number(e.target.value) : null })} aria-label="Сервер-бейджик">
-              <option value="">Без бейджика</option>
-              {myServers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <span className="muted small">Тег одного из ваших серверов рядом с ником</span>
+            <div className="studio-badges" role="radiogroup" aria-label="Тег сервера у ника">
+              <button type="button" role="radio" aria-checked={!badge?.tag} className={!badge?.tag ? 'on' : ''} onClick={() => editExt({ ...ext, badge_server: null })}>
+                <span className="studio-badge-name">Без тега</span>
+              </button>
+              {myServers
+                .filter((s) => s.tag)
+                .map((s) => (
+                  <button key={s.id} type="button" role="radio" aria-checked={badge?.id === s.id} className={badge?.id === s.id ? 'on' : ''} onClick={() => editExt({ ...ext, badge_server: s.id })}>
+                    <ServerTag tag={s.tag!} icon={s.tag_icon} />
+                    <span className="studio-badge-name ellipsis">{s.name}</span>
+                  </button>
+                ))}
+            </div>
+            <span className="muted small">
+              {myServers.some((s) => s.tag)
+                ? 'Тег сервера рядом с ником — в сообщениях, списке участников и профиле. По нажатию другие увидят карточку сервера и смогут вступить.'
+                : 'Ни у одного из ваших серверов пока нет тега. Владелец задаёт его в настройках сервера → Обзор.'}
+            </span>
           </Section>
 
           <Section title="Аватар и рамка">
@@ -234,6 +247,11 @@ export function ProfileStudio() {
               )}
             </div>
             <span className="muted small">GIF-баннер — с подпиской Standard</span>
+          </Section>
+
+          <Section title="Тема профиля">
+            <span className="muted small">Два цвета — верх и низ карточки. Подложка и цвет текста подбираются автоматически.</span>
+            <ProfileThemeEditor value={ext.profile_theme} tier={tier} onChange={(profile_theme) => editExt({ ...ext, profile_theme })} />
           </Section>
 
           <Section title="Эффект профиля">
@@ -303,7 +321,7 @@ export function ProfileStudio() {
           {tier < 3 && (
             <div className="studio-promo">
               <strong>Прокачайте облик с подпиской</strong>
-              <span className="muted small">Рамки — с Basic, стили ника — со Standard, эффекты профиля — с Ultra. Подписку выдаёт администратор.</span>
+              <span className="muted small">Рамки — с Basic, стили ника и тема профиля — со Standard, эффекты профиля — с Ultra. Подписку выдаёт администратор.</span>
             </div>
           )}
         </aside>

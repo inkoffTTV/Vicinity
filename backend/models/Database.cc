@@ -240,6 +240,11 @@ void initialize() {
     // Устройство и адрес входа — для «Активных сеансов»
     exec("ALTER TABLE sessions ADD COLUMN user_agent TEXT DEFAULT NULL");
     exec("ALTER TABLE sessions ADD COLUMN ip TEXT DEFAULT NULL");
+    // Тег сервера (бейджик у ника участников, макет «6 · Бейджик»): до 4 символов, значок и описание.
+    // Сервер с тегом можно открыть по бейджику и вступить в него.
+    exec("ALTER TABLE servers ADD COLUMN tag TEXT DEFAULT NULL");
+    exec("ALTER TABLE servers ADD COLUMN tag_icon TEXT DEFAULT NULL");
+    exec("ALTER TABLE servers ADD COLUMN description TEXT DEFAULT NULL");
     // Блокировки: blocker не получает от blocked личных сообщений, звонков и заявок в друзья (и наоборот)
     exec("CREATE TABLE IF NOT EXISTS user_blocks ("
          "blocker_id INTEGER NOT NULL,"
