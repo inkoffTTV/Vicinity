@@ -13,7 +13,7 @@ test('group voice: stage tiles, screen share with LIVE, watching, cameras, sound
   const a = await registerUser(browser, 'Алиса');
   const b = await registerUser(browser, 'Боб');
   const c = await registerUser(browser, 'Ваня');
-  await setTier(c.username, 2); // Standard — 1080p30
+  await setTier(c.username, 2); // Standard — 1440p30
   await spyDisplayMedia(c);
   await c.page.reload();
   await expect(c.page.locator('.user-panel')).toContainText('В сети');
@@ -32,14 +32,14 @@ test('group voice: stage tiles, screen share with LIVE, watching, cameras, sound
   await channel(c).click();
   await expect(stage(a).locator('.stage-tile')).toHaveCount(3);
   await expect.poll(() => soundCount(a.page, 'userJoin')).toBe(2);
-  await expect(stage(c).locator('.quality-badge')).toHaveText('1080p30');
+  await expect(stage(c).locator('.quality-badge')).toHaveText('1440p30');
 
   // Ваня показывает экран: качество по подписке, у всех — LIVE и звук
   await stage(c).getByRole('button', { name: 'Показать экран' }).click();
-  await expect(stage(c).locator('.quality-badge.live')).toHaveText('1080p30');
+  await expect(stage(c).locator('.quality-badge.live')).toHaveText('1440p30');
   expect((await displayCalls(c.page)).at(-1).video).toMatchObject({
-    width: { max: 1920 },
-    height: { max: 1080 },
+    width: { max: 2560 },
+    height: { max: 1440 },
     frameRate: { max: 30 },
   });
   for (const u of [a, b]) {

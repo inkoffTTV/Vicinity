@@ -75,7 +75,7 @@ test('settings on a 360×640 phone: full-screen sheet, every tab scrolls to its 
   await expectOnScreen(page, modal.getByRole('button', { name: 'Сохранить' }), 'сохранить профиль');
   await modal.getByRole('button', { name: 'Сохранить' }).click({ trial: true });
 
-  for (const tab of ['Профиль', 'Аккаунт', 'Внешний вид', 'Уведомления', 'Голос и видео']) {
+  for (const tab of ['Профиль', 'Аккаунт', 'Тема', 'Специальные возможности', 'Подписка', 'Уведомления', 'Голос и видео']) {
     // Вкладка видна и нажимается, даже если строка разделов прокручена
     await settingsTab(u, tab).scrollIntoViewIfNeeded();
     await settingsTab(u, tab).click();

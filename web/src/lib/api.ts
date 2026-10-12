@@ -19,6 +19,107 @@ export interface Me {
   developer: number | boolean;
 }
 
+/** Что требует регистрация на этом сервере (GET /auth/registration) */
+export interface RegistrationInfo {
+  mode: 'email' | 'captcha' | 'open' | 'closed';
+  captcha: boolean;
+  email: boolean;
+  open: boolean;
+}
+
+/** Задача капчи ALTCHA (GET /auth/challenge) */
+export interface AltchaChallenge {
+  algorithm: string;
+  challenge: string;
+  maxnumber: number;
+  salt: string;
+  signature: string;
+}
+
+export interface RegisterStart {
+  username: string;
+  password: string;
+  display_name: string;
+  email?: string;
+  /** base64(JSON решения капчи) */
+  altcha?: string;
+  /** ловушка для ботов — всегда пустая */
+  website?: string;
+}
+
+export type RegisterStartResult =
+  | { token: string; user_id: number; display_name: string }
+  | { pending_id: string; email: string; expires_in: number; resend_in: number };
+
+/** Настройки оформления на сервере (GET/PATCH /settings/appearance) */
+export interface AppearanceSettings {
+  follow_system: boolean;
+  base_theme: 'light' | 'dark' | 'graphite' | 'black';
+  color_theme: string | null;
+  custom_theme: { colors: string[]; angle: number; base: 'light' | 'dark' } | null;
+  sync_devices: boolean;
+  apply_to_profiles: boolean;
+  server_theme: 'mine' | 'default';
+  accent: string;
+  font_size: 's' | 'm' | 'l';
+  compact: boolean;
+  reduce_motion: boolean;
+  saturation: number;
+  high_contrast: boolean;
+}
+
+export interface AppearanceResponse {
+  settings: AppearanceSettings;
+  access: { color_themes: boolean; custom_theme: boolean; tier: number };
+  stored: boolean;
+}
+
+/** Что даёт подписка (GET /subscription) — лимиты проверяет сервер */
+export interface Plan {
+  tier: number;
+  name: string;
+  files_mb: number;
+  screen: { height: number; fps: number };
+  camera_height: number;
+  /** -1 — без лимита */
+  servers: number;
+  bio: number;
+  animated_banner: boolean;
+  color_themes: boolean;
+  custom_theme: boolean;
+  name_color: boolean;
+  gradient_name: boolean;
+}
+
+/** Пользователь в админ-панели (GET /admin/users) */
+export interface AdminUser {
+  id: number;
+  username: string;
+  display_name: string;
+  avatar_path: string;
+  email: string;
+  signup_ip: string;
+  created_at: string;
+  banned: boolean;
+  developer: boolean;
+  subscription_tier: number;
+}
+
+export interface AdminUsers {
+  users: AdminUser[];
+  top_ips: { ip: string; count: number; last: string }[];
+  total: number;
+  last_day: number;
+  banned: number;
+}
+
+export interface BlockedIp {
+  ip: string;
+  note: string;
+  created_at: string;
+  accounts: number;
+}
+
 export interface UserSummary {
   id: number;
   username: string;
@@ -51,6 +152,9 @@ export interface Message {
   author_id: number;
   author_name: string;
   author_avatar: string;
+  /** Подписка автора (цветной ник с Basic, градиентный с Ultra) — нет у старых серверов */
+  author_tier?: number;
+  author_accent?: string;
   text: string;
   created_at: string;
   edited: boolean;
@@ -213,6 +317,70 @@ export interface Profile {
   friendship_status: string;
   mutual_servers: { id: number; name: string }[];
   mutual_friends: UserSummary[];
+  /** Расширенный профиль сайта — нет у старых серверов */
+  profile_ext?: Partial<ProfileExt>;
+  /** Сервер-бейджик (выбран в профиле) */
+  badge?: { id: number; name: string; icon: string } | null;
+}
+
+/** Игра из каталога Steam: обложку отдаёт наш сервер (/api/v1/games/{appid}/cover) */
+export interface Game {
+  appid: number;
+  name: string;
+  cover: string;
+}
+
+export interface FavoriteGame extends Game {
+  note: string;
+  tags: string[];
+}
+
+export interface Connection {
+  type: string;
+  name: string;
+  url: string;
+}
+
+/** Расширенный профиль (POST /profile/extras, docs/API.md §10.1) */
+export interface ProfileExt {
+  badge_server: number | null;
+  frame: string | null;
+  effect: string | null;
+  name_style: string | null;
+  connections: Connection[];
+  widgets: {
+    favorite_game: FavoriteGame | null;
+    games: Game[];
+    wishlist: Game[];
+    order: ('favorite_game' | 'games')[];
+  };
+}
+
+export const EMPTY_EXT: ProfileExt = {
+  badge_server: null,
+  frame: null,
+  effect: null,
+  name_style: null,
+  connections: [],
+  widgets: { favorite_game: null, games: [], wishlist: [], order: [] },
+};
+
+/** Расширенный профиль с сервера → полный объект (недостающее — пустое) */
+export function normalizeExt(e: Partial<ProfileExt> | undefined | null): ProfileExt {
+  const w: Partial<ProfileExt['widgets']> = e?.widgets ?? {};
+  return {
+    badge_server: e?.badge_server ?? null,
+    frame: e?.frame ?? null,
+    effect: e?.effect ?? null,
+    name_style: e?.name_style ?? null,
+    connections: Array.isArray(e?.connections) ? e!.connections : [],
+    widgets: {
+      favorite_game: w.favorite_game ?? null,
+      games: Array.isArray(w.games) ? w.games : [],
+      wishlist: Array.isArray(w.wishlist) ? w.wishlist : [],
+      order: Array.isArray(w.order) ? w.order : [],
+    },
+  };
 }
 
 export class ApiError extends Error {
@@ -311,6 +479,14 @@ export const api = {
     post<{ token: string; user_id: number }>('/auth/login', { username, password }),
   register: (username: string, password: string, display_name: string) =>
     post<{ token: string; user_id: number }>('/auth/register', { username, password, display_name }),
+  registrationInfo: () => get<RegistrationInfo>('/auth/registration'),
+  challenge: () => get<AltchaChallenge>('/auth/challenge'),
+  /** Режим email → {pending_id, …} (код ушёл на почту); иначе сразу {token, user_id} */
+  registerStart: (b: RegisterStart) => post<RegisterStartResult>('/auth/register/start', b),
+  registerVerify: (pending_id: string, code: string) =>
+    post<{ token: string; user_id: number }>('/auth/register/verify', { pending_id, code }),
+  registerResend: (pending_id: string) =>
+    post<{ resend_in: number; expires_in: number }>('/auth/register/resend', { pending_id }),
   logout: () => post('/auth/logout'),
   me: () => get<Me>('/auth/me'),
   changePassword: (old_password: string, new_password: string) =>
@@ -318,6 +494,21 @@ export const api = {
   sessions: () => get<{ sessions: Session[] }>('/auth/sessions').then((r) => r.sessions),
   revokeSession: (id: string) => del(`/auth/sessions/${encodeURIComponent(id)}`),
   revokeOtherSessions: () => del<{ status: string; revoked: number }>('/auth/sessions/others'),
+
+  // ── Подписка и оформление ──
+  subscription: () => get<{ tier: number; current: Plan; plans: Plan[] }>('/subscription'),
+  appearance: () => get<AppearanceResponse>('/settings/appearance'),
+  saveAppearance: (s: Partial<AppearanceSettings>) => request<AppearanceResponse>('PATCH', '/settings/appearance', s),
+
+  // ── Админ-панель (developer) ──
+  adminSetTier: (id: number, tier: number) => post<{ id: number; tier: number }>(`/admin/users/${id}/tier`, { tier }),
+  adminUsers: (q = '') => get<AdminUsers>(`/admin/users?q=${encodeURIComponent(q)}`),
+  adminBan: (id: number, banned: boolean) => post<{ id: number; banned: boolean }>(`/admin/users/${id}/ban`, { banned }),
+  adminDeleteUser: (id: number) => del<{ status: string }>(`/admin/users/${id}`),
+  adminBlockedIps: () => get<{ blocked: BlockedIp[] }>('/admin/blocked-ips').then((r) => r.blocked),
+  adminBlockIp: (ip: string, note: string, ban_accounts: boolean) =>
+    post<{ ip: string; banned: number }>('/admin/blocked-ips', { ip, note, ban_accounts }),
+  adminUnblockIp: (ip: string) => del<{ status: string }>(`/admin/blocked-ips/${encodeURIComponent(ip)}`),
 
   // ── Пользователи / лички ──
   searchUsers: (q: string) =>
@@ -423,6 +614,8 @@ export const api = {
     return request<{ file_url: string }>('POST', '/profile/upload', fd);
   },
   clearMedia: (field: 'avatar' | 'banner') => post('/profile/clear_media', { field }),
+  saveProfileExt: (ext: ProfileExt) => post<ProfileExt>('/profile/extras', ext),
+  searchGames: (q: string) => get<{ games: Game[] }>(`/games/search?q=${encodeURIComponent(q)}`).then((r) => r.games),
 
   // ── Ответы, прочитанное, поиск, закрепы, участники бесед (docs/API.md §2–§7) ──
   messagesAround: (channelId: number, around: number, limit = 50) =>

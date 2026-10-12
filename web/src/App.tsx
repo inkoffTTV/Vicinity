@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useAppearance } from './lib/prefs';
 import { setAppBadge } from './lib/pwa';
 import { useInvite } from './lib/router';
 import { useSearch } from './lib/search';
@@ -24,6 +25,7 @@ import { CallOverlay } from './components/CallOverlay';
 import { VoiceStage } from './components/VoiceStage';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { SearchPanel } from './components/Search';
+import { ProfileStudio, useProfileStudio } from './components/profile/ProfileStudio';
 
 export default function App() {
   const booting = useStore((s) => s.booting);
@@ -33,6 +35,7 @@ export default function App() {
   const view = useStore((s) => s.view);
   const profileUserId = useStore((s) => s.profileUserId);
   const settingsOpen = useStore((s) => s.settingsOpen);
+  const studioOpen = useProfileStudio((s) => s.open);
   const inVoice = useVoice((s) => s.channelId !== null);
   const stageOpen = useVoiceVideo((s) => s.stageOpen);
   const searchOpen = useSearch((s) => s.open);
@@ -57,6 +60,10 @@ export default function App() {
 
   // На мобильном — закрывать меню при переходе
   useEffect(() => setNavOpen(false), [view, stageOpen]);
+
+  // «Тема по умолчанию на серверах»: на сервере можно показывать стандартную тему вместо своей
+  const inServer = !!me && view.kind === 'server';
+  useEffect(() => useAppearance.getState().setInServer(inServer), [inServer]);
 
   // Счётчик во вкладке браузера и на значке приложения: личные сообщения и упоминания
   const unreadTotal = useStore(attentionCount);
@@ -104,6 +111,7 @@ export default function App() {
       )}
       {profileUserId !== null && <ProfileModal userId={profileUserId} />}
       {settingsOpen && <Settings />}
+      {studioOpen && <ProfileStudio />}
       {inviteCode && <InviteCard code={inviteCode} />}
       {switcher && <QuickSwitcher onClose={closeSwitcher} />}
       <UserMenu />

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  CAMERA_CONSTRAINTS,
+  cameraConstraints,
   canShareScreen,
   mediaError,
   openScreen,
@@ -351,7 +351,7 @@ export const useVoiceVideo = create<VoiceVideoState>((set, get) => ({
     if (!useVoice.getState().joined) return;
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: CAMERA_CONSTRAINTS });
+      stream = await navigator.mediaDevices.getUserMedia({ video: cameraConstraints() });
     } catch (e) {
       return toast(mediaError(e, 'camera'), 'error');
     }

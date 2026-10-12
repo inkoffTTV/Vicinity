@@ -17,8 +17,10 @@ import {
   UploadedFile,
   UserSummary,
 } from './api';
+import { startAppearanceSync, stopAppearanceSync } from './appearanceSync';
 import { mentionsUser } from './markdown';
 import { notifyMessage } from './notify';
+import { loadPlan } from './plan';
 import { parsePath, viewForRoute } from './routes';
 import { socket, WsEvent } from './ws';
 
@@ -102,6 +104,8 @@ interface State {
   retryBoot: () => void;
   login: (u: string, p: string) => Promise<void>;
   register: (u: string, p: string, d: string) => Promise<void>;
+  /** Войти с токеном, выданным регистрацией (/auth/register/start или /verify) */
+  signInWithToken: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
   refreshServers: () => Promise<void>;
@@ -831,6 +835,9 @@ export const useStore = create<State>((set, get) => {
     set({ me, presence: { ...get().presence, [me.user_id]: me.presence } });
     get().open(v);
     void get().loadUnread();
+    // Тема с других устройств и что даёт подписка
+    void startAppearanceSync((msg) => get().toast(msg, 'error'));
+    void loadPlan();
   };
 
   // Вход при загрузке страницы. Нет сети или 5xx (перезапуск сервера за nginx) — не выходим,
@@ -884,6 +891,7 @@ export const useStore = create<State>((set, get) => {
   // Полный сброс при выходе/401: следующему пользователю в этой вкладке не должно достаться ничего
   const resetSession = () => {
     epoch++;
+    stopAppearanceSync();
     socket.disconnect();
     setToken(null);
     forgetView();
@@ -1032,6 +1040,11 @@ export const useStore = create<State>((set, get) => {
     register: async (u, p, d) => {
       const r = await api.register(u, p, d);
       setToken(r.token);
+      await startSession();
+    },
+
+    signInWithToken: async (token) => {
+      setToken(token);
       await startSession();
     },
 

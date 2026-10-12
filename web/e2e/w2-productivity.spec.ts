@@ -131,7 +131,8 @@ test('role chips, user context menu, clickable mutual servers and friends in the
   const page = a.page;
   await expect(page.locator('.members .member', { hasText: 'Борис' }).locator('.role-chip')).toHaveText('Модератор');
   await page.locator('.msg-author', { hasText: 'Борис' }).click();
-  await expect(page.locator('.profile-card section', { hasText: 'Роли' }).locator('.role-chip')).toHaveText('Модератор');
+  await page.locator('.profile-view').getByRole('tab', { name: 'Активность' }).click();
+  await expect(page.locator('.profile-view section.widget', { hasText: 'Роли' }).locator('.role-chip')).toHaveText('Модератор');
   await page.keyboard.press('Escape');
 
   // Правая кнопка на авторе сообщения: профиль, написать, в друзья, копировать id
@@ -154,12 +155,14 @@ test('role chips, user context menu, clickable mutual servers and friends in the
 
   // Профиль: общие друзья и серверы — ссылки
   await page.locator('.chat-title', { hasText: 'Борис' }).click();
-  const card = page.locator('.profile-card');
+  const card = page.locator('.profile-view');
   await expect(card.locator('h2')).toHaveText('Борис');
+  await card.getByRole('tab', { name: 'Активность' }).click();
   await card.locator('.profile-link', { hasText: 'Вера' }).click();
   await expect(card.locator('h2')).toHaveText('Вера');
   await page.keyboard.press('Escape');
   await page.locator('.chat-title', { hasText: 'Борис' }).click();
+  await card.getByRole('tab', { name: 'Активность' }).click();
   await card.locator('.profile-link', { hasText: 'Общий клуб' }).click();
   await expect(card).toHaveCount(0);
   await expect(page.locator('.side-head', { hasText: 'Общий клуб' })).toBeVisible();

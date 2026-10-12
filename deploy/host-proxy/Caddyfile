@@ -7,9 +7,9 @@
 # X-Forwarded-Proto reverse_proxy передаёт сам, таймаутов для WebSocket у него нет.
 
 chat.example.com {
-	# Аватары и вложения до 15 МБ (+ запас на multipart) — как в контейнере
+	# Вложения до 100 МБ у подписчиков Ultra (+ запас на multipart) — как в контейнере
 	request_body {
-		max_size 20MB
+		max_size 110MB
 	}
 	header Strict-Transport-Security "max-age=31536000"
 	reverse_proxy 127.0.0.1:8081

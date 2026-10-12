@@ -52,7 +52,7 @@ for (const [name, viewport, colorScheme] of [
     await shot('settings-account');
     await page.locator('#settings-panel').evaluate((el) => (el.scrollTop = el.scrollHeight));
     await shot('settings-account-bottom');
-    await settingsTab(a, 'Внешний вид').click();
+    await settingsTab(a, 'Тема').click();
     await shot('settings-appearance');
     await settingsTab(a, 'Голос и видео').click();
     await shot('settings-voice');

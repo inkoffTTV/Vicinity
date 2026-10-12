@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from './api';
+import { usePlan } from './plan';
 
 // Микрофон, камера и вывод звука — общее для голосовых каналов и звонков
 
@@ -123,9 +124,10 @@ export async function rtcIceServers(): Promise<RTCIceServer[]> {
 }
 
 // ── Качество показа экрана по подписке ──
-// Ultra — до 2560×1440 @ 60 к/с, Standard — 1080p30, Basic и без подписки — 720p30. Выше 1440p не бывает:
-// 4K съедает канал и процессор без заметной пользы. Десктоп-клиент декодирует H264 уровня 3.1 —
-// собеседнику-десктопу больше 1080p30 не шлём.
+// Потолок задаёт сервер (GET /subscription → screen {height, fps}, backend/utils/Tiers.cc):
+// без подписки 1080p30, Basic 1080p60, Standard 1440p30, Ultra 1440p60. Выше 1440p не бывает:
+// 4K съедает канал и процессор без заметной пользы. «Чёткость» — то же разрешение при 30 к/с.
+// Десктоп-клиент декодирует H264 уровня 3.1 — собеседнику-десктопу больше 1080p30 не шлём.
 
 export type ScreenMode = 'motion' | 'detail';
 
@@ -146,34 +148,26 @@ export interface ScreenQuality {
 
 export const TIER_NAMES = ['Без подписки', 'Basic', 'Standard', 'Ultra'];
 
+/** Битрейт под разрешение и частоту: 1080p30 ≈ 4 Мбит/с, 1440p60 ≈ 9 Мбит/с */
+function bitrateFor(height: number, fps: number): number {
+  return Math.round(Math.min(10_000_000, 4_000_000 * ((height * height) / (1080 * 1080)) * Math.sqrt(fps / 30)));
+}
+
 export function screenQuality(tier: number, mode: ScreenMode, opts: { desktopPeer?: boolean } = {}): ScreenQuality {
-  let width = 1280;
-  let height = 720;
-  let fps = 30;
-  let maxBitrate = 2_500_000;
-  if (tier >= 3) {
-    width = 2560;
-    height = 1440;
-    fps = mode === 'motion' ? 60 : 30;
-    maxBitrate = mode === 'motion' ? 8_000_000 : 6_000_000;
-  } else if (tier === 2) {
-    width = 1920;
-    height = 1080;
-    maxBitrate = 4_000_000;
-  }
+  const plan = usePlan.getState().current.screen;
+  let height = Math.min(plan.height, 1440);
+  let fps = mode === 'motion' ? plan.fps : 30;
   let capped = false;
   if (opts.desktopPeer && (height > 1080 || fps > 30)) {
-    width = Math.min(width, 1920);
     height = Math.min(height, 1080);
     fps = 30;
-    maxBitrate = Math.min(maxBitrate, 4_000_000);
     capped = true;
   }
   return {
-    width,
+    width: Math.round((height * 16) / 9),
     height,
     fps,
-    maxBitrate,
+    maxBitrate: bitrateFor(height, fps),
     label: `${height}p${fps}`,
     upgradable: tier < 3,
     capped,
@@ -236,12 +230,12 @@ export async function tuneScreenSender(sender: RTCRtpSender, q: ScreenQuality) {
   }
 }
 
-/** Отправитель камеры: до 1.5 Мбит/с, 30 к/с */
+/** Отправитель камеры: 30 к/с, до 1.5 Мбит/с (1080p у Ultra — до 3 Мбит/с) */
 export async function tuneCameraSender(sender: RTCRtpSender) {
   try {
     const p = sender.getParameters();
     if (!p.encodings?.length) return;
-    p.encodings[0].maxBitrate = 1_500_000;
+    p.encodings[0].maxBitrate = usePlan.getState().current.camera_height >= 1080 ? 3_000_000 : 1_500_000;
     p.encodings[0].maxFramerate = 30;
     await sender.setParameters(p);
   } catch {
@@ -249,8 +243,8 @@ export async function tuneCameraSender(sender: RTCRtpSender) {
   }
 }
 
-export const CAMERA_CONSTRAINTS: MediaTrackConstraints = {
-  width: { ideal: 1280 },
-  height: { ideal: 720 },
-  frameRate: { ideal: 30, max: 30 },
-};
+/** Камера по подписке (GET /subscription, lib/plan.ts): 720p, у Ultra — 1080p; 30 к/с */
+export function cameraConstraints(): MediaTrackConstraints {
+  const h = usePlan.getState().current.camera_height;
+  return { width: { ideal: Math.round((h * 16) / 9) }, height: { ideal: h }, frameRate: { ideal: 30, max: 30 } };
+}

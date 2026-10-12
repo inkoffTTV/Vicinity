@@ -26,7 +26,7 @@ test('1:1 call: source swap, fullscreen, tier screen quality, sounds', async ({ 
   const a = await registerUser(browser, 'Алиса');
   const b = await registerUser(browser, 'Боб');
   await makeFriends(a, b);
-  // У Алисы Ultra — экран до 1440p60, у Боба подписки нет — 720p30
+  // У Алисы Ultra — экран до 1440p60, у Боба подписки нет — 1080p30
   await setTier(a.username, 3);
   await spyDisplayMedia(a);
   await spyDisplayMedia(b);
@@ -51,8 +51,8 @@ test('1:1 call: source swap, fullscreen, tier screen quality, sounds', async ({ 
   // Без видео — аватар крупно
   await expect(stage(a)).toHaveAttribute('data-main', 'peer');
 
-  // Боб: камера и экран (без подписки — 720p30)
-  await expect(win(b).locator('.quality-badge')).toHaveText('720p30');
+  // Боб: камера и экран (без подписки — 1080p30)
+  await expect(win(b).locator('.quality-badge')).toHaveText('1080p30');
   await win(b).getByRole('button', { name: 'Качество показа экрана' }).click();
   await expect(b.page.locator('.screen-quality-menu .upgrade-hint')).toContainText('Ultra');
   await b.page.keyboard.press('Escape');
@@ -62,9 +62,9 @@ test('1:1 call: source swap, fullscreen, tier screen quality, sounds', async ({ 
   await expect.poll(() => soundCount(a.page, 'streamStart')).toBe(1);
   await expect(stage(a)).toHaveAttribute('data-main', 'remote-camera');
   await win(b).getByRole('button', { name: 'Показать экран' }).click();
-  await expect(win(b)).toContainText('Вы показываете экран · 720p30');
+  await expect(win(b)).toContainText('Вы показываете экран · 1080p30');
   const bCall = (await displayCalls(b.page)).at(-1);
-  expect(bCall.video).toMatchObject({ width: { max: 1280 }, height: { max: 720 }, frameRate: { max: 30 } });
+  expect(bCall.video).toMatchObject({ width: { max: 1920 }, height: { max: 1080 }, frameRate: { max: 30 } });
 
   // У Алисы экран Боба крупно (экран важнее камеры), камера — миниатюрой
   await expect(stage(a)).toHaveAttribute('data-main', 'remote-screen');
@@ -98,7 +98,7 @@ test('1:1 call: source swap, fullscreen, tier screen quality, sounds', async ({ 
   expect(await soundCount(a.page, 'mute')).toBe(1);
   expect(await soundCount(a.page, 'unmute')).toBe(1);
 
-  // Алиса показывает экран: Ultra и «Плавность» — 1440p60 с потолком 8 Мбит/с
+  // Алиса показывает экран: Ultra и «Плавность» — 1440p60 с потолком 10 Мбит/с
   await expect(win(a).locator('.quality-badge')).toHaveText('1440p60');
   await win(a).getByRole('button', { name: 'Показать экран' }).click();
   await expect(win(a)).toContainText('Вы показываете экран · 1440p60');
@@ -110,7 +110,7 @@ test('1:1 call: source swap, fullscreen, tier screen quality, sounds', async ({ 
   });
   await expect
     .poll(() => a.page.evaluate(() => (window as any).__vicinityMedia.screen?.params?.encodings?.[0] ?? null))
-    .toMatchObject({ maxBitrate: 8_000_000, maxFramerate: 60 });
+    .toMatchObject({ maxBitrate: 10_000_000, maxFramerate: 60 });
   // Своё превью — миниатюрой
   await expect(win(a).getByRole('button', { name: 'Показать крупно: Ваш экран' })).toBeVisible();
   await expect(stage(b)).toHaveAttribute('data-main', 'remote-screen');

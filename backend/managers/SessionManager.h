@@ -31,6 +31,8 @@ public:
     std::vector<SessionRecord> listSessions(int64_t userId, const std::string& currentToken);
     // Завершить все сессии пользователя, кроме текущей (с закрытием их WS). Возвращает число завершённых.
     int deleteOtherSessions(int64_t userId, const std::string& currentToken);
+    // Завершить все сессии пользователя (блокировка аккаунта). Возвращает число завершённых.
+    int deleteAllSessions(int64_t userId);
     // Завершить сессию пользователя по её id из listSessions. false — такой нет.
     bool deleteSessionById(int64_t userId, const std::string& id);
 

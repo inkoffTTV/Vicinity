@@ -8,4 +8,7 @@
 namespace Cascade {
     void deleteChannel(const drogon::orm::DbClientPtr& db, int64_t channelId);
     void deleteServer(const drogon::orm::DbClientPtr& db, int64_t serverId);
+    // Удалить аккаунт со всеми его сообщениями, реакциями, участием и сессиями (админ-панель).
+    // Серверы, которыми он владеет, не трогает — вызывающий проверяет это заранее.
+    void deleteUser(const drogon::orm::DbClientPtr& db, int64_t userId);
 }

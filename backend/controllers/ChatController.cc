@@ -6,7 +6,9 @@
 #include "../utils/JsonUtils.h"
 #include "../utils/Messages.h"
 #include "../utils/TextUtils.h"
+#include "../utils/Tiers.h"
 #include "../utils/Uploads.h"
+#include "../models/User.h"
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/drogon.h>
 #include <json/json.h>
@@ -410,7 +412,9 @@ void ChatController::uploadAttachment(const HttpRequestPtr& req,
         if (fileUpload.parse(req) != 0 || fileUpload.getFiles().empty()) {
             cb(error("Invalid file upload", k400BadRequest)); return;
         }
-        auto saved = Uploads::saveAttachment(fileUpload.getFiles()[0]);
+        const auto me = UserModel::findById(userId);
+        auto saved = Uploads::saveAttachment(fileUpload.getFiles()[0],
+                                             Tiers::uploadLimitBytes(me ? me->subscriptionTier : 0));
         if (!saved.error.empty()) { cb(error(saved.error, saved.code)); return; }
 
         Json::Value resp;

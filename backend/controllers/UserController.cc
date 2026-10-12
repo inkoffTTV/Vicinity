@@ -3,6 +3,7 @@
 #include "../utils/PresenceUtil.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/Messages.h"
+#include "../utils/ProfileExt.h"
 #include <drogon/HttpResponse.h>
 
 using namespace drogon;
@@ -83,6 +84,8 @@ void UserController::profile(const HttpRequestPtr& req,
     resp["subscription_tier"] = u->subscriptionTier;
     resp["developer"]         = u->developer;
     resp["badges"]            = computeBadges(*u);
+    // Расширенный профиль сайта: украшения без подписки не показываются (utils/ProfileExt.h)
+    resp["profile_ext"]       = ProfileExt::forDisplay(u->profileExt, u->subscriptionTier);
     resp["presence"]          = (id == self) ? u->presence : effectivePresence(id);
     resp["friendship_status"] = (id == self) ? "self" : friendshipStatus(self, id);
 
@@ -126,6 +129,24 @@ void UserController::profile(const HttpRequestPtr& req,
         } catch (...) {}
     }
     resp["mutual_friends"] = mfriends;
+
+    // Бейджик — сервер, который человек выбрал: название и иконка (если он всё ещё в нём состоит)
+    resp["badge"] = Json::nullValue;
+    const Json::Value& badgeId = resp["profile_ext"]["badge_server"];
+    if (badgeId.isIntegral()) {
+        try {
+            auto r = db->execSqlSync(
+                "SELECT s.id, s.name, s.icon FROM servers s JOIN server_members m ON m.server_id = s.id AND m.user_id = ? "
+                "WHERE s.id = ?", id, badgeId.asInt64());
+            if (!r.empty()) {
+                Json::Value b;
+                b["id"]   = static_cast<Json::Int64>(r[0]["id"].as<int64_t>());
+                b["name"] = r[0]["name"].as<std::string>();
+                b["icon"] = r[0]["icon"].isNull() ? std::string() : r[0]["icon"].as<std::string>();
+                resp["badge"] = b;
+            }
+        } catch (...) {}
+    }
 
     cb(jsonResp(resp));
 }

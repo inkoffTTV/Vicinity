@@ -112,4 +112,27 @@ std::string hmacSha1Base64(const std::string& key, const std::string& data) {
     return out;
 }
 
+std::string hmacSha256Hex(const std::string& key, const std::string& data) {
+    unsigned char mac[EVP_MAX_MD_SIZE];
+    unsigned int macLen = 0;
+    if (!HMAC(EVP_sha256(), key.data(), static_cast<int>(key.size()),
+              reinterpret_cast<const unsigned char*>(data.data()), data.size(), mac, &macLen))
+        throw std::runtime_error("HMAC failed");
+    return toHex(mac, macLen);
+}
+
+bool constTimeEquals(const std::string& a, const std::string& b) { return constTimeEq(a, b); }
+
+uint64_t randomBelow(uint64_t bound) {
+    if (bound <= 1) return 0;
+    // Отбрасываем хвост, который не делится на bound нацело, — иначе младшие значения выпадали бы чаще
+    const uint64_t limit = UINT64_MAX - (UINT64_MAX % bound);
+    for (;;) {
+        uint64_t v = 0;
+        if (RAND_bytes(reinterpret_cast<unsigned char*>(&v), sizeof v) != 1)
+            throw std::runtime_error("RAND_bytes failed");
+        if (v < limit) return v % bound;
+    }
+}
+
 } // namespace CryptoUtils

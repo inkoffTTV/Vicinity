@@ -12,6 +12,93 @@ WebSocket `/ws` принимает токен в заголовке или ка�
 
 ---
 
+## 0. Регистрация и админ-панель **[new]**
+
+Режим регистрации — `custom_config.registration.mode` (Docker: `VICINITY_REGISTRATION`):
+`email` (капча + код из письма; по умолчанию, если настроен SMTP), `captcha` (только капча; по умолчанию без SMTP),
+`open` (без проверок), `closed`. Лимит — `signups_per_ip_per_day` успешных регистраций с одного IP за сутки
+(по умолчанию 3, `0` — без лимита). IP — адрес соединения или `X-Real-IP` от доверенного прокси (`trusted_proxies`).
+
+- GET `/auth/registration` → `{mode, captcha, email, open}` — что требуется; форма регистрации подстраивается.
+- GET `/auth/challenge` → задача капчи [ALTCHA](https://altcha.org/docs/server-integration/):
+  `{algorithm:"SHA-256", challenge, maxnumber, salt, signature}`. Решение — число `n ≤ maxnumber`, при котором
+  `hex(SHA-256(salt + n)) == challenge`; в запрос кладётся `base64(JSON{algorithm, challenge, number, salt, signature})`.
+  Задача живёт 10 минут, каждое решение принимается один раз, ключ подписи меняется при перезапуске сервера.
+- POST `/auth/register/start` `{username, password, display_name, email?, altcha?, website?}`:
+  `website` — ловушка для ботов (должно быть пустым), `altcha` обязателен в режимах `email` и `captcha`,
+  `email` — в режиме `email`.
+  - режим `email` → **202** `{pending_id, email (замаскированный), expires_in, resend_in}`, код ушёл на почту;
+  - режим `captcha`/`open` → **201** `{token, user_id, display_name}` — как старый `/auth/register`.
+  Ошибки: 400 (поля, капча, одноразовая почта), 403 (закрыто, IP заблокирован), 409 (логин или почта заняты),
+  429 (лимит с IP), 503 (режим `email` без SMTP).
+- POST `/auth/register/verify` `{pending_id, code}` → **201** `{token, user_id, display_name}`.
+  Код — 6 цифр, действует 15 минут, 5 неверных попыток — регистрация сбрасывается (429); устарела — 410.
+- POST `/auth/register/resend` `{pending_id}` → `{resend_in, expires_in}` — новый код; не чаще раза в минуту
+  и не больше 5 писем (429).
+- POST `/auth/register` (старый путь, десктоп) работает только в режиме `open`; иначе **403** с текстом
+  «Регистрация теперь проходит на сайте …» — десктоп показывает его как ошибку.
+- Почта нормализуется для правила «один ящик — один аккаунт»: нижний регистр, без `+метки`, у Gmail без точек.
+
+Заблокированный аккаунт (`users.banned = 1`): вход — **403** «Аккаунт заблокирован администратором»,
+все его токены — 401, WS-подключения закрываются.
+
+Админ-панель — только `developer = 1` (остальным 403):
+- GET `/admin/users?q=&limit=` → `{users:[{id, username, display_name, avatar_path, email, signup_ip, created_at,
+  banned, developer, subscription_tier}], top_ips:[{ip, count, last}], total, last_day, banned}` — `q` ищет по логину,
+  имени, почте и IP; `top_ips` — адреса с несколькими регистрациями за 7 дней.
+- POST `/admin/users/{id}/ban` `{banned: true|false}` — блокировка завершает все сессии и выводит из чужих
+  серверов; администратора заблокировать нельзя.
+- DELETE `/admin/users/{id}` — удалить **заблокированный** аккаунт со всеми сообщениями, реакциями, участием и его серверами
+  (409, если не заблокирован).
+- GET `/admin/blocked-ips` → `{blocked:[{ip, note, created_at, accounts}]}`;
+  POST `/admin/blocked-ips` `{ip, note, ban_accounts}` — запретить регистрацию с адреса
+  (`ban_accounts` — заодно заблокировать все аккаунты, созданные с него); DELETE `/admin/blocked-ips/{ip}`.
+
+### Подписка **[new]**
+
+Уровни: 0 — бесплатно, 1 — Basic, 2 — Standard, 3 — Ultra (`users.subscription_tier`). Оплаты нет — уровень
+выдаёт администратор: POST `/admin/users/{id}/tier` `{tier}` (только `developer = 1`). Лимиты — `backend/utils/Tiers.cc`:
+
+| | Бесплатно | Basic | Standard | Ultra |
+|---|---|---|---|---|
+| Вложения | 15 МБ | 25 МБ | 50 МБ | 100 МБ |
+| Показ экрана | 1080p 30 | 1080p 60 | 1440p 30 | 1440p 60 |
+| Камера | 720p | 720p | 720p | 1080p |
+| Своих серверов | 10 | 25 | 50 | без лимита |
+| «О себе» | 190 | 190 | 400 | 400 |
+| Прочее | | ник цветом профиля | + GIF-баннер, цветовые темы | + своя тема, градиентный ник |
+
+Сервер проверяет сам: размер вложения (413), длину «о себе» (400), GIF-баннер (403), число своих серверов
+при создании (403; уже созданные не трогаются), цветовые темы (403). Качество камеры и показа экрана выставляет
+клиент — WebRTC идёт напрямую между участниками.
+
+- GET `/subscription` → `{tier, current: Plan, plans: [Plan × 4]}`, `Plan` = `{tier, name, files_mb,
+  screen:{height, fps}, camera_height, servers (-1 — без лимита), bio, animated_banner, color_themes, custom_theme,
+  name_color, gradient_name}`.
+- В сообщениях — `author_tier` и `author_accent` (для цветного ника).
+
+### Настройки оформления **[new]**
+
+GET `/settings/appearance` → `{settings, access:{color_themes, custom_theme, tier}, stored}`
+(`stored` — сохранялись ли настройки; иначе клиент отправляет свои).
+PATCH `/settings/appearance` `{любые поля settings}` → то же. `settings`:
+
+| Поле | Значения |
+|---|---|
+| `follow_system` | bool — «Как тема устройства» |
+| `base_theme` | `light` \| `dark` \| `graphite` \| `black` |
+| `color_theme` | null \| id готовой темы (`mint`, `peach`, … — список в `SettingsController.cc` и `web/src/lib/themes.ts`) — **Standard+, иначе 403** `{error, required_tier: 2}` |
+| `custom_theme` | null \| `{colors: [2–3 × "#rrggbb"], angle: 0–360, base: "dark"\|"light"}` — **Ultra, иначе 403** `{error, required_tier: 3}` |
+| `sync_devices` | bool — синхронизировать между устройствами |
+| `apply_to_profiles` | bool — чужие профили в своих цветах |
+| `server_theme` | `mine` \| `default` — тема на серверах |
+| `accent` | `""` \| `#rrggbb` |
+| `font_size` | `s` \| `m` \| `l` |
+| `compact`, `reduce_motion`, `high_contrast` | bool |
+| `saturation` | 0–100 |
+
+Тема, на которую подписки уже нет, в GET приходит как `null`. Неизвестные поля игнорируются, некорректные значения — 400.
+
 ## 1. Доступ к каналам
 
 Канал доступен пользователю, если:
@@ -173,6 +260,30 @@ GET `/search?q=<строка ≥2 символов>&channel_id=N` или `&serve
 
 При изменении имени/аватара/баннера/цвета/статуса друзьям и участникам общих серверов уходит
 `{"type":"user_updated","user_id":U,"display_name":"...","avatar_path":"...","accent_color":"..."}`.
+
+### 10.1 Расширенный профиль **[new]**
+
+POST `/profile/extras` — расширенный профиль целиком → сохранённый объект. В GET `/users/{id}/profile` — `profile_ext`
+(украшения без подписки владельца — `null`) и `badge` `{id, name, icon}` выбранного сервера. Отдельно от `profile_json`:
+его десктоп перезаписывает своими ключами. Статус и цвет баннера по-прежнему в `profile_json` (`statusText`, `banner.color`).
+
+| Поле | |
+|---|---|
+| `badge_server` | null | id сервера, где пользователь состоит (иначе 400) |
+| `frame` | null | `neon`, `gold`, `ice` (Basic), `fire` (Standard), `rainbow` (Ultra) |
+| `effect` | null | `stars`, `aurora`, `snow`, `glint` (Ultra) |
+| `name_style` | null | `gradient`, `neon`, `metal`, `flame` (Standard), `aurora` (Ultra) |
+| `connections` | до 10 × `{type, name ≤ 40, url: "" | https://…}`, type: steam, spotify, epic, xbox, playstation, battlenet, twitch, youtube, github, telegram, vk, website |
+| `widgets` | `{favorite_game: null | {appid, name, note ≤ 120, tags ≤ 6 из списка}, games: ≤ 20 × {appid, name}, wishlist: ≤ 20 × {appid, name}, order: ["favorite_game" | "games"]}` |
+
+Украшение без нужной подписки — **403**. `cover` у игр сервер ставит сам: `/api/v1/games/{appid}/cover`.
+
+### 10.2 Игры **[new]**
+
+- GET `/games/search?q=` → `{games: [{appid, name, cover}]}` — до 10 игр из магазина Steam (запрос идёт с сервера,
+  ответы кэшируются на час; лимит — как у поиска).
+- GET `/games/{appid}/cover` (без токена — для `<img>`) → 302 на `/uploads/games/{appid}.jpg`; при первом запросе
+  сервер скачивает обложку Steam (вертикальную, иначе горизонтальную). Нет обложки — 404, занято — 503.
 
 ## 11. Голос **[new]**
 - Несколько WS-подключений одного пользователя работают одновременно (десктоп + вкладки браузера):

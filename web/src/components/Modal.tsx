@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { ReactNode, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 
 interface Props {
@@ -28,7 +29,9 @@ export function Modal({ title, onClose, children, wide, bare, className, label }
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  // В корень страницы: окна открываются и из панелей (настройки сервера из боковой панели) — так
+  // ни transform, ни filter, ни overflow родителя не сожмут и не обрежут окно
+  return createPortal(
     <div ref={ref} className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
         className={`modal${wide ? ' wide' : ''}${bare ? ' bare' : ''}${className ? ` ${className}` : ''}`}
@@ -47,6 +50,7 @@ export function Modal({ title, onClose, children, wide, bare, className, label }
         {/* Шапка окна стоит на месте, прокручивается только содержимое (на телефоне — тоже) */}
         {bare ? children : <div className={`modal-body${title ? '' : ' no-head'}`}>{children}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

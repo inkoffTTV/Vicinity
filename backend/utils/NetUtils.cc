@@ -1,4 +1,5 @@
 #include "NetUtils.h"
+#include <drogon/drogon.h>
 #include <trantor/utils/Logger.h>
 #ifdef _WIN32
 #include <ws2tcpip.h>
@@ -77,6 +78,25 @@ bool contains(const std::vector<Cidr>& list, const trantor::InetAddress& addr) {
     for (const auto& c : list)
         if (c.v6 == v6 && prefixMatch(bytes, c.addr.data(), c.prefix)) return true;
     return false;
+}
+
+// Прокси, которым верим заголовок X-Real-IP: custom_config.trusted_proxies (список подсетей).
+// По умолчанию — никому (даже loopback: через туннель весь интернет приходит с 127.0.0.1).
+static const std::vector<Cidr>& trustedProxies() {
+    static const std::vector<Cidr> list = [] {
+        const Json::Value& cfg = drogon::app().getCustomConfig();
+        return cfg.isObject() ? parseCidrList(cfg["trusted_proxies"]) : std::vector<Cidr>{};
+    }();
+    return list;
+}
+
+std::string clientIp(const drogon::HttpRequestPtr& req) {
+    // За nginx все веб-клиенты приходят с одного адреса — берём реальный IP из X-Real-IP,
+    // но только от доверенного прокси (иначе заголовок подделывается).
+    const std::string& realIp = req->getHeader("X-Real-IP");
+    if (!realIp.empty() && realIp.size() <= 64 && contains(trustedProxies(), req->peerAddr()))
+        return realIp;
+    return req->peerAddr().toIp();
 }
 
 } // namespace NetUtils

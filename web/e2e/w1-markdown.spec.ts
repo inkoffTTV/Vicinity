@@ -93,8 +93,8 @@ test('markdown renders safely; XSS attempts stay inert text; mentions and emoji-
   await b.page.locator('.modal').getByRole('button', { name: 'Сохранить' }).click();
   await expect(b.page.locator('.toast', { hasText: 'Профиль сохранён' })).toBeVisible();
   await a.page.locator('.chat-title', { hasText: 'Боб' }).click();
-  await expect(a.page.locator('.profile-card .bio strong')).toHaveText('Главное');
-  await expect(a.page.locator('.profile-card .bio')).toContainText('<i>не html</i>');
+  await expect(a.page.locator('.profile-view .bio strong')).toHaveText('Главное');
+  await expect(a.page.locator('.profile-view .bio')).toContainText('<i>не html</i>');
 
   expect(dialogs).toEqual([]);
   expect(pageErrors(a.page)).toEqual([]);

@@ -1,4 +1,5 @@
 #pragma once
+#include <drogon/HttpRequest.h>
 #include <json/json.h>
 #include <trantor/net/InetAddress.h>
 #include <array>
@@ -23,5 +24,8 @@ std::vector<Cidr> parseCidrList(const Json::Value& arr);
 
 // Попадает ли адрес в одну из подсетей (IPv4-mapped IPv6 сравнивается как IPv4)
 bool contains(const std::vector<Cidr>& list, const trantor::InetAddress& addr);
+
+// IP клиента: X-Real-IP от доверенного прокси (custom_config.trusted_proxies), иначе адрес соединения
+std::string clientIp(const drogon::HttpRequestPtr& req);
 
 } // namespace NetUtils

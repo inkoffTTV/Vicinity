@@ -12,6 +12,7 @@ public:
     ADD_METHOD_TO(ProfileController::updateBio,     "/api/v1/profile/bio",    Post, Options, "AuthFilter");
     ADD_METHOD_TO(ProfileController::updateAccent,  "/api/v1/profile/accent",    Post, Options, "AuthFilter");
     ADD_METHOD_TO(ProfileController::customize,     "/api/v1/profile/customize", Post, Options, "AuthFilter");
+    ADD_METHOD_TO(ProfileController::updateExtras,  "/api/v1/profile/extras",    Post, Options, "AuthFilter");
     ADD_METHOD_TO(ProfileController::clearMedia,    "/api/v1/profile/clear_media", Post, Options, "AuthFilter");
     METHOD_LIST_END
 
@@ -20,5 +21,6 @@ public:
     void updateBio    (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void updateAccent (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void customize    (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void updateExtras (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void clearMedia   (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
 };

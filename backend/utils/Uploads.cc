@@ -48,10 +48,11 @@ static std::string nameExtension(std::string_view name) {
     return ext;
 }
 
-static bool tooLarge(const drogon::HttpFile& file, Saved& out) {
-    if (file.fileLength() <= static_cast<size_t>(Vicinity::MAX_UPLOAD_SIZE)) return false;
+static bool tooLarge(const drogon::HttpFile& file, int64_t maxBytes, Saved& out) {
+    if (maxBytes <= 0) maxBytes = Vicinity::MAX_UPLOAD_SIZE;
+    if (file.fileLength() <= static_cast<size_t>(maxBytes)) return false;
     out.code  = drogon::k413RequestEntityTooLarge;
-    out.error = "Файл слишком большой (макс 15 МБ)";
+    out.error = "Файл слишком большой (макс " + std::to_string(maxBytes / (1024 * 1024)) + " МБ)";
     return true;
 }
 
@@ -70,7 +71,7 @@ static void store(const drogon::HttpFile& file, const std::string& subDir, const
 
 Saved saveImage(const drogon::HttpFile& file, const std::string& subDir) {
     Saved out;
-    if (tooLarge(file, out)) return out;
+    if (tooLarge(file, Vicinity::MAX_UPLOAD_SIZE, out)) return out;
     const std::string ext = imageExtension(file.fileContent());
     if (ext.empty()) {
         out.code  = drogon::k415UnsupportedMediaType;
@@ -81,9 +82,9 @@ Saved saveImage(const drogon::HttpFile& file, const std::string& subDir) {
     return out;
 }
 
-Attachment saveAttachment(const drogon::HttpFile& file) {
+Attachment saveAttachment(const drogon::HttpFile& file, int64_t maxBytes) {
     Attachment out;
-    if (tooLarge(file, out)) return out;
+    if (tooLarge(file, maxBytes, out)) return out;
     out.name = cleanFileName(file.getFileName());
     out.size = static_cast<int64_t>(file.fileLength());
     // Картинка определяется по содержимому; всё остальное — файл, расширение берём из имени

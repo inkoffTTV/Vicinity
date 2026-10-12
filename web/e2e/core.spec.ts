@@ -77,7 +77,7 @@ test('servers: create, join by code, messages, presence, profile, reload, logout
 
   // Профиль
   await a.page.locator('.members .member', { hasText: 'Боб' }).locator('.member-main').click();
-  await expect(a.page.locator('.profile-card h2', { hasText: 'Боб' })).toBeVisible();
+  await expect(a.page.locator('.profile-view .pcard-name', { hasText: 'Боб' })).toBeVisible();
   await a.page.keyboard.press('Escape');
 
   // Настройки: био + аватар

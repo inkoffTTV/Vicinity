@@ -1,4 +1,5 @@
 import {
+  Accessibility,
   Bell,
   Copy,
   Headphones,
@@ -7,30 +8,38 @@ import {
   LogOut,
   type LucideIcon,
   Palette,
-  RotateCcw,
   ShieldCheck,
   ShieldQuestion,
+  Sparkles,
   UserRound,
+  Wrench,
 } from 'lucide-react';
-import { CSSProperties, FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ADMIN_USERNAME, isAdminUsername, openAdminDm } from '../lib/admin';
 import { api, ApiError, parseTs, Presence, Session } from '../lib/api';
 import { copyText } from '../lib/clipboard';
 import { NOTIFY_LEVELS, serverLevel, useNotifySettings } from '../lib/notify';
-import { ACCENTS, DEFAULT_ACCENT, FontSize, Theme, useAppearance } from '../lib/prefs';
+import { DEFAULT_ACCENT } from '../lib/prefs';
+import { usePlan } from '../lib/plan';
 import { useStore } from '../lib/store';
 import { fullWhen } from '../lib/time';
+import { AdminPanel } from './AdminPanel';
 import { AudioSettingsPanel } from './AudioSettings';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
+import { Toggle } from './SettingControls';
+import { useProfileStudio } from './profile/ProfileStudio';
+import { AccessibilityTab, SubscriptionTab, ThemeTab } from './ThemeSettings';
 
-type Tab = 'profile' | 'account' | 'appearance' | 'notifications' | 'voice';
+type Tab = 'profile' | 'account' | 'theme' | 'accessibility' | 'subscription' | 'notifications' | 'voice' | 'admin';
 
 const TABS: [Tab, string, LucideIcon][] = [
   ['profile', 'Профиль', UserRound],
   ['account', 'Аккаунт', ShieldCheck],
-  ['appearance', 'Внешний вид', Palette],
+  ['theme', 'Тема', Palette],
+  ['accessibility', 'Специальные возможности', Accessibility],
+  ['subscription', 'Подписка', Sparkles],
   ['notifications', 'Уведомления', Bell],
   ['voice', 'Голос и видео', Headphones],
 ];
@@ -38,13 +47,16 @@ const TABS: [Tab, string, LucideIcon][] = [
 export function Settings() {
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
   const [tab, setTab] = useState<Tab>('profile');
+  const isAdmin = useStore((s) => Boolean(s.me?.developer));
+  // Администрирование — только разработчикам (developer = 1)
+  const tabs: [Tab, string, LucideIcon][] = isAdmin ? [...TABS, ['admin', 'Администрирование', Wrench]] : TABS;
   const close = useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
 
   return (
     <Modal title="Настройки" onClose={close} className="settings-modal">
       <div className="settings-layout">
         <div className="settings-tabs" role="tablist" aria-label="Разделы настроек">
-          {TABS.map(([id, label, icon]) => (
+          {tabs.map(([id, label, icon]) => (
             <button
               key={id}
               role="tab"
@@ -66,9 +78,12 @@ export function Settings() {
         <div className="settings-panel" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${tab}`}>
           {tab === 'profile' && <ProfileTab onClose={close} />}
           {tab === 'account' && <AccountTab />}
-          {tab === 'appearance' && <AppearanceTab />}
+          {tab === 'theme' && <ThemeTab goTo={setTab} />}
+          {tab === 'accessibility' && <AccessibilityTab />}
+          {tab === 'subscription' && <SubscriptionTab />}
           {tab === 'notifications' && <NotificationsTab />}
           {tab === 'voice' && <AudioSettingsPanel />}
+          {tab === 'admin' && isAdmin && <AdminPanel />}
         </div>
       </div>
     </Modal>
@@ -86,6 +101,7 @@ function ProfileTab({ onClose }: { onClose: () => void }) {
   const toast = useStore((s) => s.toast);
   const [displayName, setDisplayName] = useState(me.display_name);
   const [bio, setBio] = useState(me.bio ?? '');
+  const bioMax = usePlan((s) => s.current.bio);
   const [pronouns, setPronouns] = useState(me.pronouns ?? '');
   const [accent, setAccent] = useState(me.accent_color || DEFAULT_ACCENT);
   const [presence, setPresence] = useState<Presence>(me.presence === 'offline' ? 'online' : me.presence);
@@ -139,6 +155,22 @@ function ProfileTab({ onClose }: { onClose: () => void }) {
 
   return (
     <form onSubmit={save} className="settings">
+      <section className="settings-card studio-cta">
+        <div className="grow">
+          <strong>Редактор профиля</strong>
+          <span className="muted small">Карточка, рамка аватара, эффекты, стиль ника, подключения и любимые игры</span>
+        </div>
+        <button
+          type="button"
+          className="btn primary"
+          onClick={() => {
+            onClose();
+            useProfileStudio.getState().show();
+          }}
+        >
+          Открыть редактор
+        </button>
+      </section>
       <div className="settings-media">
         <div
           className="settings-banner"
@@ -179,8 +211,8 @@ function ProfileTab({ onClose }: { onClose: () => void }) {
         <input value={pronouns} onChange={(e) => setPronouns(e.target.value)} maxLength={40} />
       </label>
       <label>
-        О себе <span className="muted small">{bio.length}/190</span>
-        <textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={190} rows={3} />
+        О себе <span className="muted small">{bio.length}/{bioMax}</span>
+        <textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={bioMax} rows={3} />
       </label>
       <div className="row">
         <label>
@@ -432,112 +464,6 @@ function Sessions() {
 }
 
 // ── Внешний вид ──
-
-function Segmented<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: [T, string][];
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="setting-row">
-      <span className="setting-label" id={`seg-${label}`}>
-        {label}
-      </span>
-      <div className="segmented" role="radiogroup" aria-labelledby={`seg-${label}`}>
-        {options.map(([v, text]) => (
-          <button key={v} type="button" role="radio" aria-checked={value === v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>
-            {text}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Toggle({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label className="toggle-row">
-      <span className="grow">
-        <span className="toggle-label">{label}</span>
-        {hint && <span className="muted small toggle-hint">{hint}</span>}
-      </span>
-      <input type="checkbox" role="switch" className="switch" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-    </label>
-  );
-}
-
-function AppearanceTab() {
-  const a = useAppearance();
-  const accent = a.accent || DEFAULT_ACCENT;
-  return (
-    <div className="settings">
-      <Segmented<Theme>
-        label="Тема"
-        value={a.theme}
-        options={[
-          ['system', 'Как в системе'],
-          ['light', 'Светлая'],
-          ['dark', 'Тёмная'],
-        ]}
-        onChange={(theme) => a.set({ theme })}
-      />
-      <div className="setting-row">
-        <span className="setting-label">Акцентный цвет</span>
-        <div className="swatches">
-          {ACCENTS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className={`swatch${accent === c ? ' on' : ''}`}
-              aria-label={`Цвет ${c}`}
-              aria-pressed={accent === c}
-              style={{ '--swatch': c } as CSSProperties}
-              onClick={() => a.set({ accent: c === DEFAULT_ACCENT ? '' : c })}
-            />
-          ))}
-          <label className="swatch custom" title="Свой цвет">
-            <input type="color" aria-label="Свой цвет" value={accent} onChange={(e) => a.set({ accent: e.target.value })} />
-          </label>
-        </div>
-      </div>
-      <Segmented<FontSize>
-        label="Размер шрифта сообщений"
-        value={a.fontSize}
-        options={[
-          ['s', 'Мелкий'],
-          ['m', 'Обычный'],
-          ['l', 'Крупный'],
-        ]}
-        onChange={(fontSize) => a.set({ fontSize })}
-      />
-      <Toggle
-        label="Компактный режим"
-        hint="Меньше отступы и аватары — больше сообщений на экране"
-        checked={a.compact}
-        onChange={(compact) => a.set({ compact })}
-      />
-      <Toggle
-        label="Уменьшить анимацию"
-        hint="Анимации выключаются и так, если это задано в системе"
-        checked={a.reducedMotion}
-        onChange={(reducedMotion) => a.set({ reducedMotion })}
-      />
-      <div className="row end">
-        <div className="grow" />
-        <button type="button" className="btn" onClick={a.reset}>
-          <Icon icon={RotateCcw} size={16} className="anim-turn-back" />
-          Сбросить оформление
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ── Уведомления ──
 

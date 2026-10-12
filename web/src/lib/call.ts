@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  CAMERA_CONSTRAINTS,
+  cameraConstraints,
   canShareScreen,
   HTTPS_REQUIRED,
   mediaAvailable,
@@ -460,7 +460,7 @@ async function startVideo(s: Session, role: 'video' | 'screen') {
   try {
     stream =
       role === 'video'
-        ? await navigator.mediaDevices.getUserMedia({ video: CAMERA_CONSTRAINTS })
+        ? await navigator.mediaDevices.getUserMedia({ video: cameraConstraints() })
         : await openScreen(quality);
   } catch (e) {
     if (sess === s) toast(mediaError(e, role === 'video' ? 'camera' : 'screen'), 'error');
