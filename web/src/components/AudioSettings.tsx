@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { canPickOutput, useMediaPrefs } from '../lib/media';
+import { canPickOutput, canShareScreen, useMediaPrefs } from '../lib/media';
 import { Modal } from './Modal';
+import { ScreenQualityPanel } from './ScreenShareControl';
 
 // Устройства ввода/вывода и уровни — общие для голосовых каналов и звонков.
 // Усиление микрофона действует только в голосовых каналах (там звук проходит через наш обработчик).
@@ -87,6 +88,11 @@ export function AudioSettingsPanel({ micGain = true }: { micGain?: boolean }) {
         />
       </label>
       {!canPickOutput && <div className="muted small">Этот браузер не позволяет выбрать устройство вывода звука.</div>}
+      {canShareScreen() && (
+        <div className="audio-settings-screen">
+          <ScreenQualityPanel />
+        </div>
+      )}
     </div>
   );
 }

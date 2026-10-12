@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { applyOutput, HTTPS_REQUIRED, mediaAvailable, mediaError, openMic, stopStream, useMediaPrefs } from './media';
+import { playSound } from './sounds';
 import { useStore } from './store';
 import { socket } from './ws';
 
@@ -130,6 +131,8 @@ class Engine {
 }
 
 let engine: Engine | null = null;
+// Канал, о входе в который уже прозвучал сигнал (после переподключения — без звука)
+let announced: number | null = null;
 let joinTimer: number | undefined;
 let speaking = false;
 let quiet = Infinity; // кадров подряд без речи
@@ -201,6 +204,8 @@ function sendJoin() {
 
 // Выключить звук у себя; серверу ничего не сообщаем
 function stopLocal() {
+  if (announced !== null) playSound('leave');
+  announced = null;
   window.clearTimeout(joinTimer);
   resetSpeaking();
   engine?.close();
@@ -272,6 +277,7 @@ export const useVoice = create<VoiceState>((set, get) => ({
     const { muted, deafened } = get();
     // Как в Discord: включить микрофон при «не слышать» — снова слышать
     set(deafened ? { muted: false, deafened: false } : { muted: !muted });
+    playSound(deafened ? 'undeafen' : get().muted ? 'mute' : 'unmute');
     if (!get().muted) return;
     setSpeaking(false);
     resetSpeaking();
@@ -280,6 +286,7 @@ export const useVoice = create<VoiceState>((set, get) => ({
   toggleDeafen: () => {
     const deafened = !get().deafened;
     set({ deafened });
+    playSound(deafened ? 'deafen' : 'undeafen');
     if (!deafened) return;
     engine?.reset();
     setSpeaking(false);
@@ -310,10 +317,20 @@ useStore.subscribe((s, prev) => {
   if (prev.me && !s.me) return stopLocal();
   const { channelId, joined } = useVoice.getState();
   if (channelId === null || s.voice[channelId] === prev.voice[channelId]) return;
-  const present = !!s.voice[channelId]?.some((u) => u.user_id === s.me?.user_id);
+  const me = s.me?.user_id;
+  const present = !!s.voice[channelId]?.some((u) => u.user_id === me);
+  // Кто-то зашёл в наш канал или вышел из него — короткий сигнал
+  if (joined && present) {
+    const before = prev.voice[channelId] ?? [];
+    const now = s.voice[channelId] ?? [];
+    if (now.some((u) => u.user_id !== me && !before.some((b) => b.user_id === u.user_id))) playSound('userJoin');
+    else if (before.some((b) => b.user_id !== me && !now.some((u) => u.user_id === b.user_id))) playSound('userLeave');
+  }
   if (present && !joined) {
     window.clearTimeout(joinTimer);
     useVoice.setState({ joined: true });
+    if (announced !== channelId) playSound('join');
+    announced = channelId;
   } else if (!present && joined) {
     // Сервер убрал нас из канала: кик с сервера, доступ пропал, голос включили на другом устройстве
     stopLocal();

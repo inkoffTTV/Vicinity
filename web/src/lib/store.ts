@@ -32,6 +32,9 @@ export type View =
 export interface VoiceUser {
   user_id: number;
   name: string;
+  /** Показывает экран / включил камеру (voice_media; у старого сервера и десктопов полей нет) */
+  screen?: boolean;
+  camera?: boolean;
 }
 
 interface Toast {

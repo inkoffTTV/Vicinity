@@ -14,6 +14,8 @@ public:
         int64_t                         userId = 0;
         drogon::WebSocketConnectionPtr  conn;
         int                             proto  = 1;   // 2 — кадры с префиксом id отправителя
+        bool                            screen = false;  // показывает экран (voice_media, только браузер)
+        bool                            camera = false;  // включил камеру
     };
 
     static VoiceManager& instance();
@@ -32,12 +34,20 @@ public:
     std::vector<Member> membersIn(int64_t channelId);
     // В каком голосовом канале пользователь (0 если ни в каком).
     int64_t channelOf(int64_t userId);
+    // Голосовое подключение пользователя (nullptr — не в голосе).
+    drogon::WebSocketConnectionPtr connectionOf(int64_t userId);
+    // Видео участника (voice_media), только от подключения, владеющего голосом.
+    // true — состояние изменилось (надо разослать voice_state); channelOut — его канал.
+    bool setMedia(int64_t userId, const drogon::WebSocketConnectionPtr& conn,
+                  bool screen, bool camera, int64_t* channelOut);
 
 private:
     struct State {
         int64_t                         channelId = 0;
         drogon::WebSocketConnectionPtr  conn;
         int                             proto = 1;
+        bool                            screen = false;
+        bool                            camera = false;
     };
     int64_t leaveLocked(int64_t userId);
 

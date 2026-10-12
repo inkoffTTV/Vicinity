@@ -22,6 +22,8 @@ config.listeners[0].port = port;
 config.app.log_level = 'WARN';
 delete config.app.log_path;
 writeFileSync(join(dir, 'config.json'), JSON.stringify(config, null, 2));
+// Где лежит база этого прогона — тесты меняют в ней то, что API не позволяет (например, подписку)
+writeFileSync(join(tmpdir(), `vicinity-e2e-${port}.dir`), dir);
 
 const child = spawn(bin, [], { cwd: dir, stdio: 'inherit' });
 child.on('exit', (code) => process.exit(code ?? 0));

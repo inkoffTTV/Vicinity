@@ -24,6 +24,7 @@ public:
         VoiceQuery,     // voice_query — 30 в минуту
         VoiceSpeaking,  // voice_speaking — 5 в секунду, до 50 подряд
         CallSignal,     // call_accept/reject/end/busy, rtc_* — 5 в секунду, до 100 подряд (пачка ICE)
+        VoiceMedia,     // voice_media (камера/экран в голосовом канале) — 20 в минуту
         VoiceBytes,     // байты голоса: 48 КБ/с (полтора реального потока 32 КБ/с), запас 64 КБ
     };
 

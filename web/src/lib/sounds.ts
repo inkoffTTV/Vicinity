@@ -68,9 +68,15 @@ function context(): AudioContext | null {
   }
 }
 
+// Отладка и e2e: какие звуки и когда проигрывались (последние 100)
+const played: { name: SoundName; at: number }[] = [];
+(window as unknown as { __vicinitySounds: typeof played }).__vicinitySounds = played;
+
 /** Проиграть звук интерфейса (если звуки не выключены в настройках) */
 export function playSound(name: SoundName) {
   if (!useNotifySettings.getState().sound) return;
+  played.push({ name, at: Date.now() });
+  if (played.length > 100) played.shift();
   const c = context();
   if (!c) return;
   const t0 = c.currentTime + 0.01;

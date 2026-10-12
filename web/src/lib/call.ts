@@ -1,15 +1,21 @@
 import { create } from 'zustand';
-import { api } from './api';
 import {
+  CAMERA_CONSTRAINTS,
   canShareScreen,
   HTTPS_REQUIRED,
   mediaAvailable,
   mediaError,
   openMic,
+  openScreen,
+  rtcIceServers,
+  screenQuality,
   stopStream,
+  tuneCameraSender,
+  tuneScreenSender,
   useMediaPrefs,
 } from './media';
 import { startTone } from './ringtone';
+import { playSound } from './sounds';
 import { userName, useStore } from './store';
 import { setVoiceGuard, useVoice } from './voice';
 import { socket, WsEvent } from './ws';
@@ -28,12 +34,10 @@ const CONNECT_TIMEOUT = 30_000;
 const DISCONNECT_GRACE = 5_000;
 // Ответ сервера call_unavailable на наш же call_end уже завершённого звонка — не показываем
 const ENDED_QUIET = 10_000;
-const FALLBACK_ICE: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
-const CAMERA: MediaTrackConstraints = {
-  width: { ideal: 1280 },
-  height: { ideal: 720 },
-  frameRate: { ideal: 30, max: 30 },
-};
+const STATS_PERIOD = 2_000;
+
+/** Качество связи по RTT и потерям входящего звука: для индикатора в шапке звонка */
+export type NetQuality = 'good' | 'fair' | 'poor' | 'unknown';
 
 interface CallState {
   phase: CallPhase;
@@ -52,6 +56,14 @@ interface CallState {
   remoteCamera: boolean;
   remoteScreen: boolean;
   localCamera: MediaStream | null;
+  localScreen: MediaStream | null;
+  /** Качество своего показа экрана, «1440p60» ('' — не показываем) */
+  screenLabel: string;
+  /** Собеседник — десктоп-клиент (mid audio/video/screen, без a=extmap): экран не выше 1080p30 */
+  desktopPeer: boolean;
+  net: NetQuality;
+  /** Время приёма-передачи, мс (0 — неизвестно) */
+  rtt: number;
   remoteAudio: MediaStream | null;
   remoteCameraStream: MediaStream | null;
   remoteScreenStream: MediaStream | null;
@@ -81,6 +93,11 @@ const IDLE = {
   remoteCamera: false,
   remoteScreen: false,
   localCamera: null,
+  localScreen: null,
+  screenLabel: '',
+  desktopPeer: false,
+  net: 'unknown' as NetQuality,
+  rtt: 0,
   remoteAudio: null,
   remoteCameraStream: null,
   remoteScreenStream: null,
@@ -104,9 +121,14 @@ interface Session {
   /** Свои кандидаты до отправки call_invite/call_accept: десктоп отбрасывает их раньше SDP */
   localIce: WsEvent[];
   signalled: boolean;
+  /** Собеседник уже сообщил по ctrl, включены ли камера/экран: дальше решает только ctrl */
+  ctrlSaid: { video: boolean; screen: boolean };
   ringTimer: number;
   connectTimer: number;
   graceTimer: number;
+  statsTimer: number;
+  /** Прошлый замер входящего звука — потери считаются по разнице */
+  lastAudio: { received: number; lost: number };
   stopTone: (() => void) | null;
 }
 
@@ -127,9 +149,12 @@ const fresh = (): Session => ({
   remoteIce: [],
   localIce: [],
   signalled: false,
+  ctrlSaid: { video: false, screen: false },
   ringTimer: 0,
   connectTimer: 0,
   graceTimer: 0,
+  statsTimer: 0,
+  lastAudio: { received: 0, lost: 0 },
   stopTone: null,
 });
 
@@ -148,12 +173,14 @@ function silenceRing(s: Session) {
   s.stopTone = null;
 }
 
-function teardown() {
+/** Завершить звонок у себя. sound — короткий сигнал отбоя (не нужен, если звонок ушёл в другую вкладку) */
+function teardown(sound = true) {
   const s = sess;
   sess = fresh();
   silenceRing(s);
   window.clearTimeout(s.connectTimer);
   window.clearTimeout(s.graceTimer);
+  window.clearInterval(s.statsTimer);
   if (s.ctrl) s.ctrl.onopen = s.ctrl.onmessage = null;
   if (s.pc) {
     s.pc.onicecandidate = s.pc.ontrack = s.pc.ondatachannel = s.pc.onconnectionstatechange = null;
@@ -161,7 +188,10 @@ function teardown() {
   }
   [s.mic, s.cam, s.scr].forEach(stopStream);
   const { phase, peerId } = useCall.getState();
-  if (phase !== 'idle') lastEnded = { peerId, at: Date.now() };
+  if (phase !== 'idle') {
+    lastEnded = { peerId, at: Date.now() };
+    if (sound) playSound('callEnd');
+  }
   useCall.setState(IDLE);
 }
 
@@ -180,13 +210,41 @@ function fail(s: Session) {
   endWith('call_end');
 }
 
-async function iceServers(): Promise<RTCIceServer[]> {
+// Собеседник — десктоп-клиент: его m-строки называются audio/video/screen, и в SDP нет a=extmap
+// (у браузеров они есть всегда). Его H264 — уровень 3.1: экран больше 1080p30 рискованно слать.
+function isDesktopSdp(sdp: string): boolean {
+  return (/^a=mid:audio\r?$/m.test(sdp) && /^a=mid:screen\r?$/m.test(sdp)) || !/^a=extmap:/m.test(sdp);
+}
+
+// Качество связи раз в пару секунд: RTT выбранной пары кандидатов и доля потерь входящего звука
+async function sampleStats(s: Session) {
+  const pc = s.pc;
+  if (!pc || sess !== s) return;
+  let rtt = 0;
+  let received = 0;
+  let lost = 0;
   try {
-    const list = await api.rtcIce();
-    return list.length ? list : FALLBACK_ICE;
+    const report = await pc.getStats();
+    report.forEach((r) => {
+      if (r.type === 'candidate-pair' && r.nominated && typeof r.currentRoundTripTime === 'number')
+        rtt = r.currentRoundTripTime * 1000;
+      if (r.type === 'inbound-rtp' && r.kind === 'audio') {
+        received += r.packetsReceived ?? 0;
+        lost += Math.max(0, r.packetsLost ?? 0);
+      }
+    });
   } catch {
-    return FALLBACK_ICE;
+    return;
   }
+  if (sess !== s) return;
+  const dr = received - s.lastAudio.received;
+  const dl = lost - s.lastAudio.lost;
+  s.lastAudio = { received, lost };
+  const loss = dr + dl > 0 ? dl / (dr + dl) : 0;
+  const net: NetQuality =
+    !rtt && dr <= 0 ? 'unknown' : rtt < 150 && loss < 0.02 ? 'good' : rtt < 400 && loss < 0.08 ? 'fair' : 'poor';
+  const st = useCall.getState();
+  if (st.net !== net || Math.abs(st.rtt - rtt) >= 5) useCall.setState({ net, rtt: Math.round(rtt) });
 }
 
 // Роли m-строк по порядку в SDP: первая аудио — микрофон, первая видео — камера, вторая — экран.
@@ -238,18 +296,6 @@ function preferH264(t: RTCRtpTransceiver) {
   }
 }
 
-async function limitSender(sender: RTCRtpSender, maxBitrate: number, maxFramerate: number) {
-  try {
-    const p = sender.getParameters();
-    if (!p.encodings?.length) return;
-    p.encodings[0].maxBitrate = maxBitrate;
-    p.encodings[0].maxFramerate = maxFramerate;
-    await sender.setParameters(p);
-  } catch {
-    /* остаются ограничения браузера */
-  }
-}
-
 function sendCtrl(s: Session) {
   if (s.ctrl?.readyState !== 'open') return;
   const { camera, screen } = useCall.getState();
@@ -269,8 +315,14 @@ function setupCtrl(s: Session, ch: RTCDataChannel) {
     if (!msg || typeof msg !== 'object') return;
     const m = msg as { video?: unknown; screen?: unknown };
     const patch: Partial<CallState> = {};
-    if ('video' in m) patch.remoteCamera = !!m.video;
-    if ('screen' in m) patch.remoteScreen = !!m.screen;
+    if ('video' in m) {
+      patch.remoteCamera = !!m.video;
+      s.ctrlSaid.video = true;
+    }
+    if ('screen' in m) {
+      patch.remoteScreen = !!m.screen;
+      s.ctrlSaid.screen = true;
+    }
     useCall.setState(patch);
   };
   ch.onopen = () => sendCtrl(s);
@@ -283,13 +335,14 @@ function onTrack(s: Session, e: RTCTrackEvent) {
   // Потоков в SDP десктопа нет (нет a=msid) — e.streams может быть пустым
   const stream = new MediaStream([e.track]);
   if (mid === s.mids.audio) useCall.setState({ remoteAudio: stream });
-  // Как у десктопа: первый кадр показывает видео, скрывает только сообщение ctrl
+  // Как у десктопа: первый кадр показывает видео, пока не открылся ctrl; дальше включает и выключает
+  // только ctrl (иначе запоздалые кадры после «выключил» снова показали бы застывшую картинку)
   else if (mid === s.mids.video) {
     useCall.setState({ remoteCameraStream: stream });
-    e.track.onunmute = () => sess === s && useCall.setState({ remoteCamera: true });
+    e.track.onunmute = () => sess === s && !s.ctrlSaid.video && useCall.setState({ remoteCamera: true });
   } else if (mid === s.mids.screen) {
     useCall.setState({ remoteScreenStream: stream });
-    e.track.onunmute = () => sess === s && useCall.setState({ remoteScreen: true });
+    e.track.onunmute = () => sess === s && !s.ctrlSaid.screen && useCall.setState({ remoteScreen: true });
   }
 }
 
@@ -300,7 +353,13 @@ function onConnectionState(s: Session, pc: RTCPeerConnection) {
   window.clearTimeout(s.graceTimer);
   if (state === 'connected') {
     window.clearTimeout(s.connectTimer);
-    if (useCall.getState().phase !== 'active') useCall.setState({ phase: 'active', startedAt: Date.now() });
+    if (useCall.getState().phase !== 'active') {
+      useCall.setState({ phase: 'active', startedAt: Date.now() });
+      playSound('join');
+      window.clearInterval(s.statsTimer);
+      s.statsTimer = window.setInterval(() => void sampleStats(s), STATS_PERIOD);
+      void sampleStats(s);
+    }
   } else if (state === 'disconnected') {
     s.graceTimer = window.setTimeout(() => fail(s), DISCONNECT_GRACE);
   } else if (state === 'failed' || state === 'closed') {
@@ -382,7 +441,7 @@ function stopVideo(s: Session, role: 'video' | 'screen') {
   } else {
     stopStream(s.scr);
     s.scr = null;
-    useCall.setState({ screen: false });
+    useCall.setState({ screen: false, localScreen: null, screenLabel: '' });
   }
   sendCtrl(s);
 }
@@ -391,19 +450,24 @@ function stopVideo(s: Session, role: 'video' | 'screen') {
 async function startVideo(s: Session, role: 'video' | 'screen') {
   const t = s.transceivers[role];
   if (!t) return;
+  // Качество экрана — по подписке; собеседнику-десктопу — не выше 1080p30
+  const quality = screenQuality(
+    useStore.getState().me?.subscription_tier ?? 0,
+    useMediaPrefs.getState().screenMode,
+    { desktopPeer: useCall.getState().desktopPeer },
+  );
   let stream: MediaStream;
   try {
     stream =
       role === 'video'
-        ? await navigator.mediaDevices.getUserMedia({ video: CAMERA })
-        : await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+        ? await navigator.mediaDevices.getUserMedia({ video: CAMERA_CONSTRAINTS })
+        : await openScreen(quality);
   } catch (e) {
     if (sess === s) toast(mediaError(e, role === 'video' ? 'camera' : 'screen'), 'error');
     return;
   }
   const track = stream.getVideoTracks()[0];
   if (sess !== s || !track || (role === 'video' ? s.cam : s.scr)) return stopStream(stream);
-  if (role === 'screen') track.contentHint = 'detail';
   try {
     await t.sender.replaceTrack(track);
   } catch {
@@ -415,11 +479,11 @@ async function startVideo(s: Session, role: 'video' | 'screen') {
   if (role === 'video') {
     s.cam = stream;
     useCall.setState({ camera: true, localCamera: stream });
-    void limitSender(t.sender, 1_500_000, 30);
+    void tuneCameraSender(t.sender);
   } else {
     s.scr = stream;
-    useCall.setState({ screen: true });
-    void limitSender(t.sender, 2_500_000, 15);
+    useCall.setState({ screen: true, localScreen: stream, screenLabel: quality.label });
+    void tuneScreenSender(t.sender, quality);
   }
   // Камеру отключили или нажали «Прекратить показ» в браузере
   track.addEventListener('ended', () => {
@@ -450,7 +514,7 @@ export const useCall = create<CallState>((set, get) => ({
     if (sess !== s) return stopStream(mic);
     attachMic(s, mic);
     try {
-      const ice = await iceServers();
+      const ice = await rtcIceServers();
       if (sess !== s) return;
       const pc = createPc(s, ice);
       const audio = pc.addTransceiver(s.mic!.getAudioTracks()[0], { direction: 'sendrecv' });
@@ -507,10 +571,11 @@ export const useCall = create<CallState>((set, get) => ({
     if (sess !== s) return stopStream(mic);
     attachMic(s, mic);
     try {
-      const ice = await iceServers();
+      const ice = await rtcIceServers();
       if (sess !== s) return;
       const pc = createPc(s, ice);
       s.mids = sdpMids(s.offer);
+      set({ desktopPeer: isDesktopSdp(s.offer) });
       await pc.setRemoteDescription({ type: 'offer', sdp: tuneOffer(s.offer) });
       if (sess !== s) return;
       await addRemoteIce(s);
@@ -553,6 +618,7 @@ export const useCall = create<CallState>((set, get) => ({
     const muted = !get().muted;
     sess.mic?.getAudioTracks().forEach((t) => (t.enabled = !muted));
     set({ muted });
+    playSound(muted ? 'mute' : 'unmute');
   },
 
   toggleCamera: async () => {
@@ -644,6 +710,7 @@ async function onAccept(ev: WsEvent) {
     return;
   }
   if (sess !== s) return;
+  useCall.setState({ desktopPeer: isDesktopSdp(ev.sdp) });
   const audio = s.transceivers.audio?.currentDirection;
   if (audio !== 'sendrecv' && audio !== 'sendonly' && audio !== 'recvonly') return incompatible();
   await addRemoteIce(s);
@@ -722,13 +789,13 @@ useMediaPrefs.subscribe((p, prev) => {
 
 // Выход из аккаунта: сокет уже закрыт — только освобождаем микрофон и камеру
 useStore.subscribe((s, prev) => {
-  if (prev.me && !s.me && useCall.getState().phase !== 'idle') teardown();
+  if (prev.me && !s.me && useCall.getState().phase !== 'idle') teardown(false);
 });
 
 if (tabs)
   tabs.onmessage = (e) => {
     const { phase, peerId } = useCall.getState();
-    if (phase === 'incoming' && e.data?.handled === peerId && e.data?.userId === meId()) teardown();
+    if (phase === 'incoming' && e.data?.handled === peerId && e.data?.userId === meId()) teardown(false);
   };
 
 // Закрытие вкладки: собеседник узнаёт сразу, а не по обрыву соединения. Входящий не отклоняем —
@@ -736,6 +803,34 @@ if (tabs)
 window.addEventListener('pagehide', () => {
   const { phase } = useCall.getState();
   if (phase === 'idle') return;
-  if (phase === 'incoming') teardown();
+  if (phase === 'incoming') teardown(false);
   else endWith('call_end');
+});
+
+// Собеседник включил/выключил камеру или показ экрана — короткий сигнал. Флаги «мигают» (первые пакеты
+// дорожки и сообщение ctrl приходят в разном порядке), поэтому сигналим по устоявшемуся состоянию,
+// и не в первые секунды разговора, когда собеседник только присылает своё начальное состояние.
+const STREAM_SETTLE = 500;
+const STREAM_QUIET_AFTER_CONNECT = 1_200;
+let announced = { camera: false, screen: false };
+let streamTimer = 0;
+useCall.subscribe((s, prev) => {
+  if (s.phase !== 'active') {
+    window.clearTimeout(streamTimer);
+    announced = { camera: false, screen: false };
+    return;
+  }
+  if (s.remoteCamera === prev.remoteCamera && s.remoteScreen === prev.remoteScreen && prev.phase === 'active') return;
+  window.clearTimeout(streamTimer);
+  streamTimer = window.setTimeout(() => {
+    const st = useCall.getState();
+    if (st.phase !== 'active') return;
+    const now = { camera: st.remoteCamera, screen: st.remoteScreen };
+    const quiet = Date.now() - st.startedAt < STREAM_QUIET_AFTER_CONNECT;
+    if (!quiet) {
+      if ((now.camera && !announced.camera) || (now.screen && !announced.screen)) playSound('streamStart');
+      else if ((!now.camera && announced.camera) || (!now.screen && announced.screen)) playSound('streamStop');
+    }
+    announced = now;
+  }, STREAM_SETTLE);
 });

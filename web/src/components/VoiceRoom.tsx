@@ -1,6 +1,9 @@
+import { HeadphoneOff, LayoutGrid, LogOut, MicOff, PhoneCall, Video, Volume2 } from 'lucide-react';
 import { useStore, VoiceUser } from '../lib/store';
 import { useVoice } from '../lib/voice';
+import { useVoiceVideo } from '../lib/voiceVideo';
 import { Avatar } from './Avatar';
+import { Icon } from './Icon';
 
 const NOBODY: VoiceUser[] = [];
 
@@ -20,18 +23,42 @@ export function VoiceUsers({ channelId }: { channelId: number }) {
   );
 }
 
+/** Значки трансляций участника: «LIVE» (показывает экран) и камера */
+export function StreamBadges({ user }: { user: VoiceUser }) {
+  return (
+    <>
+      {user.camera && (
+        <span className="voice-user-cam" title="Камера включена" aria-label="Камера включена">
+          <Icon icon={Video} size={14} />
+        </span>
+      )}
+      {user.screen && (
+        <span className="live-badge" title="Показывает экран">
+          LIVE
+        </span>
+      )}
+    </>
+  );
+}
+
 // Строка подписана только на «говорит» своего пользователя: списков в панели много, перерисовывается одна
 function VoiceUserRow({ user, mine }: { user: VoiceUser; mine: boolean }) {
   const speaking = useStore((s) => !!s.speaking[user.user_id]);
   const isMe = useStore((s) => s.me?.user_id === user.user_id);
   const flag = useVoice((s) => (mine && isMe ? (s.deafened ? 'deafened' : s.muted ? 'muted' : '') : ''));
+  const openStage = useVoiceVideo((s) => s.openStage);
   return (
-    <div className="voice-user">
+    <div
+      className={`voice-user${mine && user.screen ? ' clickable' : ''}`}
+      onClick={mine && user.screen ? openStage : undefined}
+      data-user={user.user_id}
+    >
       <Avatar name={user.name} id={user.user_id} size={22} speaking={speaking} />
       <span className="grow ellipsis">{user.name}</span>
+      <StreamBadges user={user} />
       {flag && (
         <span className="voice-user-flag" title={flag === 'deafened' ? 'Звук выключен' : 'Микрофон выключен'}>
-          {flag === 'deafened' ? '🔕' : '🔇'}
+          <Icon icon={flag === 'deafened' ? HeadphoneOff : MicOff} size={14} />
         </span>
       )}
     </div>
@@ -46,11 +73,15 @@ export function VoiceRoom({ channelId }: { channelId: number }) {
   const inRoom = useVoice((s) => s.channelId === channelId);
   const join = useVoice((s) => s.join);
   const leave = useVoice((s) => s.leave);
+  const openStage = useVoiceVideo((s) => s.openStage);
   if (!inRoom && users.length === 0) return null;
   return (
     <div className={`voice-room${inRoom ? ' in' : ''}`} role="region" aria-label="Голосовая комната">
       <div className="voice-room-status">
-        <strong>{inRoom ? '🔊 Вы в голосовой комнате' : '🔊 Голосовая комната'}</strong>
+        <strong>
+          <Icon icon={Volume2} size={16} anim={inRoom ? 'pulse' : undefined} />{' '}
+          {inRoom ? 'Вы в голосовой комнате' : 'Голосовая комната'}
+        </strong>
         <span className="muted small">{inRoom ? 'зелёный — говорит' : 'вас ждут'}</span>
       </div>
       <div className="voice-room-users">
@@ -58,14 +89,20 @@ export function VoiceRoom({ channelId }: { channelId: number }) {
           <span key={u.user_id} className={`voice-chip${speaking[u.user_id] ? ' speaking' : ''}`}>
             <span className="voice-chip-dot" />
             {u.user_id === meId ? 'Вы' : u.name}
+            <StreamBadges user={u} />
           </span>
         ))}
       </div>
+      {inRoom && (
+        <button className="btn small" onClick={openStage}>
+          <Icon icon={LayoutGrid} size={16} /> Открыть
+        </button>
+      )}
       <button
         className={`btn small ${inRoom ? 'danger' : 'ok'}`}
         onClick={() => (inRoom ? leave() : void join(channelId))}
       >
-        {inRoom ? 'Выйти' : 'Присоединиться'}
+        <Icon icon={inRoom ? LogOut : PhoneCall} size={16} /> {inRoom ? 'Выйти' : 'Присоединиться'}
       </button>
     </div>
   );

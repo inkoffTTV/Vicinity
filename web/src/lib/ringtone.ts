@@ -32,8 +32,21 @@ function beep(ctx: AudioContext, [start, duration, freq]: Note, at: number) {
   osc.stop(t + duration + 0.01);
 }
 
+// Отладка и e2e: какой сигнал сейчас играет (window.__vicinityTone)
+const debug = window as unknown as { __vicinityTone: Tone | null };
+debug.__vicinityTone = null;
+
 /** Играть сигнал по кругу; возвращает функцию остановки */
 export function startTone(kind: Tone): () => void {
+  debug.__vicinityTone = kind;
+  const stop = play(kind);
+  return () => {
+    if (debug.__vicinityTone === kind) debug.__vicinityTone = null;
+    stop();
+  };
+}
+
+function play(kind: Tone): () => void {
   let ctx: AudioContext;
   try {
     ctx = new AudioContext();

@@ -1,15 +1,30 @@
+import {
+  Headphones,
+  HeadphoneOff,
+  LayoutGrid,
+  Mic,
+  MicOff,
+  PhoneOff,
+  ScreenShare,
+  ScreenShareOff,
+  Settings,
+  Video,
+  VideoOff,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../lib/store';
 import { useVoice } from '../lib/voice';
+import { useVoiceVideo } from '../lib/voiceVideo';
 import { AudioSettings } from './AudioSettings';
 import { Avatar } from './Avatar';
+import { Icon } from './Icon';
 import { useVoiceUsers } from './VoiceRoom';
 
 type StoreState = ReturnType<typeof useStore.getState>;
 
-// Название голосового канала и где он: сервер, личка или беседа
-function voicePlace(s: StoreState, ch: number | null): { name: string; place: string } {
+/** Название голосового канала и где он: сервер, личка или беседа */
+export function voicePlace(s: StoreState, ch: number | null): { name: string; place: string } {
   if (ch === null) return { name: '', place: '' };
   const dm = s.dms.find((d) => d.channel_id === ch);
   if (dm) return { name: dm.display_name, place: 'Личные сообщения' };
@@ -36,6 +51,10 @@ export function VoiceBar() {
   const speaking = useStore((s) => s.speaking);
   const { name, place } = useStore(useShallow((s) => voicePlace(s, channelId)));
   const [settings, setSettings] = useState(false);
+  const camera = useVoiceVideo((s) => !!s.camera);
+  const screen = useVoiceVideo((s) => !!s.screen);
+  const stageOpen = useVoiceVideo((s) => s.stageOpen);
+  const vv = useVoiceVideo.getState();
   if (channelId === null) return null;
 
   const live = connected && joined;
@@ -58,7 +77,7 @@ export function VoiceBar() {
           aria-label="Настройки звука"
           onClick={() => setSettings(true)}
         >
-          ⚙
+          <Icon icon={Settings} anim="spin" size={18} />
         </button>
         <button
           className="icon-btn hangup"
@@ -66,7 +85,7 @@ export function VoiceBar() {
           aria-label="Отключиться от голосового канала"
           onClick={leave}
         >
-          ✕
+          <Icon icon={PhoneOff} anim="ring" size={18} />
         </button>
       </div>
       <div className="voice-bar-row">
@@ -77,7 +96,7 @@ export function VoiceBar() {
           aria-label={micOff ? 'Включить микрофон' : 'Выключить микрофон'}
           onClick={toggleMute}
         >
-          {micOff ? '🔇' : '🎙'}
+          <Icon key={String(micOff)} icon={micOff ? MicOff : Mic} anim="pop" size={18} />
         </button>
         <button
           className={`voice-toggle${deafened ? ' off' : ''}`}
@@ -86,7 +105,36 @@ export function VoiceBar() {
           aria-label={deafened ? 'Включить звук' : 'Выключить звук'}
           onClick={toggleDeafen}
         >
-          {deafened ? '🔕' : '🎧'}
+          <Icon key={String(deafened)} icon={deafened ? HeadphoneOff : Headphones} anim="pop" size={18} />
+        </button>
+        <button
+          className={`voice-toggle${camera ? ' on' : ''}`}
+          aria-pressed={camera}
+          disabled={!live}
+          title={camera ? 'Выключить камеру' : 'Включить камеру'}
+          aria-label={camera ? 'Выключить камеру' : 'Включить камеру'}
+          onClick={() => void vv.toggleCamera()}
+        >
+          <Icon key={String(camera)} icon={camera ? Video : VideoOff} anim="pop" size={18} />
+        </button>
+        <button
+          className={`voice-toggle${screen ? ' on' : ''}`}
+          aria-pressed={screen}
+          disabled={!live}
+          title={screen ? 'Остановить показ экрана' : 'Показать экран'}
+          aria-label={screen ? 'Остановить показ экрана' : 'Показать экран'}
+          onClick={() => void vv.toggleScreen()}
+        >
+          <Icon key={String(screen)} icon={screen ? ScreenShareOff : ScreenShare} anim="pop" size={18} />
+        </button>
+        <button
+          className={`voice-toggle${stageOpen ? ' on' : ''}`}
+          aria-pressed={stageOpen}
+          title="Открыть голосовой канал"
+          aria-label="Открыть голосовой канал"
+          onClick={() => (stageOpen ? vv.closeStage() : vv.openStage())}
+        >
+          <Icon icon={LayoutGrid} size={18} />
         </button>
         <div className="voice-bar-users">
           {users.map((u) => (

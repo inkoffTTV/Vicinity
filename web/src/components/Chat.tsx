@@ -1,3 +1,4 @@
+import { AudioLines, Phone, PhoneOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useCall } from '../lib/call';
 import { useChannelMembers } from '../lib/channelMembers';
@@ -8,6 +9,7 @@ import { useVoice } from '../lib/voice';
 import { AddMemberDialog } from './AddMemberDialog';
 import { Avatar } from './Avatar';
 import { Composer } from './Composer';
+import { Icon } from './Icon';
 import { MessageList } from './MessageList';
 import { NotifyMenu } from './NotifyMenu';
 import { PinsPanel } from './PinsPanel';
@@ -89,7 +91,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
             disabled={!callIdle}
             onClick={() => void startCall(dm.user_id, dm.display_name)}
           >
-            📞
+            <Icon icon={Phone} anim="ring" />
           </button>
         )}
         {group && (
@@ -100,7 +102,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
             aria-pressed={inGroupRoom}
             onClick={() => (inGroupRoom ? leaveVoice() : void joinVoice(group.id))}
           >
-            🎙
+            <Icon icon={inGroupRoom ? PhoneOff : AudioLines} anim={inGroupRoom ? 'ring' : 'wiggle'} />
           </button>
         )}
         {(view.kind === 'group' || view.kind === 'server') && (

@@ -61,7 +61,8 @@ std::vector<VoiceManager::Member> VoiceManager::membersIn(int64_t channelId) {
     if (it == chUsers_.end()) return out;
     for (int64_t uid : it->second) {
         auto st = users_.find(uid);
-        if (st != users_.end()) out.push_back(Member{uid, st->second.conn, st->second.proto});
+        if (st != users_.end())
+            out.push_back(Member{uid, st->second.conn, st->second.proto, st->second.screen, st->second.camera});
     }
     return out;
 }
@@ -70,4 +71,22 @@ int64_t VoiceManager::channelOf(int64_t userId) {
     std::lock_guard<std::mutex> lock(m_);
     auto it = users_.find(userId);
     return it != users_.end() ? it->second.channelId : 0;
+}
+
+drogon::WebSocketConnectionPtr VoiceManager::connectionOf(int64_t userId) {
+    std::lock_guard<std::mutex> lock(m_);
+    auto it = users_.find(userId);
+    return it != users_.end() ? it->second.conn : nullptr;
+}
+
+bool VoiceManager::setMedia(int64_t userId, const drogon::WebSocketConnectionPtr& conn,
+                            bool screen, bool camera, int64_t* channelOut) {
+    std::lock_guard<std::mutex> lock(m_);
+    auto it = users_.find(userId);
+    if (it == users_.end() || it->second.conn != conn) return false;
+    if (channelOut) *channelOut = it->second.channelId;
+    if (it->second.screen == screen && it->second.camera == camera) return false;
+    it->second.screen = screen;
+    it->second.camera = camera;
+    return true;
 }

@@ -6,6 +6,8 @@
 #include <drogon/drogon.h>
 #include <trantor/utils/Logger.h>
 #include <algorithm>
+#include <map>
+#include <mutex>
 
 namespace Broadcast {
 
@@ -112,7 +114,8 @@ void userUpdated(int64_t userId) {
 std::string voiceStatePayload(int64_t channelId) {
     auto db = drogon::app().getDbClient();
     Json::Value arr(Json::arrayValue);
-    for (int64_t uid : VoiceManager::instance().usersIn(channelId)) {
+    for (const auto& m : VoiceManager::instance().membersIn(channelId)) {
+        const int64_t uid = m.userId;
         std::string name;
         try {
             auto r = db->execSqlSync("SELECT display_name FROM users WHERE id = ?", uid);
@@ -121,6 +124,9 @@ std::string voiceStatePayload(int64_t channelId) {
         Json::Value u;
         u["user_id"] = static_cast<Json::Int64>(uid);
         u["name"]    = name;
+        // [new] видео участника (voice_media) — старые десктопы лишние поля игнорируют
+        u["screen"]  = m.screen;
+        u["camera"]  = m.camera;
         arr.append(u);
     }
     Json::Value payload;
@@ -129,6 +135,13 @@ std::string voiceStatePayload(int64_t channelId) {
     payload["users"]      = arr;
     return JsonUtils::write(payload);
 }
+
+// Входы/выходы обрабатываются в разных потоках, и состояние, собранное раньше, могло уйти позже свежего
+// (клиенты оставались со старым списком канала). Поэтому список участников канала собирается и рассылается
+// из одного потока — главного цикла — по порядку; несколько изменений канала подряд дают одну рассылку.
+// Кому слать, определяется сразу: канал могут удалить раньше, чем дойдёт очередь (выход из удалённого канала).
+static std::mutex pendingMutex;
+static std::map<int64_t, std::set<int64_t>> pendingChannels;   // канал -> получатели
 
 void voiceState(int64_t channelId) {
     std::set<int64_t> users;
@@ -140,8 +153,31 @@ void voiceState(int64_t channelId) {
     // Канал не найден — хотя бы тем, кто в нём сидит
     if (users.empty())
         for (int64_t uid : VoiceManager::instance().usersIn(channelId)) users.insert(uid);
-    const std::string payload = voiceStatePayload(channelId);
-    for (int64_t uid : users) WSManager::instance().sendToUser(uid, payload);
+    {
+        std::lock_guard<std::mutex> lock(pendingMutex);
+        auto it = pendingChannels.find(channelId);
+        if (it != pendingChannels.end()) {   // уже в очереди — уйдёт свежим, заодно и этим получателям
+            it->second.insert(users.begin(), users.end());
+            return;
+        }
+        pendingChannels.emplace(channelId, std::move(users));
+    }
+    drogon::app().getLoop()->queueInLoop([channelId] {
+        std::set<int64_t> to;
+        {
+            std::lock_guard<std::mutex> lock(pendingMutex);
+            auto it = pendingChannels.find(channelId);
+            if (it == pendingChannels.end()) return;
+            to = std::move(it->second);
+            pendingChannels.erase(it);
+        }
+        try {
+            const std::string payload = voiceStatePayload(channelId);
+            for (int64_t uid : to) WSManager::instance().sendToUser(uid, payload);
+        } catch (const std::exception& e) {
+            LOG_WARN << "Broadcast::voiceState " << channelId << ": " << e.what();
+        }
+    });
 }
 
 void evictFromVoice(int64_t userId, const std::vector<int64_t>& channelIds) {

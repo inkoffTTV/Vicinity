@@ -25,7 +25,7 @@ namespace Broadcast {
     // {type:"user_updated"} — профиль изменился: контактам и самому пользователю (другие его вкладки)
     void userUpdated(int64_t userId);
 
-    // {type:"voice_state", channel_id, users:[{user_id,name}]}
+    // {type:"voice_state", channel_id, users:[{user_id,name,screen,camera}]}
     std::string voiceStatePayload(int64_t channelId);
     // Состояние голосового канала всем, кто видит канал
     void voiceState(int64_t channelId);

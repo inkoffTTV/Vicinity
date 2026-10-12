@@ -5,6 +5,7 @@ import { previewText, sortRecent, useMinuteClock } from '../lib/recent';
 import { useStore } from '../lib/store';
 import { fullWhen, shortWhen } from '../lib/time';
 import { useVoice } from '../lib/voice';
+import { useVoiceVideo } from '../lib/voiceVideo';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Modal } from './Modal';
@@ -204,6 +205,7 @@ function ServerSide({ serverId }: { serverId: number }) {
   );
   const myVoice = useVoice((s) => s.channelId);
   const joinVoice = useVoice((s) => s.join);
+  const openStage = useVoiceVideo((s) => s.openStage);
   const [adding, setAdding] = useState<null | 'text' | 'voice'>(null);
   const [menu, setMenu] = useState(false);
   const [settings, setSettings] = useState<ServerTab | null>(null);
@@ -279,8 +281,11 @@ function ServerSide({ serverId }: { serverId: number }) {
             <div className="side-row">
               <button
                 className={`side-item channel voice${myVoice === c.id ? ' active' : ''}`}
-                title={myVoice === c.id ? 'Вы в этом канале' : 'Подключиться к голосовому каналу'}
-                onClick={() => void joinVoice(c.id)}
+                title={myVoice === c.id ? 'Открыть голосовой канал' : 'Подключиться к голосовому каналу'}
+                onClick={() => {
+                  void joinVoice(c.id);
+                  openStage();
+                }}
               >
                 <span className="side-icon">🔊</span>
                 <span className="grow ellipsis">{c.name}</span>

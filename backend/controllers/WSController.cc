@@ -109,6 +109,55 @@ static void handleVoiceSpeaking(int64_t userId, const WebSocketConnectionPtr& co
         if (uid != userId) WSManager::instance().sendToUser(uid, payload);
 }
 
+// [new] Видео участника голосового канала: {"type":"voice_media","screen":bool,"camera":bool}.
+// Только от подключения, владеющего голосом; состояние хранится до выхода из канала и уходит
+// всем, кто видит канал, в voice_state (поля screen/camera у каждого участника).
+static void handleVoiceMedia(int64_t userId, const WebSocketConnectionPtr& conn, const Json::Value& root) {
+    auto& vm = VoiceManager::instance();
+    if (vm.channelOfConnection(userId, conn) == 0) return;
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::VoiceMedia, userId)) return;
+    int64_t ch = 0;
+    if (vm.setMedia(userId, conn, JsonUtils::getBool(root, "screen"), JsonUtils::getBool(root, "camera"), &ch))
+        Broadcast::voiceState(ch);
+}
+
+// [new] Сигналинг WebRTC для просмотра экрана/камеры в голосовом канале (браузер ↔ браузер):
+// {"type":"voice_rtc","to":U,"kind":"screen"|"camera","action":"watch"|"unwatch"|"offer"|"answer"|"ice"|"stop",
+//  sdp?, sdpType?, candidate?, mid?}. Оба должны сидеть в одном голосовом канале (отправитель — с подключения,
+// владеющего голосом); адресату — только в его голосовое подключение, с проставленным from.
+static const std::set<std::string> kVoiceRtcKinds   = {"screen", "camera"};
+static const std::set<std::string> kVoiceRtcActions = {"watch", "unwatch", "offer", "answer", "ice", "stop"};
+// Поля как у звонка плюс причина остановки (например, "full" — у трансляции максимум зрителей)
+static const std::map<std::string, size_t> kVoiceRtcFields = {
+    {"sdp", 32 * 1024}, {"sdpType", 16}, {"candidate", 1024}, {"mid", 64}, {"reason", 64},
+};
+
+static void handleVoiceRtc(int64_t userId, const WebSocketConnectionPtr& conn, const Json::Value& root) {
+    int64_t to = JsonUtils::getInt(root, "to");
+    if (to <= 0 || to == userId) return;
+    const std::string kind   = JsonUtils::getStr(root, "kind");
+    const std::string action = JsonUtils::getStr(root, "action");
+    if (!kVoiceRtcKinds.count(kind) || !kVoiceRtcActions.count(action)) return;
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::CallSignal, userId)) return;
+    auto& vm = VoiceManager::instance();
+    const int64_t ch = vm.channelOfConnection(userId, conn);
+    if (ch == 0 || vm.channelOf(to) != ch) return;
+    Json::Value out;
+    out["type"]   = "voice_rtc";
+    out["to"]     = static_cast<Json::Int64>(to);
+    out["kind"]   = kind;
+    out["action"] = action;
+    for (const auto& [field, maxLen] : kVoiceRtcFields) {
+        if (!root.isMember(field) || !root[field].isString()) continue;
+        const std::string v = root[field].asString();
+        if (v.size() > maxLen) return;
+        out[field] = v;
+    }
+    out["from"] = static_cast<Json::Int64>(userId);
+    auto target = vm.connectionOf(to);
+    if (target && wsUsable(target)) target->send(JsonUtils::write(out));
+}
+
 // Текущее состояние всех голосовых каналов сервера — только запросившему участнику сервера
 static void handleVoiceQuery(int64_t userId, const WebSocketConnectionPtr& conn, const Json::Value& root) {
     int64_t serverId = JsonUtils::getInt(root, "server_id");
@@ -248,6 +297,8 @@ void WSController::handleNewMessage(const WebSocketConnectionPtr& conn,
         }
         else if (t == "voice_speaking") handleVoiceSpeaking(userId, conn, root);
         else if (t == "voice_query")    handleVoiceQuery(userId, conn, root);
+        else if (t == "voice_media")    handleVoiceMedia(userId, conn, root);
+        else if (t == "voice_rtc")      handleVoiceRtc(userId, conn, root);
         else if (t == "typing")         handleTyping(userId, root);
         else if (t == "set_presence")   handleSetPresence(userId, root);
         else if (kCallTypes.count(t))   handleCallSignal(userId, conn, t, root);

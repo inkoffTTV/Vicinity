@@ -6,6 +6,7 @@ import { useShortcuts } from './lib/shortcuts';
 import { useStore } from './lib/store';
 import { attentionCount } from './lib/unread';
 import { useVoice } from './lib/voice';
+import { useVoiceVideo } from './lib/voiceVideo';
 import { Login } from './components/Login';
 import { ServerRail } from './components/ServerRail';
 import { Sidebar } from './components/Sidebar';
@@ -20,6 +21,7 @@ import { UserMenu } from './components/UserMenu';
 import { IncomingCall } from './components/IncomingCall';
 import { InviteCard } from './components/InviteCard';
 import { CallOverlay } from './components/CallOverlay';
+import { VoiceStage } from './components/VoiceStage';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { SearchPanel } from './components/Search';
 
@@ -32,6 +34,7 @@ export default function App() {
   const profileUserId = useStore((s) => s.profileUserId);
   const settingsOpen = useStore((s) => s.settingsOpen);
   const inVoice = useVoice((s) => s.channelId !== null);
+  const stageOpen = useVoiceVideo((s) => s.stageOpen);
   const searchOpen = useSearch((s) => s.open);
   const inviteCode = useInvite((s) => s.code);
   const [navOpen, setNavOpen] = useState(false);
@@ -53,7 +56,7 @@ export default function App() {
   }, [boot]);
 
   // На мобильном — закрывать меню при переходе
-  useEffect(() => setNavOpen(false), [view]);
+  useEffect(() => setNavOpen(false), [view, stageOpen]);
 
   // Счётчик во вкладке браузера и на значке приложения: личные сообщения и упоминания
   const unreadTotal = useStore(attentionCount);
@@ -80,7 +83,9 @@ export default function App() {
       </div>
       <div className="nav-scrim" onClick={() => setNavOpen(false)} />
       <main className="main">
-        {view.kind === 'friends' ? (
+        {stageOpen && inVoice ? (
+          <VoiceStage onMenu={() => setNavOpen(true)} />
+        ) : view.kind === 'friends' ? (
           <Friends onMenu={() => setNavOpen(true)} />
         ) : (
           <Chat
@@ -92,7 +97,7 @@ export default function App() {
       </main>
       {searchOpen ? (
         <SearchPanel />
-      ) : view.kind === 'server' && membersOpen ? (
+      ) : stageOpen && inVoice ? null : view.kind === 'server' && membersOpen ? (
         <MemberList serverId={view.serverId} />
       ) : (
         view.kind === 'group' && membersOpen && <GroupPanel key={view.channelId} channelId={view.channelId} />
