@@ -31,7 +31,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: 'Учётная запись',
     items: [
       { id: 'account', label: 'Аккаунт', keywords: 'логин почта пароль двухфакторная 2fa сеансы устройства безопасность' },
-      { id: 'profile', label: 'Профиль', keywords: 'имя аватар баннер о себе статус цвет рамка эффект ник бейджик' },
+      { id: 'profile', label: 'Профиль', keywords: 'имя аватар баннер о себе статус цвет тема ник бейджик тег' },
     ],
   },
   {
@@ -248,7 +248,7 @@ function ProfileTab({ onClose }: { onClose: () => void }) {
       <section className="settings-card studio-cta">
         <div className="grow">
           <strong>Редактор профиля</strong>
-          <span className="muted small">Карточка, рамка аватара, эффекты, стиль ника, подключения и любимые игры</span>
+          <span className="muted small">Карточка, тема профиля, стиль ника, тег сервера, подключения и любимые игры</span>
         </div>
         <button
           type="button"

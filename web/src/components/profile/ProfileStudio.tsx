@@ -2,7 +2,7 @@ import { X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { ApiError, Connection, EMPTY_EXT, normalizeExt, parseTs, Presence, Profile, ProfileExt, api } from '../../lib/api';
-import { CONNECTIONS, Cosmetic, EFFECTS, FRAMES, TIER_NAME } from '../../lib/cosmetics';
+import { CONNECTIONS } from '../../lib/cosmetics';
 import { nameCss } from '../../lib/nameStyle';
 import { usePlan } from '../../lib/plan';
 import { DEFAULT_ACCENT } from '../../lib/prefs';
@@ -32,26 +32,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <h3>{title}</h3>
       {children}
     </section>
-  );
-}
-
-/** Выбор украшения: «нет» + варианты; без подписки — замок (можно примерить, сохранить нельзя) */
-function CosmeticPicker({ items, value, tier, onChange, kind }: { items: Cosmetic[]; value: string | null; tier: number; onChange: (v: string | null) => void; kind: 'frame' | 'effect' | 'name' }) {
-  return (
-    <div className="cosmetics">
-      <button type="button" className="cosmetic none" aria-pressed={!value} onClick={() => onChange(null)}>
-        Нет
-      </button>
-      {items.map((c) => (
-        <button key={c.id} type="button" className={`cosmetic c-${kind}-${c.id}`} aria-pressed={value === c.id} title={`${c.name} — ${TIER_NAME[c.tier]}`} onClick={() => onChange(c.id)}>
-          <span className="cosmetic-sample" aria-hidden="true">
-            {kind === 'name' ? <span className={`name-${c.id}`}>Aa</span> : null}
-          </span>
-          <span className="cosmetic-name">{c.name}</span>
-          {tier < c.tier && <span className="cosmetic-lock">{TIER_NAME[c.tier]}</span>}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -101,11 +81,8 @@ export function ProfileStudio() {
     setDirty(true);
   };
 
-  // Украшения, на которые нет подписки: примерить можно, сохранить — нет
-  const locked = [
-    FRAMES.find((c) => c.id === ext.frame),
-    EFFECTS.find((c) => c.id === ext.effect),
-  ].filter((c): c is Cosmetic => !!c && c.tier > tier);
+  // Тема профиля без Standard: примерить можно, сохранить — нет
+  const themeLocked = !!ext.profile_theme && tier < 2;
 
   const upload = async (field: 'avatar' | 'banner', file?: File) => {
     if (!file) return;
@@ -137,7 +114,6 @@ export function ProfileStudio() {
   };
 
   const save = async () => {
-    if (locked.length) return toast(`«${locked[0].name}» — с подпиской ${TIER_NAME[locked[0].tier]}`, 'error');
     if (ext.profile_theme && tier < 2) return toast('Тема профиля — с подпиской Standard', 'error');
     setBusy(true);
     try {
@@ -152,7 +128,7 @@ export function ProfileStudio() {
         accent_color: accent,
         profile_json: JSON.stringify(nextPj),
       });
-      setExt(normalizeExt(await api.saveProfileExt(ext)));
+      setExt(normalizeExt(await api.saveProfileExt({ ...ext, frame: null, effect: null })));
       await refreshMe();
       setDirty(false);
       toast('Профиль сохранён');
@@ -184,8 +160,8 @@ export function ProfileStudio() {
     badges: profile?.badges ?? [],
     badge: badge ? { id: badge.id, name: badge.name, icon: badge.icon ?? '', tag: badge.tag, tag_icon: badge.tag_icon } : null,
     connections: ext.connections,
-    frame: ext.frame,
-    effect: ext.effect,
+    frame: null,
+    effect: null,
     name_style: ext.name_style,
     theme: ext.profile_theme,
   };
@@ -217,7 +193,7 @@ export function ProfileStudio() {
             </span>
           </Section>
 
-          <Section title="Аватар и рамка">
+          <Section title="Аватар">
             <div className="studio-media">
               <Avatar name={me.display_name} src={me.avatar_path} id={me.user_id} size={56} />
               <label className="btn small">
@@ -230,7 +206,6 @@ export function ProfileStudio() {
                 </button>
               )}
             </div>
-            <CosmeticPicker kind="frame" items={FRAMES} value={ext.frame} tier={tier} onChange={(frame) => editExt({ ...ext, frame })} />
           </Section>
 
           <Section title="Баннер">
@@ -252,10 +227,6 @@ export function ProfileStudio() {
           <Section title="Тема профиля">
             <span className="muted small">Два цвета — верх и низ карточки. Подложка и цвет текста подбираются автоматически.</span>
             <ProfileThemeEditor value={ext.profile_theme} tier={tier} onChange={(profile_theme) => editExt({ ...ext, profile_theme })} />
-          </Section>
-
-          <Section title="Эффект профиля">
-            <CosmeticPicker kind="effect" items={EFFECTS} value={ext.effect} tier={tier} onChange={(effect) => editExt({ ...ext, effect })} />
           </Section>
 
           <Section title="Стиль ника">
@@ -321,7 +292,7 @@ export function ProfileStudio() {
           {tier < 3 && (
             <div className="studio-promo">
               <strong>Прокачайте облик с подпиской</strong>
-              <span className="muted small">Рамки — с Basic, стили ника и тема профиля — со Standard, эффекты профиля — с Ultra. Подписку выдаёт администратор.</span>
+              <span className="muted small">Цвет ника — с Basic, стили ника и тема профиля — со Standard, все значки приложения — с Ultra. Подписку выдаёт администратор.</span>
             </div>
           )}
         </aside>
@@ -346,10 +317,8 @@ export function ProfileStudio() {
         )}
 
         <div className="studio-bar">
-          {locked.length > 0 ? (
-            <span className="studio-warn">
-              Примерка: «{locked[0].name}» сохранится с подпиской {TIER_NAME[locked[0].tier]}
-            </span>
+          {themeLocked ? (
+            <span className="studio-warn">Примерка: тема профиля сохранится с подпиской Standard</span>
           ) : (
             <span className="muted small">{dirty ? 'Есть несохранённые изменения' : 'Изменений нет'}</span>
           )}
@@ -357,7 +326,7 @@ export function ProfileStudio() {
           <button type="button" className="btn" onClick={close}>
             Закрыть
           </button>
-          <button type="button" className="btn primary" disabled={busy || !dirty || locked.length > 0} onClick={save}>
+          <button type="button" className="btn primary" disabled={busy || !dirty || themeLocked} onClick={save}>
             Сохранить
           </button>
         </div>

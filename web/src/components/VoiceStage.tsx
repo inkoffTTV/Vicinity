@@ -27,6 +27,7 @@ import { Avatar } from './Avatar';
 import { StreamVideo, useFullscreen } from './CallOverlay';
 import { Icon } from './Icon';
 import { ScreenShareControl } from './ScreenShareControl';
+import { ActivitiesButton } from './Activities';
 import { voicePlace } from './VoiceBar';
 import { useVoiceUsers } from './VoiceRoom';
 
@@ -141,6 +142,7 @@ export function VoiceStage({ onMenu }: { onMenu: () => void }) {
           activeLabel={screenLabel}
           onToggle={() => void vv.toggleScreen()}
         />
+        <ActivitiesButton btnClass="stage-btn" />
         <button className="stage-btn" title="Настройки звука" aria-label="Настройки звука" onClick={() => setSettings(true)}>
           <Icon icon={Settings} anim="spin" size={22} />
         </button>

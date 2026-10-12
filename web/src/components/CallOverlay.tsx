@@ -22,6 +22,7 @@ import { AudioSettings } from './AudioSettings';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
 import { ScreenShareControl } from './ScreenShareControl';
+import { ActivitiesButton } from './Activities';
 
 /** Идущий звонок: окно с видео и кнопками или свёрнутая «таблетка» */
 export function CallOverlay() {
@@ -353,6 +354,7 @@ function CallWindow() {
             onToggle={() => void c.toggleScreen()}
           />
         )}
+        <ActivitiesButton btnClass="call-btn" />
         <button className="call-btn" title="Настройки звука" aria-label="Настройки звука" onClick={() => setSettings(true)}>
           <Icon icon={Settings} anim="spin" size={22} />
         </button>

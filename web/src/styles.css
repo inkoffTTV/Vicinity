@@ -4719,3 +4719,67 @@ a:focus-visible > .ico {
     width: 100%;
   }
 }
+
+/* ---------- Активности в звонке (пока заглушка: components/Activities.tsx) ---------- */
+.activities-modal {
+  width: min(520px, calc(100vw - 32px));
+}
+.act-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 20px;
+  border-radius: 14px;
+  border: 1px dashed var(--border);
+  background: var(--bg-card);
+  text-align: center;
+}
+.act-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 4px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.act-empty .muted {
+  max-width: 340px;
+  line-height: 1.45;
+}
+.act-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.act-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.act-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+.act-cover {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  background: var(--bg-input);
+  color: var(--text-3);
+}
+.act-players {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
