@@ -136,14 +136,18 @@ export function VoiceBar() {
         >
           <Icon icon={LayoutGrid} size={18} />
         </button>
-        <div className="voice-bar-users">
-          {users.map((u) => (
+      </div>
+      {users.length > 0 && (
+        // Участники — отдельной строкой: в ряду с кнопками они не помещались в ширину боковой панели
+        <div className="voice-bar-users" aria-label={`В канале: ${users.length}`}>
+          {users.slice(0, 7).map((u) => (
             <span key={u.user_id} title={u.name}>
               <Avatar name={u.name} id={u.user_id} size={24} speaking={!!speaking[u.user_id]} />
             </span>
           ))}
+          {users.length > 7 && <span className="voice-bar-more">+{users.length - 7}</span>}
         </div>
-      </div>
+      )}
       {settings && <AudioSettings onClose={() => setSettings(false)} />}
     </div>
   );
