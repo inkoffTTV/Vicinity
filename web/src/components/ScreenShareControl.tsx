@@ -86,8 +86,8 @@ export function ScreenQualityPanel({ desktopPeer }: { desktopPeer?: boolean }) {
         <div className="upgrade-hint">
           <Icon icon={Sparkles} size={16} anim="pulse" />
           <span>
-            С подпиской <strong>Ultra</strong> — до 1440p и 60 кадров в секунду
-            {tier < 2 ? ', со Standard — 1080p30' : ''}.
+            {tier < 1 ? 'С Basic — 1080p60, со Standard — 1440p30, ' : tier < 2 ? 'Со Standard — 1440p30, ' : ''}
+            с <strong>Ultra</strong> — 1440p и 60 кадров в секунду.
           </span>
         </div>
       )}

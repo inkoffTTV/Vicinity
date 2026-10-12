@@ -15,14 +15,48 @@ export function mediaAvailable(): boolean {
 export const canPickOutput = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
 export const canShareScreen = () => !!navigator.mediaDevices?.getDisplayMedia;
 
-export function micConstraints(deviceId: string): MediaTrackConstraints {
+/** Обработка микрофона с учётом профиля ввода (Настройки → Голос и видео) */
+export function micConstraints(deviceId: string, p: MediaPrefs = useMediaPrefs.getState()): MediaTrackConstraints {
+  const e = effectiveProcessing(p);
   return {
     channelCount: 1,
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
+    echoCancellation: e.echo,
+    noiseSuppression: e.noise !== 'off',
+    autoGainControl: e.agc,
+    // «Усиленное» — изоляция голоса, где браузер её умеет (Chrome на macOS/Windows); остальные ограничение пропустят
+    ...(e.noise === 'max' ? ({ voiceIsolation: true } as MediaTrackConstraints) : {}),
     ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
   };
+}
+
+export type InputProfile = 'iso' | 'studio' | 'custom';
+export type NoiseMode = 'off' | 'std' | 'max';
+
+export interface Processing {
+  autoSens: boolean;
+  noise: NoiseMode;
+  echo: boolean;
+  agc: boolean;
+}
+
+/** Профили ввода (макет 03): «Изоляция голоса» и «Студия» задают обработку сами */
+export const INPUT_PROFILES: Record<Exclude<InputProfile, 'custom'>, Processing> = {
+  iso: { autoSens: true, noise: 'max', echo: true, agc: true },
+  studio: { autoSens: false, noise: 'off', echo: false, agc: false },
+};
+
+export function effectiveProcessing(p: MediaPrefs): Processing {
+  if (p.inputProfile !== 'custom') return INPUT_PROFILES[p.inputProfile];
+  return { autoSens: p.autoSens, noise: p.noise, echo: p.echo, agc: p.agc };
+}
+
+/** Ключ обработки: поменялся — микрофон надо открыть заново */
+export const processingKey = (p: MediaPrefs) => JSON.stringify(effectiveProcessing(p));
+
+/** Порог «говорит» в единицах RMS 16-битного звука; автоматический — как раньше (≈ −39 дБ) */
+export const AUTO_SPEAK_RMS = 380;
+export function speakThreshold(p: MediaPrefs = useMediaPrefs.getState()): number {
+  return effectiveProcessing(p).autoSens ? AUTO_SPEAK_RMS : 32768 * Math.pow(10, p.thresholdDb / 20);
 }
 
 export function stopStream(s: MediaStream | null) {
@@ -62,9 +96,24 @@ export function applyOutput(el: HTMLMediaElement, deviceId: string) {
 
 // ── Настройки звука (запоминаются в браузере) ──
 
-interface MediaPrefs {
+export interface MediaPrefs {
   inputId: string;
   outputId: string;
+  cameraId: string;
+  inputProfile: InputProfile;
+  /** Ручные значения профиля «Пользовательский» */
+  autoSens: boolean;
+  noise: NoiseMode;
+  echo: boolean;
+  agc: boolean;
+  /** Порог срабатывания при ручной чувствительности, дБ (−100…0) */
+  thresholdDb: number;
+  /** Режим рации: голос идёт, только пока зажата клавиша */
+  ptt: boolean;
+  /** KeyboardEvent.code */
+  pttKey: string;
+  /** Задержка отпускания, мс */
+  pttDelay: number;
   /** Показ экрана: плавность (60 к/с на Ultra) или чёткость текста */
   screenMode: ScreenMode;
   /** Усиление микрофона, 0…2 */
@@ -78,7 +127,26 @@ interface PrefsState extends MediaPrefs {
 }
 
 const PREFS_KEY = 'vicinity.media';
-const DEFAULTS: MediaPrefs = { inputId: '', outputId: '', screenMode: 'motion', micGain: 1, volume: 1 };
+const DEFAULTS: MediaPrefs = {
+  inputId: '',
+  outputId: '',
+  cameraId: '',
+  inputProfile: 'custom',
+  autoSens: true,
+  noise: 'std',
+  echo: true,
+  agc: true,
+  thresholdDb: -45,
+  ptt: false,
+  pttKey: 'AltLeft',
+  pttDelay: 200,
+  screenMode: 'motion',
+  micGain: 1,
+  volume: 1,
+};
+const clampNum = (v: unknown, min: number, max: number, def: number) =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def;
+const bool = (v: unknown, def: boolean) => (typeof v === 'boolean' ? v : def);
 const clampLevel = (v: unknown, def: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(2, Math.max(0, v)) : def;
 
@@ -88,6 +156,16 @@ function loadPrefs(): MediaPrefs {
     return {
       inputId: typeof raw.inputId === 'string' ? raw.inputId : '',
       outputId: typeof raw.outputId === 'string' ? raw.outputId : '',
+      cameraId: typeof raw.cameraId === 'string' ? raw.cameraId : '',
+      inputProfile: raw.inputProfile === 'iso' || raw.inputProfile === 'studio' ? raw.inputProfile : 'custom',
+      autoSens: bool(raw.autoSens, DEFAULTS.autoSens),
+      noise: raw.noise === 'off' || raw.noise === 'max' ? raw.noise : 'std',
+      echo: bool(raw.echo, DEFAULTS.echo),
+      agc: bool(raw.agc, DEFAULTS.agc),
+      thresholdDb: clampNum(raw.thresholdDb, -100, 0, DEFAULTS.thresholdDb),
+      ptt: bool(raw.ptt, DEFAULTS.ptt),
+      pttKey: typeof raw.pttKey === 'string' && raw.pttKey ? raw.pttKey : DEFAULTS.pttKey,
+      pttDelay: clampNum(raw.pttDelay, 0, 1000, DEFAULTS.pttDelay),
       screenMode: raw.screenMode === 'detail' ? 'detail' : 'motion',
       micGain: clampLevel(raw.micGain, DEFAULTS.micGain),
       volume: clampLevel(raw.volume, DEFAULTS.volume),
@@ -101,9 +179,10 @@ export const useMediaPrefs = create<PrefsState>((set, get) => ({
   ...loadPrefs(),
   set: (p) => {
     set(p);
-    const { inputId, outputId, screenMode, micGain, volume } = get();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { set: _set, ...prefs } = get();
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ inputId, outputId, screenMode, micGain, volume }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
     } catch {
       /* приватный режим — настройки живут до перезагрузки */
     }
@@ -246,5 +325,11 @@ export async function tuneCameraSender(sender: RTCRtpSender) {
 /** Камера по подписке (GET /subscription, lib/plan.ts): 720p, у Ultra — 1080p; 30 к/с */
 export function cameraConstraints(): MediaTrackConstraints {
   const h = usePlan.getState().current.camera_height;
-  return { width: { ideal: Math.round((h * 16) / 9) }, height: { ideal: h }, frameRate: { ideal: 30, max: 30 } };
+  const id = useMediaPrefs.getState().cameraId;
+  return {
+    width: { ideal: Math.round((h * 16) / 9) },
+    height: { ideal: h },
+    frameRate: { ideal: 30, max: 30 },
+    ...(id ? { deviceId: { ideal: id } } : {}),
+  };
 }

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { applyOutput, HTTPS_REQUIRED, mediaAvailable, mediaError, openMic, stopStream, useMediaPrefs } from './media';
+import { applyOutput, HTTPS_REQUIRED, mediaAvailable, mediaError, openMic, processingKey, speakThreshold, stopStream, useMediaPrefs } from './media';
+import { pttHeld } from './ptt';
 import { playSound } from './sounds';
 import { useStore } from './store';
 import { socket } from './ws';
@@ -10,7 +11,6 @@ import { socket } from './ws';
 
 const WORKLET_URL = `${import.meta.env.BASE_URL}worklets/voice-processor.js`;
 // «Говорит» — RMS кадра после усиления выше 380 (шкала int16) и ещё 300 мс после: как у десктопа
-const SPEAK_RMS = 380;
 const HOLD_FRAMES = 15;
 // Кадры идут, пока говорит, и ещё 300 мс — чтобы не обрезать окончания; в тишине не отправляем ничего
 const HANGOVER_FRAMES = 15;
@@ -177,7 +177,16 @@ function sendFrame(pcm: ArrayBuffer) {
 function onCaptured({ pcm, rms }: { pcm: ArrayBuffer; rms: number }) {
   const v = useVoice.getState();
   if (!v.joined || v.muted || v.deafened) return;
-  quiet = rms > SPEAK_RMS ? 0 : quiet + 1;
+  // Режим рации: передаём, только пока зажата клавиша (и ещё задержку отпускания)
+  if (useMediaPrefs.getState().ptt) {
+    const on = pttHeld();
+    setSpeaking(on);
+    quiet = Infinity;
+    preroll = [];
+    if (on) sendFrame(pcm);
+    return;
+  }
+  quiet = rms > speakThreshold() ? 0 : quiet + 1;
   setSpeaking(quiet < HOLD_FRAMES);
   if (quiet < HOLD_FRAMES + HANGOVER_FRAMES) {
     preroll.forEach(sendFrame);
@@ -343,7 +352,7 @@ useMediaPrefs.subscribe((p, prev) => {
   if (p.micGain !== prev.micGain) engine.setGain(p.micGain);
   if (p.volume !== prev.volume) engine.setVolume(p.volume);
   if (p.outputId !== prev.outputId) engine.setOutput(p.outputId);
-  if (p.inputId !== prev.inputId)
+  if (p.inputId !== prev.inputId || processingKey(p) !== processingKey(prev))
     engine.openMic(p.inputId).catch((e) => useStore.getState().toast(mediaError(e), 'error'));
 });
 

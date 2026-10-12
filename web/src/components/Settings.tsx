@@ -6,7 +6,7 @@ import { DEFAULT_ACCENT } from '../lib/prefs';
 import { usePlan } from '../lib/plan';
 import { useStore } from '../lib/store';
 import { AdminPanel } from './AdminPanel';
-import { AudioSettingsPanel } from './AudioSettings';
+import { VoiceScreen } from './settings/VoiceScreen';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
@@ -127,7 +127,7 @@ export function Settings() {
             {tab === 'account' && <AccountScreen onEditProfile={() => go('profile')} />}
             {tab === 'profile' && <ProfileTab onClose={close} />}
             {tab === 'theme' && <ThemeTab goTo={(t) => go(t === 'accessibility' ? 'accessibility' : 'subscription')} />}
-            {tab === 'voice' && <AudioSettingsPanel />}
+            {tab === 'voice' && <VoiceScreen />}
             {tab === 'notifications' && <NotificationsTab />}
             {tab === 'hotkeys' && <HotkeysScreen />}
             {tab === 'accessibility' && <AccessibilityTab />}

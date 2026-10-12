@@ -581,3 +581,241 @@ input.invalid {
     display: inline-flex;
   }
 }
+
+/* ---------- Голос и видео (макет 03) ---------- */
+.voice-screen fieldset {
+  margin: 0;
+  min-width: 0;
+}
+.vs-grid,
+.vs-video {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.vs-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.vs-col label,
+.vs-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.vs-slider input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.vs-test {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.vs-test > .btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.vs-test-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.vs-meter {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  height: 14px;
+}
+.vs-meter span {
+  flex: 1;
+  border-radius: 2px;
+  background: var(--bg-active);
+  transition: background 0.06s linear;
+}
+.vs-meter span.lit {
+  background: var(--accent);
+}
+.vs-meter span.lit.below {
+  background: color-mix(in srgb, var(--text-2) 45%, transparent);
+}
+.vs-meter-thr {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+}
+.vs-profiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.vs-profile {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.vs-profile > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.vs-profile:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.vs-profile.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+}
+.vs-radio {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 2px solid var(--text-3);
+}
+.vs-profile.on .vs-radio {
+  border-color: var(--accent);
+  background: radial-gradient(circle, var(--accent) 0 4px, transparent 5px);
+}
+.vs-note {
+  margin: 0;
+}
+.vs-proc {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 0;
+  transition: opacity 0.2s;
+}
+.vs-proc.locked {
+  opacity: 0.5;
+}
+.vs-threshold {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vs-hint {
+  margin-top: -4px;
+}
+.vs-capturing {
+  animation: vs-pulse 1.2s ease-in-out infinite;
+}
+@keyframes vs-pulse {
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+}
+.vs-cam {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background: var(--bg-ground);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.vs-cam.off {
+  align-content: center;
+  gap: 6px;
+  color: var(--text-3);
+}
+.vs-cam video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+.vs-cam-tag {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+}
+.vs-ladder {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.vs-rung {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  font-size: 14px;
+}
+.vs-rung.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.vs-rung.locked {
+  color: var(--text-3);
+}
+.vs-rung svg {
+  align-self: flex-end;
+  margin-top: -20px;
+}
+.vs-tier {
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-active);
+  color: var(--text-2);
+}
+.vs-tier.t1 {
+  background: #b7bdc9;
+  color: #15181e;
+}
+.vs-tier.t2 {
+  background: #7db8f5;
+  color: #071b30;
+}
+.vs-tier.t3 {
+  background: #b78cf7;
+  color: #1d1236;
+}
+@media (max-width: 720px) {
+  .vs-grid,
+  .vs-video,
+  .vs-profiles {
+    grid-template-columns: 1fr;
+  }
+  .vs-ladder {
+    grid-template-columns: 1fr 1fr;
+  }
+  .vs-test {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

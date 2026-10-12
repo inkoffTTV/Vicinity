@@ -6,6 +6,7 @@ import {
   mediaAvailable,
   mediaError,
   openMic,
+  processingKey,
   openScreen,
   rtcIceServers,
   screenQuality,
@@ -14,6 +15,7 @@ import {
   tuneScreenSender,
   useMediaPrefs,
 } from './media';
+import { pttHeld, usePtt } from './ptt';
 import { startTone } from './ringtone';
 import { playSound } from './sounds';
 import { userName, useStore } from './store';
@@ -415,8 +417,10 @@ function updateCaps(s: Session) {
 }
 
 // Кнопка «выключить микрофон» могла быть нажата, пока он открывался
+// В режиме рации микрофон открыт, только пока зажата клавиша
 function applyMute(mic: MediaStream) {
-  mic.getAudioTracks().forEach((t) => (t.enabled = !useCall.getState().muted));
+  const open = !useMediaPrefs.getState().ptt || pttHeld();
+  mic.getAudioTracks().forEach((t) => (t.enabled = !useCall.getState().muted && open));
 }
 
 function attachMic(s: Session, mic: MediaStream) {
@@ -616,8 +620,8 @@ export const useCall = create<CallState>((set, get) => ({
 
   toggleMute: () => {
     const muted = !get().muted;
-    sess.mic?.getAudioTracks().forEach((t) => (t.enabled = !muted));
     set({ muted });
+    if (sess.mic) applyMute(sess.mic);
     playSound(muted ? 'mute' : 'unmute');
   },
 
@@ -768,7 +772,8 @@ setVoiceGuard(() => {
 // Выбрали другой микрофон в настройках — подменяем дорожку прямо в звонке
 useMediaPrefs.subscribe((p, prev) => {
   const s = sess;
-  if (p.inputId === prev.inputId || !s.mic) return;
+  if (s.mic && p.ptt !== prev.ptt) applyMute(s.mic);
+  if ((p.inputId === prev.inputId && processingKey(p) === processingKey(prev)) || !s.mic) return;
   openMic(p.inputId).then(
     async (mic) => {
       if (sess !== s) return stopStream(mic);
@@ -785,6 +790,11 @@ useMediaPrefs.subscribe((p, prev) => {
     },
     (e) => sess === s && toast(mediaError(e), 'error'),
   );
+});
+
+// Рация: клавишу зажали или отпустили — открываем или закрываем микрофон в звонке
+usePtt.subscribe(() => {
+  if (sess.mic) applyMute(sess.mic);
 });
 
 // Выход из аккаунта: сокет уже закрыт — только освобождаем микрофон и камеру
