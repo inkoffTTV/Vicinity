@@ -1,8 +1,8 @@
-import { ChevronRight, Copy, Download, KeyRound, Laptop, MonitorSmartphone, Pencil, ShieldCheck, ShieldQuestion, Smartphone } from 'lucide-react';
+import { ChevronRight, Copy, Download, KeyRound, Laptop, MonitorSmartphone, Pencil, ShieldCheck, ShieldQuestion, Smartphone, UserX } from 'lucide-react';
 import QRCode from 'qrcode';
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { ADMIN_USERNAME, isAdminUsername, openAdminDm } from '../../lib/admin';
-import { AccountInfo, ApiError, api, parseTs, Session } from '../../lib/api';
+import { AccountInfo, ApiError, api, parseTs, Session, UserSummary } from '../../lib/api';
 import { copyText } from '../../lib/clipboard';
 import { usePlan } from '../../lib/plan';
 import { useStore } from '../../lib/store';
@@ -15,7 +15,7 @@ import { PasswordForm } from '../Settings';
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Ошибка');
 const TIER_NAMES = ['', 'Basic', 'Standard', 'Ultra'];
 
-type Dialog = null | 'username' | 'email-show' | 'email-change' | 'password' | 'twofa' | 'twofa-off' | 'sessions';
+type Dialog = null | 'username' | 'email-show' | 'email-change' | 'password' | 'twofa' | 'twofa-off' | 'sessions' | 'blocks';
 
 /** «Изменён 3 месяца назад» */
 function ago(ts: string): string {
@@ -147,6 +147,15 @@ export function AccountScreen({ onEditProfile }: { onEditProfile: () => void }) 
             <span className="muted">{devicesLabel(sessions.length)}</span>
             <Icon icon={ChevronRight} size={18} />
           </button>
+          <div className="acc-sep inset" />
+          <button type="button" className="acc-row link" onClick={() => setDialog('blocks')}>
+            <span className="acc-icon"><Icon icon={UserX} size={18} /></span>
+            <span className="grow">
+              <span className="acc-title">Заблокированные</span>
+              <span className="muted small">Они не могут писать вам, звонить и добавлять в друзья</span>
+            </span>
+            <Icon icon={ChevronRight} size={18} />
+          </button>
         </div>
       </section>
 
@@ -182,6 +191,7 @@ export function AccountScreen({ onEditProfile }: { onEditProfile: () => void }) 
       {dialog === 'twofa' && <TwoFactorDialog onClose={() => setDialog(null)} onDone={done} />}
       {dialog === 'twofa-off' && <TwoFactorOffDialog onClose={() => setDialog(null)} onDone={done} />}
       {dialog === 'sessions' && <SessionsDialog onClose={done} />}
+      {dialog === 'blocks' && <BlocksDialog onClose={() => setDialog(null)} />}
     </div>
   );
 }
@@ -688,6 +698,58 @@ export function deviceOf(ua: string | undefined): { name: string; kind: 'pc' | '
   const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '';
   const phone = /iPhone|Android|Mobile/.test(ua);
   return { name: os ? `${browser} · ${os}` : browser, kind: phone ? 'phone' : 'pc' };
+}
+
+function BlocksDialog({ onClose }: { onClose: () => void }) {
+  const toast = useStore((s) => s.toast);
+  const showProfile = useStore((s) => s.showProfile);
+  const [list, setList] = useState<UserSummary[] | null>(null);
+  const [busy, setBusy] = useState<number | null>(null);
+
+  useEffect(() => {
+    api.blocks().then(setList, (e) => toast(errText(e), 'error'));
+  }, [toast]);
+
+  const unblock = async (u: UserSummary) => {
+    setBusy(u.id);
+    try {
+      await api.unblock(u.id);
+      setList((l) => (l ?? []).filter((x) => x.id !== u.id));
+      toast(`${u.display_name} разблокирован(а)`);
+    } catch (e) {
+      toast(errText(e), 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Modal title="Заблокированные" onClose={onClose} className="sessions-modal">
+      <div className="stack">
+        <p className="muted">Заблокированные не могут писать вам в личные сообщения, звонить и отправлять заявки в друзья.</p>
+        {list === null && <div className="muted small">Загрузка…</div>}
+        {list?.length === 0 && <div className="muted small">Вы никого не заблокировали.</div>}
+        {!!list?.length && (
+          <ul className="session-list-v">
+            {list.map((u) => (
+              <li key={u.id} className="session-row">
+                <button type="button" className="plain" onClick={() => showProfile(u.id)} aria-label={`Профиль ${u.display_name}`}>
+                  <Avatar name={u.display_name} src={u.avatar_path} id={u.id} size={32} />
+                </button>
+                <span className="grow">
+                  <span className="acc-title">{u.display_name}</span>
+                  <span className="muted small">@{u.username}</span>
+                </span>
+                <button type="button" className="btn small" disabled={busy === u.id} onClick={() => unblock(u)}>
+                  Разблокировать
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Modal>
+  );
 }
 
 function SessionsDialog({ onClose }: { onClose: () => void }) {
