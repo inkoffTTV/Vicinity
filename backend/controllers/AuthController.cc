@@ -8,6 +8,7 @@
 #include "../utils/EmailUtils.h"
 #include "../utils/Mailer.h"
 #include "../utils/NetUtils.h"
+#include "../utils/TwoFactor.h"
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/HttpResponse.h>
 #include <drogon/drogon.h>
@@ -153,10 +154,10 @@ static void sendCode(const std::string& to, const std::string& username, const s
 // Создать аккаунт и сессию; ответ 201 {token, user_id, display_name}
 static HttpResponsePtr createAccount(const std::string& username, const std::string& hash,
                                      const std::string& displayName, const std::string& email,
-                                     const std::string& ip) {
+                                     const std::string& ip, const std::string& userAgent) {
     try {
         int64_t id = UserModel::create(username, hash, displayName, email, ip);
-        std::string token = AppSessionManager::instance().createSession(id);
+        std::string token = AppSessionManager::instance().createSession(id, userAgent, ip);
         Json::Value resp;
         resp["token"]        = token;
         resp["user_id"]      = static_cast<Json::Int64>(id);
@@ -213,7 +214,7 @@ void AuthController::registerUser(const HttpRequestPtr& req,
     const std::string ip = NetUtils::clientIp(req);
     if (ipBlocked(ip)) { cb(error("Регистрация с этого адреса запрещена", k403Forbidden)); return; }
     if (UserModel::findByUsername(username)) { cb(error("Username already taken", k409Conflict)); return; }
-    cb(createAccount(username, CryptoUtils::hashPassword(password), displayName, "", ip));
+    cb(createAccount(username, CryptoUtils::hashPassword(password), displayName, "", ip, req->getHeader("User-Agent")));
 }
 
 // POST /api/v1/auth/register/start {username, password, display_name, email, altcha, website}
@@ -244,7 +245,7 @@ void AuthController::registerStart(const HttpRequestPtr& req,
         if (UserModel::findByUsername(username)) { cb(error("Username already taken", k409Conflict)); return; }
 
         if (mode != "email") {
-            cb(createAccount(username, CryptoUtils::hashPassword(password), displayName, "", ip));
+            cb(createAccount(username, CryptoUtils::hashPassword(password), displayName, "", ip, req->getHeader("User-Agent")));
             return;
         }
 
@@ -306,7 +307,7 @@ void AuthController::registerVerify(const HttpRequestPtr& req,
     try {
         auto db = drogon::app().getDbClient();
         auto rows = db->execSqlSync(
-            "SELECT username, password_hash, display_name, email, code_hash, attempts, ip FROM pending_signups "
+            "SELECT username, password_hash, display_name, email, send_to, code_hash, attempts, ip FROM pending_signups "
             "WHERE id = ? AND expires_at > datetime('now')", id);
         if (rows.empty()) { cb(error("Код устарел — начните регистрацию заново", k410Gone)); return; }
         const auto& p = rows[0];
@@ -331,7 +332,11 @@ void AuthController::registerVerify(const HttpRequestPtr& req,
         if (auto err = checkIpLimit(ip)) { cb(error(*err, k429TooManyRequests)); return; }
         const std::string username = p["username"].as<std::string>();
         auto resp = createAccount(username, p["password_hash"].as<std::string>(),
-                                  p["display_name"].as<std::string>(), p["email"].as<std::string>(), ip);
+                                  p["display_name"].as<std::string>(), p["email"].as<std::string>(), ip,
+                                  req->getHeader("User-Agent"));
+        // Почта в том виде, как её ввёл человек (email — нормализованный, для уникальности)
+        if (resp->statusCode() == k201Created)
+            db->execSqlSync("UPDATE users SET email_display = ? WHERE username = ?", p["send_to"].as<std::string>(), username);
         // Аккаунт создан или логин/почту успели занять — эта регистрация больше не нужна
         if (resp->statusCode() == k201Created || resp->statusCode() == k409Conflict)
             db->execSqlSync("DELETE FROM pending_signups WHERE id = ?", id);
@@ -380,6 +385,9 @@ void AuthController::registerResend(const HttpRequestPtr& req,
     }
 }
 
+static HttpResponsePtr sessionResponseImpl(const User& user, const HttpRequestPtr& req);
+static HttpResponsePtr sessionResponse(const User& user, const HttpRequestPtr& req) { return sessionResponseImpl(user, req); }
+
 void AuthController::login(const HttpRequestPtr& req,
                            std::function<void(const HttpResponsePtr&)>&& cb) {
     auto json = req->getJsonObject();
@@ -407,25 +415,65 @@ void AuthController::login(const HttpRequestPtr& req,
         } catch (...) { /* апгрейд best-effort, на вход не влияет */ }
     }
 
+    // Двухфакторная защита: сначала код из приложения (POST /auth/login/2fa по билету).
+    // Старый десктоп код вводить не умеет — ему понятная ошибка вместо «входа» без токена.
+    if (TwoFactor::enabled(user->id)) {
+        if (!JsonUtils::getBool(*json, "supports_2fa")) {
+            cb(error("На аккаунте включена двухфакторная защита — войдите через сайт", k403Forbidden)); return;
+        }
+        Json::Value r;
+        r["twofa_required"] = true;
+        r["ticket"]         = TwoFactor::issueTicket(user->id);
+        cb(jsonResp(std::move(r)));
+        return;
+    }
+    cb(sessionResponse(*user, req));
+}
+
+// POST /api/v1/auth/login/2fa {ticket, code} → как /auth/login: код из приложения или резервный
+void AuthController::loginTwoFactor(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
+    auto json = req->getJsonObject();
+    if (!json || !json->isObject()) { cb(error("Invalid JSON", k400BadRequest)); return; }
+    const std::string ticket = JsonUtils::getStr(*json, "ticket");
+    const int64_t userId = TwoFactor::ticketUser(ticket);
+    if (!userId) { cb(error("Время на ввод кода вышло — войдите заново", k410Gone)); return; }
+    try {
+        if (!TwoFactor::check(userId, JsonUtils::getStr(*json, "code"))) {
+            if (!TwoFactor::ticketFailed(ticket)) { cb(error("Попытки закончились — войдите заново", k429TooManyRequests)); return; }
+            cb(error("Неверный код", k400BadRequest));
+            return;
+        }
+        TwoFactor::dropTicket(ticket);
+        auto user = UserModel::findById(userId);
+        if (!user || user->banned) { cb(error("Вход недоступен", k403Forbidden)); return; }
+        cb(sessionResponse(*user, req));
+    } catch (const std::exception& e) {
+        cb(error(e.what(), k500InternalServerError));
+    }
+}
+
+// Ответ успешного входа: новая сессия (с устройством и адресом) и данные профиля
+static HttpResponsePtr sessionResponseImpl(const User& user, const HttpRequestPtr& req) {
     std::string token;
     try {
-        token = AppSessionManager::instance().createSession(user->id);
+        token = AppSessionManager::instance().createSession(user.id, req->getHeader("User-Agent"), NetUtils::clientIp(req));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError)); return;
+        return error(e.what(), k500InternalServerError);
     }
+    const auto* u = &user;
 
     Json::Value resp;
     resp["token"]             = token;
-    resp["user_id"]           = static_cast<Json::Int64>(user->id);
-    resp["display_name"]      = user->displayName;
-    resp["avatar_path"]       = user->avatarPath;
-    resp["bio"]               = user->bio;
-    resp["accent_color"]      = user->accentColor;
-    resp["banner_path"]       = user->bannerPath;
-    resp["profile_json"]      = user->profileJson;
-    resp["subscription_tier"] = user->subscriptionTier;
-    resp["developer"]         = user->developer;
-    cb(jsonResp(std::move(resp)));
+    resp["user_id"]           = static_cast<Json::Int64>(u->id);
+    resp["display_name"]      = u->displayName;
+    resp["avatar_path"]       = u->avatarPath;
+    resp["bio"]               = u->bio;
+    resp["accent_color"]      = u->accentColor;
+    resp["banner_path"]       = u->bannerPath;
+    resp["profile_json"]      = u->profileJson;
+    resp["subscription_tier"] = u->subscriptionTier;
+    resp["developer"]         = u->developer;
+    return jsonResp(std::move(resp));
 }
 
 void AuthController::logout(const HttpRequestPtr& req,
@@ -480,8 +528,9 @@ void AuthController::changePassword(const HttpRequestPtr& req,
         cb(error("Неверный текущий пароль", k403Forbidden)); return;
     }
     try {
-        drogon::app().getDbClient()->execSqlSync("UPDATE users SET password_hash = ? WHERE id = ?",
-                                                 CryptoUtils::hashPassword(newPassword), userId);
+        drogon::app().getDbClient()->execSqlSync(
+            "UPDATE users SET password_hash = ?, password_changed_at = CURRENT_TIMESTAMP WHERE id = ?",
+            CryptoUtils::hashPassword(newPassword), userId);
         // Кто знал старый пароль, теряет доступ на всех остальных устройствах
         const int revoked = AppSessionManager::instance().deleteOtherSessions(userId, token);
         Json::Value resp;
@@ -506,6 +555,8 @@ void AuthController::sessions(const HttpRequestPtr& req,
             item["created_at"] = s.createdAt;
             item["expires_at"] = s.expiresAt;
             item["current"]    = s.current;
+            item["user_agent"] = s.userAgent;
+            item["ip"]         = s.ip;
             arr.append(item);
         }
         Json::Value resp;

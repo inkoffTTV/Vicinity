@@ -15,6 +15,8 @@ struct SessionRecord {
     std::string id;          // короткий непрозрачный идентификатор (не токен и не его хэш)
     std::string createdAt;
     std::string expiresAt;
+    std::string userAgent;   // браузер/приложение, из которого вошли ("" — старый сеанс)
+    std::string ip;          // адрес входа
     bool        current = false;
 };
 
@@ -22,7 +24,8 @@ class AppSessionManager {
 public:
     static AppSessionManager& instance();
 
-    std::string createSession(int64_t userId);
+    // userAgent и ip — для списка устройств в «Активных сеансах»
+    std::string createSession(int64_t userId, const std::string& userAgent = "", const std::string& ip = "");
     std::optional<SessionInfo> validate(const std::string& token);
     // Удаляет сессию и закрывает открытые с ней WS-подключения
     void deleteSession(const std::string& token);

@@ -9,6 +9,7 @@ find_package(OpenSSL REQUIRED)
 
 add_executable(VicinityServer
     main.cc
+    controllers/AccountController.cc
     controllers/AdminController.cc
     controllers/AuthController.cc
     controllers/ChannelController.cc
@@ -45,6 +46,8 @@ add_executable(VicinityServer
     utils/ProfileExt.cc
     utils/TextUtils.cc
     utils/Tiers.cc
+    utils/Totp.cc
+    utils/TwoFactor.cc
     utils/Uploads.cc
 )
 

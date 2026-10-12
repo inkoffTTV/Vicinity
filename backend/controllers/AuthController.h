@@ -13,6 +13,7 @@ public:
     ADD_METHOD_TO(AuthController::registerVerify, "/api/v1/auth/register/verify", Post, Options, "RateLimitFilter");
     ADD_METHOD_TO(AuthController::registerResend, "/api/v1/auth/register/resend", Post, Options, "RateLimitFilter");
     ADD_METHOD_TO(AuthController::login,        "/api/v1/auth/login",    Post, Options, "RateLimitFilter");
+    ADD_METHOD_TO(AuthController::loginTwoFactor, "/api/v1/auth/login/2fa", Post, Options, "RateLimitFilter");
     ADD_METHOD_TO(AuthController::logout,       "/api/v1/auth/logout",   Post, Options, "AuthFilter");
     ADD_METHOD_TO(AuthController::me,           "/api/v1/auth/me",       Get,  Options, "AuthFilter");
     ADD_METHOD_TO(AuthController::changePassword, "/api/v1/auth/password",        Post,   Options, "RateLimitFilter", "AuthFilter");
@@ -28,6 +29,7 @@ public:
     void registerVerify(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void registerResend(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void login       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void loginTwoFactor(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void logout      (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void me          (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void changePassword(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);

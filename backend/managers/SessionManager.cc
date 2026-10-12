@@ -10,15 +10,15 @@ AppSessionManager& AppSessionManager::instance() {
     return inst;
 }
 
-std::string AppSessionManager::createSession(int64_t userId) {
+std::string AppSessionManager::createSession(int64_t userId, const std::string& userAgent, const std::string& ip) {
     std::string token = CryptoUtils::generateToken();
     // В БД храним ТОЛЬКО хэш токена — утечка базы не даст угнать сессии.
     std::string tokenHash = CryptoUtils::sha256Hex(token);
     auto db = drogon::app().getDbClient();
     db->execSqlSync(
-        "INSERT INTO sessions(token, user_id, expires_at) "
-        "VALUES(?, ?, datetime('now', '+' || ? || ' hours'))",
-        tokenHash, userId, Vicinity::SESSION_EXPIRE_HOURS);
+        "INSERT INTO sessions(token, user_id, expires_at, user_agent, ip) "
+        "VALUES(?, ?, datetime('now', '+' || ? || ' hours'), NULLIF(?, ''), NULLIF(?, ''))",
+        tokenHash, userId, Vicinity::SESSION_EXPIRE_HOURS, userAgent.substr(0, 300), ip);
     return token;   // клиенту отдаём сырой токен
 }
 
@@ -63,14 +63,17 @@ static std::string publicId(const std::string& tokenHash) {
 std::vector<SessionRecord> AppSessionManager::listSessions(int64_t userId, const std::string& currentToken) {
     const std::string currentHash = CryptoUtils::sha256Hex(currentToken);
     auto rows = drogon::app().getDbClient()->execSqlSync(
-        "SELECT token, created_at, expires_at FROM sessions "
+        "SELECT token, created_at, expires_at, user_agent, ip FROM sessions "
         "WHERE user_id = ? AND expires_at > datetime('now') ORDER BY created_at DESC, rowid DESC",
         userId);
     std::vector<SessionRecord> out;
     for (const auto& r : rows) {
         const std::string hash = r["token"].as<std::string>();
         out.push_back(SessionRecord{publicId(hash), r["created_at"].as<std::string>(),
-                                    r["expires_at"].as<std::string>(), hash == currentHash});
+                                    r["expires_at"].as<std::string>(),
+                                    r["user_agent"].isNull() ? std::string() : r["user_agent"].as<std::string>(),
+                                    r["ip"].isNull() ? std::string() : r["ip"].as<std::string>(),
+                                    hash == currentHash});
     }
     return out;
 }

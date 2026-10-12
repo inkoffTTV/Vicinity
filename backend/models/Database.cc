@@ -230,6 +230,26 @@ void initialize() {
     exec("ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0");
     // Расширенный профиль сайта (бейджик, украшения, подключения, виджеты) — utils/ProfileExt.h
     exec("ALTER TABLE users ADD COLUMN profile_ext TEXT DEFAULT NULL");
+    // Аккаунт (controllers/AccountController.cc): когда меняли логин и пароль, двухфакторная защита
+    exec("ALTER TABLE users ADD COLUMN username_changed_at DATETIME DEFAULT NULL");
+    exec("ALTER TABLE users ADD COLUMN password_changed_at DATETIME DEFAULT NULL");
+    exec("ALTER TABLE users ADD COLUMN totp_secret TEXT DEFAULT NULL");    // включённая 2FA
+    exec("ALTER TABLE users ADD COLUMN totp_pending TEXT DEFAULT NULL");   // секрет до подтверждения кодом
+    exec("ALTER TABLE users ADD COLUMN totp_backup TEXT DEFAULT NULL");    // JSON-массив sha256 резервных кодов
+    exec("ALTER TABLE users ADD COLUMN email_display TEXT DEFAULT NULL");  // почта как её ввели (email — нормализованная)
+    // Устройство и адрес входа — для «Активных сеансов»
+    exec("ALTER TABLE sessions ADD COLUMN user_agent TEXT DEFAULT NULL");
+    exec("ALTER TABLE sessions ADD COLUMN ip TEXT DEFAULT NULL");
+    // Смена почты: ждём код, отправленный на новый адрес
+    exec("CREATE TABLE IF NOT EXISTS email_changes ("
+         "user_id INTEGER PRIMARY KEY,"
+         "email TEXT NOT NULL,"
+         "send_to TEXT NOT NULL,"
+         "code_hash TEXT NOT NULL,"
+         "attempts INTEGER NOT NULL DEFAULT 0,"
+         "last_sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "expires_at DATETIME NOT NULL,"
+         "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
     exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL");
     exec("CREATE INDEX IF NOT EXISTS idx_users_signup_ip ON users(signup_ip, created_at)");
 
