@@ -2,6 +2,7 @@ import { ExternalLink } from 'lucide-react';
 import { ReactNode } from 'react';
 import { Connection, Presence } from '../../lib/api';
 import { connectionType } from '../../lib/cosmetics';
+import { NameStyle, nameCss } from '../../lib/nameStyle';
 import { Avatar, PRESENCE_LABEL } from '../Avatar';
 import { Markdown } from '../Markdown';
 import { ServerIcon } from '../ServerRail';
@@ -25,7 +26,7 @@ export interface CardData {
   connections: Connection[];
   frame: string | null;
   effect: string | null;
-  name_style: string | null;
+  name_style: NameStyle | null;
 }
 
 /** Ссылка подключённого аккаунта: своя или по имени (Twitch, GitHub, Telegram…) */
@@ -63,7 +64,7 @@ export function ProfileCard({ d, actions, onBadge }: { d: CardData; actions?: Re
         )}
       </div>
       <div className="pcard-body">
-        <h2 className={`pcard-name${d.name_style ? ` name-${d.name_style}` : ''}`}>{d.display_name}</h2>
+        <h2 className="pcard-name">{d.name_style ? <span style={nameCss(d.name_style, 24)}>{d.display_name}</span> : d.display_name}</h2>
         <div className="pcard-sub">
           <span>@{d.username}</span>
           {d.pronouns && <span>• {d.pronouns}</span>}

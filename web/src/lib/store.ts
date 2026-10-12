@@ -836,6 +836,8 @@ export const useStore = create<State>((set, get) => {
     // Интерфейс показываем только с загруженными данными нового пользователя
     set({ me, presence: { ...get().presence, [me.user_id]: me.presence } });
     get().open(v);
+    // Ссылка на профиль (/users/<id>) — открыть его поверх последнего экрана
+    if (route?.kind === 'user') get().showProfile(route.userId);
     void get().loadUnread();
     // Тема с других устройств и что даёт подписка
     void startAppearanceSync((msg) => get().toast(msg, 'error'));

@@ -4,6 +4,13 @@ import { userMenuProps } from '../lib/userMenu';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
 import { OwnerCrown, RoleChips } from './RoleChips';
+import { nameCss, parseNameStyle } from '../lib/nameStyle';
+
+/** Стиль ника участника (шрифт, эффект, цвет) — поверх цвета роли */
+function memberNameStyle(v: unknown) {
+  const s = parseNameStyle(v);
+  return s ? nameCss(s, 0) : undefined;
+}
 
 export function MemberList({ serverId }: { serverId: number }) {
   const members = useStore((s) => s.membersByServer[serverId] ?? []);
@@ -39,7 +46,7 @@ export function MemberList({ serverId }: { serverId: number }) {
                 <Avatar name={m.display_name} src={m.avatar_path} id={m.id} size={32} presence={presence[m.id] ?? m.presence ?? 'offline'} />
                 <span className="member-names">
                   <span className="member-name">
-                    <span className="ellipsis" style={topRole ? { color: topRole.color } : undefined}>
+                    <span className="ellipsis" style={memberNameStyle(m.name_style) ?? (topRole ? { color: topRole.color } : undefined)}>
                       {m.display_name}
                     </span>
                     {m.is_owner && <OwnerCrown />}

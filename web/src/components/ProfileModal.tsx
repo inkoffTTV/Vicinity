@@ -1,7 +1,6 @@
 import { X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, Member, normalizeExt, Profile, ProfileExt } from '../lib/api';
-import { useCall } from '../lib/call';
 import { useAppearance } from '../lib/prefs';
 import { useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
@@ -12,6 +11,7 @@ import { ServerIcon } from './ServerRail';
 import { cardFromProfile } from './profile/cardData';
 import { ProfileBoard } from './profile/ProfileBoard';
 import { ProfileCard } from './profile/ProfileCard';
+import { ProfileActions } from './profile/ProfileActions';
 import { useProfileStudio } from './profile/ProfileStudio';
 import { Icon } from './Icon';
 
@@ -21,8 +21,6 @@ export function ProfileModal({ userId }: { userId: number }) {
   // «Применить тему к профилям других пользователей» — чужие карточки в моих цветах (Настройки → Тема)
   const applyMine = useAppearance((s) => s.applyToProfiles);
   const showProfile = useStore((s) => s.showProfile);
-  const openDmWith = useStore((s) => s.openDmWith);
-  const refreshFriends = useStore((s) => s.refreshFriends);
   const openStudio = useProfileStudio((s) => s.show);
   const livePresence = useStore((s) => s.presence[userId]);
   const toast = useStore((s) => s.toast);
@@ -30,8 +28,6 @@ export function ProfileModal({ userId }: { userId: number }) {
   const servers = useStore((s) => s.servers);
   // Роли — из списков участников серверов, где этот пользователь уже встречался
   const roles = useStore((s) => Object.values(s.membersByServer).flat().find((m) => m.id === userId)?.roles ?? NO_ROLES);
-  const callIdle = useCall((s) => s.phase === 'idle');
-  const startCall = useCall((s) => s.start);
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState('');
 
@@ -58,15 +54,6 @@ export function ProfileModal({ userId }: { userId: number }) {
     }, 500);
   };
 
-  const friendAction = async (fn: () => Promise<unknown>) => {
-    try {
-      await fn();
-      await Promise.all([load(), refreshFriends()]);
-    } catch (e) {
-      toast(e instanceof ApiError ? e.message : 'Ошибка', 'error');
-    }
-  };
-
   if (!p)
     return (
       <Modal onClose={close} bare>
@@ -86,54 +73,16 @@ export function ProfileModal({ userId }: { userId: number }) {
     card.banner_color = 'var(--theme-gradient, var(--accent))';
   }
 
-  const actions = self ? (
-    <button
-      className="btn primary"
-      onClick={() => {
+  const actions = (
+    <ProfileActions
+      p={p}
+      onChanged={load}
+      onClose={close}
+      onEdit={() => {
         close();
         openStudio();
       }}
-    >
-      Редактировать профиль
-    </button>
-  ) : (
-    <>
-      <button className="btn primary" onClick={() => openDmWith(p.id)}>
-        Сообщение
-      </button>
-      {p.friendship_status === 'none' && (
-        <button className="btn" onClick={() => friendAction(() => api.friendRequest(p.id))}>
-          Добавить в друзья
-        </button>
-      )}
-      {p.friendship_status === 'pending_out' && (
-        <button className="btn" onClick={() => friendAction(() => api.friendRemove(p.id))}>
-          Отменить заявку
-        </button>
-      )}
-      {p.friendship_status === 'pending_in' && (
-        <button className="btn" onClick={() => friendAction(() => api.friendRespond(p.id, true))}>
-          Принять заявку
-        </button>
-      )}
-      {p.friendship_status === 'friends' && (
-        <button
-          className="btn ok"
-          disabled={!callIdle}
-          onClick={() => {
-            close();
-            void startCall(p.id, p.display_name);
-          }}
-        >
-          Позвонить
-        </button>
-      )}
-      {p.friendship_status === 'friends' && (
-        <button className="btn" onClick={() => friendAction(() => api.friendRemove(p.id))}>
-          Удалить из друзей
-        </button>
-      )}
-    </>
+    />
   );
 
   const activity = (

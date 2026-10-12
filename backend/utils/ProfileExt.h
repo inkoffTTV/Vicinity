@@ -14,4 +14,8 @@ namespace ProfileExt {
 
     // Сохранённый профиль для показа: украшения, на которые подписки уже нет, убираются
     Json::Value forDisplay(const std::string& stored, int tier);
+
+    // Стиль ника из JSON (json_extract(profile_ext, '$.name_style')) для сообщений и списков участников;
+    // null — стиля нет или подписка его не позволяет
+    Json::Value nameStyleFromJson(const std::string& styleJson, int tier);
 }

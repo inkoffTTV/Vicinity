@@ -4,6 +4,7 @@ import { Message, parseTs, Reaction } from '../lib/api';
 import { copyText } from '../lib/clipboard';
 import { isEmojiOnly, mentionsUser, plainText } from '../lib/markdown';
 import { usePins } from '../lib/pins';
+import { nameCss, parseNameStyle } from '../lib/nameStyle';
 import { useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
 import { useUserDirectory } from '../lib/users';
@@ -15,6 +16,9 @@ import { Markdown } from './Markdown';
 
 /** Ник подписчика: цветом профиля (Basic+), градиентом (Ultra) — utils/Tiers.h на сервере */
 function authorNameStyle(msg: Message): { className: string; style?: CSSProperties } {
+  // Свой стиль ника (шрифт, эффект, цвет) — важнее цвета по подписке
+  const custom = parseNameStyle(msg.author_style);
+  if (custom) return { className: ' styled', style: nameCss(custom, 0) };
   const tier = msg.author_tier ?? 0;
   const color = msg.author_accent && /^#[0-9a-f]{6}$/i.test(msg.author_accent) ? msg.author_accent : '';
   if (tier < 1 || !color) return { className: '' };

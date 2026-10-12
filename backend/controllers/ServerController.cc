@@ -8,6 +8,7 @@
 #include "../utils/Broadcast.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/TextUtils.h"
+#include "../utils/ProfileExt.h"
 #include "../utils/Tiers.h"
 #include "../utils/Uploads.h"
 #include "../../shared/crypto/common_consts.h"
@@ -371,7 +372,7 @@ void ServerController::listMembers(const HttpRequestPtr& req,
         }
         auto rows = db->execSqlSync(
             "SELECT u.id, u.username, u.display_name, u.avatar_path, u.presence, "
-            "       u.developer, u.subscription_tier, s.owner_id "
+            "       u.developer, u.subscription_tier, s.owner_id, json_extract(u.profile_ext, '$.name_style') AS name_style "
             "FROM server_members sm "
             "JOIN users u   ON u.id = sm.user_id "
             "JOIN servers s ON s.id = sm.server_id "
@@ -411,6 +412,8 @@ void ServerController::listMembers(const HttpRequestPtr& req,
             m["is_owner"]     = (r["owner_id"].as<int64_t>() == uid);
             m["developer"]    = r["developer"].isNull() ? 0 : r["developer"].as<int>();
             m["tier"]         = r["subscription_tier"].isNull() ? 0 : r["subscription_tier"].as<int>();
+            m["name_style"]   = ProfileExt::nameStyleFromJson(r["name_style"].isNull() ? std::string() : r["name_style"].as<std::string>(),
+                                                              m["tier"].asInt());
             m["roles"]        = rolesByUser.count(uid) ? rolesByUser[uid] : Json::Value(Json::arrayValue);
             arr.append(m);
         }

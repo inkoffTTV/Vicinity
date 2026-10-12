@@ -3,6 +3,7 @@
 //   /channels/@me/<channelId>          — личка или беседа
 //   /channels/<serverId>/<channelId>   — канал сервера (без channelId — первый текстовый)
 //   /invite/<CODE>                     — приглашение на сервер
+//   /users/<userId>                    — профиль (ссылка «Поделиться профилем»)
 // nginx и vite preview отдают index.html на любой путь, так что прямая ссылка и перезагрузка работают.
 import type { Dm, Group, Server, ServerChannel } from './api';
 import type { View } from './store';
@@ -10,7 +11,8 @@ import type { View } from './store';
 export type Route =
   | { kind: 'home'; channelId: number | null }
   | { kind: 'server'; serverId: number; channelId: number | null }
-  | { kind: 'invite'; code: string };
+  | { kind: 'invite'; code: string }
+  | { kind: 'user'; userId: number };
 
 const id = (s: string | undefined) => (s && /^\d{1,15}$/.test(s) ? Number(s) : null);
 
@@ -19,6 +21,10 @@ export function parsePath(path: string): Route | null {
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
   if (parts[0] === 'invite' && parts.length === 2 && /^[A-Za-z0-9]{1,32}$/.test(parts[1]))
     return { kind: 'invite', code: parts[1].toUpperCase() };
+  if (parts[0] === 'users' && parts.length === 2) {
+    const userId = id(parts[1]);
+    return userId === null ? null : { kind: 'user', userId };
+  }
   if (parts[0] !== 'channels' || parts.length < 2 || parts.length > 3) return null;
   const channelId = parts.length === 3 ? id(parts[2]) : null;
   if (parts.length === 3 && channelId === null) return null;

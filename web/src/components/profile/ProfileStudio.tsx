@@ -2,13 +2,15 @@ import { X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { ApiError, Connection, EMPTY_EXT, normalizeExt, parseTs, Presence, Profile, ProfileExt, api } from '../../lib/api';
-import { CONNECTIONS, Cosmetic, EFFECTS, FRAMES, NAME_STYLES, TIER_NAME } from '../../lib/cosmetics';
+import { CONNECTIONS, Cosmetic, EFFECTS, FRAMES, TIER_NAME } from '../../lib/cosmetics';
+import { nameCss } from '../../lib/nameStyle';
 import { usePlan } from '../../lib/plan';
 import { DEFAULT_ACCENT } from '../../lib/prefs';
 import { useStore } from '../../lib/store';
 import { Avatar } from '../Avatar';
 import { Modal } from '../Modal';
 import { bannerColorOf, parseProfileJson, statusOf } from './cardData';
+import { NameStyleEditor } from './NameStyleEditor';
 import { ProfileBoard } from './ProfileBoard';
 import { ConnectionTile, ProfileCard } from './ProfileCard';
 import { Icon } from '../Icon';
@@ -74,6 +76,7 @@ export function ProfileStudio() {
   });
   const [newConn, setNewConn] = useState<Connection>({ type: 'steam', name: '', url: '' });
   const [busy, setBusy] = useState(false);
+  const [nameEditor, setNameEditor] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
@@ -100,7 +103,6 @@ export function ProfileStudio() {
   const locked = [
     FRAMES.find((c) => c.id === ext.frame),
     EFFECTS.find((c) => c.id === ext.effect),
-    NAME_STYLES.find((c) => c.id === ext.name_style),
   ].filter((c): c is Cosmetic => !!c && c.tier > tier);
 
   const upload = async (field: 'avatar' | 'banner', file?: File) => {
@@ -239,7 +241,10 @@ export function ProfileStudio() {
           </Section>
 
           <Section title="Стиль ника">
-            <CosmeticPicker kind="name" items={NAME_STYLES} value={ext.name_style} tier={tier} onChange={(name_style) => editExt({ ...ext, name_style })} />
+            <button type="button" className="btn studio-name-btn" onClick={() => setNameEditor(true)}>
+              <span style={ext.name_style ? nameCss(ext.name_style, 16) : undefined}>{displayName.trim() || me.display_name}</span>
+              <span className="muted small">Шрифт, эффект и цвет</span>
+            </button>
           </Section>
 
           <Section title="Основное">
@@ -310,6 +315,17 @@ export function ProfileStudio() {
         <div className="studio-board">
           <ProfileBoard ext={ext} editable onChange={editExt} activity={<div className="muted">Здесь другие увидят ваши серверы и общих друзей.</div>} />
         </div>
+
+        {nameEditor && (
+          <NameStyleEditor
+            initial={ext.name_style}
+            onClose={() => setNameEditor(false)}
+            onSaved={(name_style) => {
+              setExt({ ...ext, name_style });
+              setNameEditor(false);
+            }}
+          />
+        )}
 
         <div className="studio-bar">
           {locked.length > 0 ? (

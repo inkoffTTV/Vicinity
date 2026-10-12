@@ -1,4 +1,5 @@
 #include "Messages.h"
+#include "ProfileExt.h"
 #include "TextUtils.h"
 #include <map>
 #include <sstream>
@@ -11,6 +12,7 @@ static constexpr size_t kPreviewLen = 200;
 const std::string kColumns =
     "m.id, m.channel_id, m.author_id, u.display_name AS author_name, u.avatar_path AS author_avatar, "
     "u.subscription_tier AS author_tier, u.accent_color AS author_accent, "
+    "json_extract(u.profile_ext, '$.name_style') AS author_style, "
     "m.text, m.created_at, m.edited, m.attachment, m.attachment_name, m.attachment_size, "
     "m.attachment_type, m.reply_to, "
     "rm.id AS reply_id, rm.author_id AS reply_author_id, ru.display_name AS reply_author_name, "
@@ -47,6 +49,7 @@ Json::Value fromRow(const drogon::orm::Row& row) {
     // Подписка автора и цвет профиля — для цветного/градиентного ника (utils/Tiers.h); старые клиенты игнорируют
     msg["author_tier"]   = row["author_tier"].isNull() ? 0 : row["author_tier"].as<int>();
     msg["author_accent"] = str(row, "author_accent");
+    msg["author_style"]  = ProfileExt::nameStyleFromJson(str(row, "author_style"), msg["author_tier"].asInt());
     msg["text"]          = str(row, "text");
     msg["created_at"]    = str(row, "created_at");
     msg["edited"]        = row["edited"].as<int>() != 0;

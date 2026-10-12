@@ -1,6 +1,8 @@
 // Тонкая обёртка над REST API бэкенда Vicinity (/api/v1/...).
 // Веб-клиент отдаётся с того же origin, что и API, поэтому пути относительные.
 
+import { NameStyle, parseNameStyle } from './nameStyle';
+
 export type Presence = 'online' | 'idle' | 'dnd' | 'invisible' | 'offline';
 
 export interface Me {
@@ -155,6 +157,8 @@ export interface Message {
   /** Подписка автора (цветной ник с Basic, градиентный с Ultra) — нет у старых серверов */
   author_tier?: number;
   author_accent?: string;
+  /** Стиль ника автора (lib/nameStyle.ts) — нет у старых серверов */
+  author_style?: unknown;
   text: string;
   created_at: string;
   edited: boolean;
@@ -246,6 +250,8 @@ export interface Member extends UserSummary {
   is_owner: boolean;
   developer: number;
   tier: number;
+  /** Стиль ника — нет у старых серверов */
+  name_style?: unknown;
   roles: { name: string; color: string }[];
 }
 
@@ -334,6 +340,8 @@ export interface Profile {
   badges: { id: string; label: string; color: string }[];
   presence: Presence;
   friendship_status: string;
+  /** Я заблокировал этого пользователя */
+  blocked?: boolean;
   mutual_servers: { id: number; name: string }[];
   mutual_friends: UserSummary[];
   /** Расширенный профиль сайта — нет у старых серверов */
@@ -365,7 +373,8 @@ export interface ProfileExt {
   badge_server: number | null;
   frame: string | null;
   effect: string | null;
-  name_style: string | null;
+  /** Стиль ника (lib/nameStyle.ts) */
+  name_style: NameStyle | null;
   connections: Connection[];
   widgets: {
     favorite_game: FavoriteGame | null;
@@ -391,7 +400,7 @@ export function normalizeExt(e: Partial<ProfileExt> | undefined | null): Profile
     badge_server: e?.badge_server ?? null,
     frame: e?.frame ?? null,
     effect: e?.effect ?? null,
-    name_style: e?.name_style ?? null,
+    name_style: parseNameStyle(e?.name_style),
     connections: Array.isArray(e?.connections) ? e!.connections : [],
     widgets: {
       favorite_game: w.favorite_game ?? null,
@@ -632,6 +641,9 @@ export const api = {
   friendRespond: (user_id: number, accept: boolean) =>
     post<{ status: string }>('/friends/respond', { user_id, accept }),
   friendRemove: (id: number) => del(`/friends/${id}`),
+  block: (id: number) => post<{ blocked: boolean }>(`/users/${id}/block`),
+  unblock: (id: number) => del<{ blocked: boolean }>(`/users/${id}/block`),
+  blocks: () => get<{ users: UserSummary[] }>('/blocks').then((r) => r.users),
 
   // ── Профиль ──
   customize: (p: {

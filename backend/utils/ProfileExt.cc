@@ -2,6 +2,8 @@
 #include "JsonUtils.h"
 #include "TextUtils.h"
 #include "Tiers.h"
+#include <algorithm>
+#include <cctype>
 #include <map>
 #include <set>
 
@@ -16,9 +18,65 @@ static const std::map<std::string, int>& effects() {
     static const std::map<std::string, int> m = {{"stars", 3}, {"aurora", 3}, {"snow", 3}, {"glint", 3}};
     return m;
 }
-static const std::map<std::string, int>& nameStyles() {
-    static const std::map<std::string, int> m = {{"gradient", 2}, {"neon", 2}, {"metal", 2}, {"flame", 2}, {"aurora", 3}};
+// Стиль ника (макет «4 · Стиль отображаемого имени»): шрифт, эффект, 1–2 цвета. Как выглядит — web/src/lib/nameStyle.ts
+static const std::map<std::string, int>& nameFonts() {
+    static const std::map<std::string, int> m = {
+        {"onest", 1}, {"comfortaa", 1}, {"oswald", 1}, {"exo", 1},
+        {"unbounded", 2}, {"russo", 2}, {"caveat", 2}, {"playfair", 2},
+        {"pressstart", 3}, {"lobster", 3}, {"amatic", 3}, {"rubikmono", 3}};
     return m;
+}
+static const std::map<std::string, int>& nameEffects() {
+    static const std::map<std::string, int> m = {
+        {"minimal", 1}, {"gradient", 2}, {"outline", 2}, {"highlight", 2}, {"neon", 3}, {"jelly", 3}, {"prism", 3}};
+    return m;
+}
+// Готовые цвета — с Basic; свой цвет — со Standard
+static const std::set<std::string>& presetColors() {
+    static const std::set<std::string> s = {"#2bc6a4", "#4c9bff", "#b78cf7", "#ff6b9a", "#ff8a3d", "#f2c14e", "#3dd68c", "#f0616d"};
+    return s;
+}
+
+static bool isHex(const std::string& s) {
+    if (s.size() != 7 || s[0] != '#') return false;
+    for (size_t i = 1; i < 7; ++i)
+        if (!std::isxdigit(static_cast<unsigned char>(s[i]))) return false;
+    return true;
+}
+
+static std::string lower(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+// Проверить стиль ника: {font, effect, colors[1..2]} → канонический объект; need — какая подписка нужна
+static bool cleanNameStyle(const Json::Value& v, Json::Value& out, int& need) {
+    need = 0;
+    if (!v.isObject()) return false;
+    const std::string font = v["font"].isString() ? v["font"].asString() : "";
+    const std::string effect = v["effect"].isString() ? v["effect"].asString() : "";
+    if (!nameFonts().count(font) || !nameEffects().count(effect)) return false;
+    const Json::Value& colors = v["colors"];
+    if (!colors.isArray() || colors.size() < 1 || colors.size() > 2) return false;
+    out = Json::Value(Json::objectValue);
+    out["font"]   = font;
+    out["effect"] = effect;
+    out["colors"] = Json::Value(Json::arrayValue);
+    need = std::max(nameFonts().at(font), nameEffects().at(effect));
+    for (const auto& c : colors) {
+        if (!c.isString() || !isHex(c.asString())) return false;
+        const std::string hex = lower(c.asString());
+        if (!presetColors().count(hex)) need = std::max(need, 2);
+        out["colors"].append(hex);
+    }
+    return true;
+}
+
+Json::Value nameStyleFromJson(const std::string& styleJson, int tier) {
+    Json::Value v, out;
+    int need = 0;
+    if (styleJson.empty() || !JsonUtils::parse(styleJson, v) || !cleanNameStyle(v, out, need)) return Json::nullValue;
+    return Tiers::clamp(tier) >= need ? out : Json::Value(Json::nullValue);
 }
 static const std::set<std::string>& connectionTypes() {
     static const std::set<std::string> s = {"steam", "spotify", "epic", "xbox", "playstation", "battlenet", "twitch",
@@ -109,8 +167,19 @@ bool sanitize(const Json::Value& in, int tier, const Json::Value& memberServerId
     out["frame"] = c;
     if (!cleanCosmetic(in["effect"], effects(), tier, "Эффект профиля", c, error, code)) return false;
     out["effect"] = c;
-    if (!cleanCosmetic(in["name_style"], nameStyles(), tier, "Стиль ника", c, error, code)) return false;
-    out["name_style"] = c;
+    // Стиль ника: null или {font, effect, colors}; старый формат (строка) — сбрасывается
+    out["name_style"] = Json::nullValue;
+    if (in["name_style"].isObject()) {
+        Json::Value ns;
+        int need = 0;
+        if (!cleanNameStyle(in["name_style"], ns, need)) { error = "Некорректный стиль ника"; code = 400; return false; }
+        if (Tiers::clamp(tier) < need) {
+            error = std::string("Этот стиль ника — с подпиской ") + tierName(need);
+            code  = 403;
+            return false;
+        }
+        out["name_style"] = ns;
+    }
     code = 400;
 
     // Подключённые аккаунты: до 10, имя до 40 символов, ссылка — только https://
@@ -183,7 +252,13 @@ Json::Value forDisplay(const std::string& stored, int tier) {
     };
     drop("frame", frames());
     drop("effect", effects());
-    drop("name_style", nameStyles());
+    // Стиль ника — только если подписка его ещё позволяет
+    if (v.isMember("name_style")) {
+        Json::StreamWriterBuilder w;
+        w["indentation"] = "";
+        v["name_style"] = v["name_style"].isObject() ? nameStyleFromJson(Json::writeString(w, v["name_style"]), tier)
+                                                     : Json::Value(Json::nullValue);
+    }
     return v;
 }
 
