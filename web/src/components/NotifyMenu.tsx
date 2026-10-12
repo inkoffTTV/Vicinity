@@ -1,5 +1,7 @@
+import { Bell, BellOff, MonitorSmartphone } from 'lucide-react';
 import { ReactNode, useState } from 'react';
 import { NOTIFY_LEVELS, serverLevel, useNotifySettings } from '../lib/notify';
+import { Icon } from './Icon';
 import { Popover } from './Popover';
 
 interface Props {
@@ -32,7 +34,8 @@ export function NotifyMenu({ channelId, serverId, anchor, point, onClose, childr
           onClose();
         }}
       >
-        {muted ? '🔔 Включить уведомления канала' : '🔕 Заглушить канал'}
+        <Icon key={muted ? 'off' : 'on'} icon={muted ? Bell : BellOff} size={16} anim="pop" />
+        {muted ? 'Включить уведомления канала' : 'Заглушить канал'}
       </button>
       {serverId !== null && (
         <>
@@ -55,7 +58,8 @@ export function NotifyMenu({ channelId, serverId, anchor, point, onClose, childr
       )}
       {permission === 'default' && (
         <button role="menuitem" onClick={() => void Notification.requestPermission().then(setPermission)}>
-          🖥 Разрешить уведомления браузера
+          <Icon icon={MonitorSmartphone} size={16} />
+          Разрешить уведомления браузера
         </button>
       )}
     </Popover>

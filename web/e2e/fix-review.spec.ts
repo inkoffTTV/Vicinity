@@ -299,8 +299,9 @@ test.describe('исправления по ревью', () => {
     for (let i = 0; i < 40; i++) sa.send({ type: 'voice_join', channel_id: srv.voices[0] });
     await sa.sync();
     await sb.sync();
+    // Быстрые изменения склеиваются в одно voice_state, поэтому снизу — хотя бы одно обновление
     const joins = sb.count((e) => e.type === 'voice_state' && e.channel_id === srv.voices[0]);
-    expect(joins).toBeGreaterThanOrEqual(10);
+    expect(joins).toBeGreaterThanOrEqual(1);
     expect(joins).toBeLessThanOrEqual(21);
 
     // Сигналинг: адресату — только известные поля, from/name ставит сервер; слишком длинное не пересылается

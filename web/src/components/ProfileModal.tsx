@@ -1,9 +1,11 @@
+import { MessageCircle, Pencil, Phone, UserCheck, UserMinus, UserPlus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, ApiError, Member, parseTs, Profile } from '../lib/api';
 import { useCall } from '../lib/call';
 import { useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
+import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 import { Modal } from './Modal';
 import { RoleChips } from './RoleChips';
@@ -60,6 +62,12 @@ export function ProfileModal({ userId }: { userId: number }) {
   return (
     <Modal onClose={close} bare>
       <div className="profile-card">
+        {/* Кнопка закрытия «прилипает» к верху, когда длинный профиль прокручивают на телефоне */}
+        <div className="profile-close-bar">
+          <button className="icon-btn profile-close" onClick={close} aria-label="Закрыть" title="Закрыть (Esc)">
+            <Icon icon={X} size={20} className="anim-turn" />
+          </button>
+        </div>
         <div
           className="profile-banner"
           style={p.banner_path ? { backgroundImage: `url("${p.banner_path}")` } : { background: accent }}
@@ -67,9 +75,6 @@ export function ProfileModal({ userId }: { userId: number }) {
         <div className="profile-avatar">
           <Avatar name={p.display_name} src={p.avatar_path} id={p.id} size={88} presence={presence} />
         </div>
-        <button className="icon-btn profile-close" onClick={close} aria-label="Закрыть">
-          ✕
-        </button>
         <div className="profile-content">
           <h2>{p.display_name}</h2>
           <div className="muted">
@@ -148,15 +153,18 @@ export function ProfileModal({ userId }: { userId: number }) {
                   setSettingsOpen(true);
                 }}
               >
+                <Icon icon={Pencil} size={16} anim="wiggle" />
                 Редактировать профиль
               </button>
             ) : (
               <>
                 <button className="btn primary" onClick={() => openDmWith(p.id)}>
+                  <Icon icon={MessageCircle} size={16} anim="wiggle" />
                   Написать
                 </button>
                 {p.friendship_status === 'none' && (
                   <button className="btn" onClick={() => friendAction(() => api.friendRequest(p.id))}>
+                    <Icon icon={UserPlus} size={16} anim="bounce" />
                     Добавить в друзья
                   </button>
                 )}
@@ -167,6 +175,7 @@ export function ProfileModal({ userId }: { userId: number }) {
                 )}
                 {p.friendship_status === 'pending_in' && (
                   <button className="btn" onClick={() => friendAction(() => api.friendRespond(p.id, true))}>
+                    <Icon icon={UserCheck} size={16} anim="bounce" />
                     Принять заявку
                   </button>
                 )}
@@ -179,11 +188,13 @@ export function ProfileModal({ userId }: { userId: number }) {
                       void startCall(p.id, p.display_name);
                     }}
                   >
-                    📞 Позвонить
+                    <Icon icon={Phone} size={16} anim="ring" />
+                    Позвонить
                   </button>
                 )}
                 {p.friendship_status === 'friends' && (
                   <button className="btn" onClick={() => friendAction(() => api.friendRemove(p.id))}>
+                    <Icon icon={UserMinus} size={16} anim="wiggle" />
                     Удалить из друзей
                   </button>
                 )}

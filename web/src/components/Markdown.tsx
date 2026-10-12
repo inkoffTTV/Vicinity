@@ -1,8 +1,10 @@
+import { Check, Copy } from 'lucide-react';
 import { KeyboardEvent, MouseEvent, ReactNode, useMemo, useState } from 'react';
 import { copyText } from '../lib/clipboard';
 import { MdNode, parseMarkdown } from '../lib/markdown';
 import { useStore } from '../lib/store';
 import { Directory, resolveLogin, useUserDirectory } from '../lib/users';
+import { Icon } from './Icon';
 
 interface Props {
   text: string;
@@ -141,7 +143,8 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
       <div className="md-codeblock-head">
         <span className="md-codeblock-lang">{lang}</span>
         <button type="button" className="md-codeblock-copy" onClick={copy}>
-          {copied ? 'Скопировано ✓' : 'Копировать'}
+          <Icon key={copied ? 'done' : 'copy'} icon={copied ? Check : Copy} size={14} anim="pop" />
+          {copied ? 'Скопировано' : 'Копировать'}
         </button>
       </div>
       <pre>

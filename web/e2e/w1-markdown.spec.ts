@@ -62,7 +62,7 @@ test('markdown renders safely; XSS attempts stay inert text; mentions and emoji-
   await expect(bad).toBeVisible();
   await expect(bad).toContainText('<script>alert(2)</script>');
   await expect(bad.locator('strong')).toHaveText('<svg onload=alert(6)>');
-  await expect(a.page.locator('.messages img[src="x"], .messages script, .messages svg')).toHaveCount(0);
+  await expect(a.page.locator('.messages img[src="x"], .messages script, .messages svg:not(.ico)')).toHaveCount(0);
   await expect(a.page.locator('.messages a[href^="javascript:"], .messages a[href^="data:"], .messages a[href^="ftp:"]')).toHaveCount(0);
   await expect(bad.locator('a')).toHaveCount(0);
 

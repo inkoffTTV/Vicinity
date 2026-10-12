@@ -1,6 +1,17 @@
+import { Download } from 'lucide-react';
 import { Message } from '../lib/api';
-import { attachmentName, fileIcon, formatSize, mediaKind } from '../lib/files';
+import { attachmentName, fileIcon, fileKind, formatSize, mediaKind } from '../lib/files';
 import { useStore } from '../lib/store';
+import { Icon } from './Icon';
+
+/** Значок файла по расширению (цвет — по data-kind в styles.css) */
+export function FileTypeIcon({ name, size = 28 }: { name: string; size?: number }) {
+  return (
+    <span className="file-icon" data-kind={fileKind(name)} aria-hidden="true">
+      <Icon icon={fileIcon(name)} size={size} strokeWidth={1.75} />
+    </span>
+  );
+}
 
 interface Props {
   msg: Message;
@@ -54,9 +65,7 @@ export function Attachment({ msg, onImage, onMediaLoad }: Props) {
         <video className="attachment-video" src={msg.attachment} controls preload="metadata" onLoadedMetadata={onMediaLoad} />
       )}
       <div className="file-card">
-        <span className="file-icon" aria-hidden="true">
-          {fileIcon(name)}
-        </span>
+        <FileTypeIcon name={name} />
         <div className="file-info">
           {msg.local ? (
             <span className="file-name ellipsis">{name}</span>
@@ -69,7 +78,7 @@ export function Attachment({ msg, onImage, onMediaLoad }: Props) {
         </div>
         {!msg.local && (
           <a className="icon-btn" href={msg.attachment} download={name} title="Скачать" aria-label={`Скачать «${name}»`}>
-            ⬇
+            <Icon icon={Download} anim="bounce" />
           </a>
         )}
       </div>

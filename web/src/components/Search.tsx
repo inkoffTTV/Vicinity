@@ -1,8 +1,10 @@
-import { MouseEvent, useEffect, useRef } from 'react';
+import { Paperclip, Search, Users, X } from 'lucide-react';
+import { MouseEvent, ReactNode, useEffect, useRef } from 'react';
 import { parseTs, SearchResult } from '../lib/api';
 import { SearchScope, scopesFor, useSearch } from '../lib/search';
 import { useStore } from '../lib/store';
 import { Avatar } from './Avatar';
+import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 import { formatTime } from './Message';
 
@@ -58,7 +60,7 @@ export function SearchBox() {
         }}
       />
       <span className="search-box-icon" aria-hidden="true">
-        🔍
+        <Icon icon={Search} size={15} />
       </span>
     </div>
   );
@@ -99,7 +101,7 @@ export function SearchPanel() {
       <div className="search-panel-head">
         <strong aria-live="polite">{title}</strong>
         <button className="icon-btn small" onClick={close} title="Закрыть поиск" aria-label="Закрыть поиск">
-          ✕
+          <Icon icon={X} size={16} className="anim-turn" />
         </button>
       </div>
       {scopes.length > 1 && (
@@ -127,13 +129,20 @@ export function SearchPanel() {
 }
 
 function SearchHit({ r, query, onOpen }: { r: SearchResult; query: string; onOpen: () => void }) {
-  const where = useStore((s) => {
+  const whereText = useStore((s) => {
     if (r.server_id) {
       const server = s.servers.find((x) => x.id === r.server_id);
       return `${server ? `${server.name} › ` : ''}#${r.channel_name}`;
     }
-    return s.dms.some((d) => d.channel_id === r.channel_id) ? `@${r.channel_name}` : `💬 ${r.channel_name}`;
+    return s.dms.some((d) => d.channel_id === r.channel_id) ? `@${r.channel_name}` : '';
   });
+  // Беседа — значком участников перед названием
+  const where: ReactNode = whereText || (
+    <>
+      <Icon icon={Users} size={13} className="inline-ico" />
+      {r.channel_name}
+    </>
+  );
   // Ссылка или упоминание в тексте делают своё; щелчок по остальному — переход к сообщению
   const onClick = (e: MouseEvent) => {
     if (!(e.target as HTMLElement).closest('a, button')) onOpen();
@@ -158,7 +167,12 @@ function SearchHit({ r, query, onOpen }: { r: SearchResult; query: string; onOpe
               <Markdown text={r.text} highlight={query} />
             </div>
           )}
-          {r.attachment && <div className="muted small">📎 {r.attachment_name || 'Вложение'}</div>}
+          {r.attachment && (
+            <div className="muted small">
+              <Icon icon={Paperclip} size={13} className="inline-ico" />
+              {r.attachment_name || 'Вложение'}
+            </div>
+          )}
         </div>
       </div>
     </div>

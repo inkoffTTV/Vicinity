@@ -8,12 +8,15 @@ import {
   useRef,
   useState,
 } from 'react';
+import { Plus, SendHorizontal, Smile, X } from 'lucide-react';
 import { useChannelMembers } from '../lib/channelMembers';
-import { fileIcon, formatSize, uploadProblem } from '../lib/files';
+import { formatSize, uploadProblem } from '../lib/files';
 import { drafts, isImageFile, useStore } from '../lib/store';
 import { resetTyping, sendTyping, typingText, useTyping } from '../lib/typing';
+import { FileTypeIcon } from './Attachment';
 import { Avatar } from './Avatar';
 import { EmojiPicker } from './EmojiPicker';
+import { Icon } from './Icon';
 import { composing } from './Message';
 
 // Файлов в очереди на отправку за раз — каждый уходит отдельным сообщением
@@ -279,7 +282,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
             aria-label="Отменить ответ"
             onClick={() => setReplyingTo(channelId, null)}
           >
-            ✕
+            <Icon icon={X} size={16} className="anim-turn" />
           </button>
         </div>
       )}
@@ -291,9 +294,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
                 <img src={f.url} alt={f.file.name} />
               ) : (
                 <div className="upload-file">
-                  <span className="file-icon" aria-hidden="true">
-                    {fileIcon(f.file.name)}
-                  </span>
+                  <FileTypeIcon name={f.file.name} size={36} />
                   <span className="ellipsis">{f.file.name}</span>
                   <span className="muted small">{formatSize(f.file.size)}</span>
                 </div>
@@ -304,7 +305,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
                 title="Убрать"
                 aria-label={`Убрать вложение «${f.file.name}»`}
               >
-                ✕
+                <Icon icon={X} size={16} className="anim-turn" />
               </button>
             </div>
           ))}
@@ -317,7 +318,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
           aria-label="Прикрепить файлы"
           onClick={() => fileInput.current?.click()}
         >
-          ＋
+          <Icon icon={Plus} className="anim-turn" size={22} />
         </button>
         <input
           ref={fileInput}
@@ -360,7 +361,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
           aria-expanded={emojiOpen}
           onClick={() => setEmojiOpen((v) => !v)}
         >
-          😊
+          <Icon icon={Smile} anim="wiggle" size={22} />
         </button>
         <button
           className="icon-btn send-btn"
@@ -369,7 +370,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
           onClick={send}
           disabled={!text.trim() && !files.length}
         >
-          ➤
+          <Icon icon={SendHorizontal} className="anim-nudge" size={22} />
         </button>
       </div>
       <div className="typing-line" aria-live="polite">

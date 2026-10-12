@@ -1,9 +1,11 @@
+import { Copy, MessageCircle, Phone, UserPlus, UserRound } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import { useCall } from '../lib/call';
 import { copyText } from '../lib/clipboard';
 import { userName, useStore } from '../lib/store';
 import { useUserMenu } from '../lib/userMenu';
 import { useUserDirectory } from '../lib/users';
+import { Icon } from './Icon';
 import { Popover } from './Popover';
 
 /** Меню пользователя по правой кнопке / долгому нажатию: профиль, написать, позвонить, в друзья, id */
@@ -38,19 +40,22 @@ export function UserMenu() {
   return (
     <Popover point={at.point} onClose={close} className="menu" role="menu" label="Действия с пользователем">
       <button role="menuitem" onClick={run(() => store.showProfile(userId))}>
-        👤 Профиль
+        <Icon icon={UserRound} size={16} />
+        Профиль
       </button>
       {!self && (
         <>
           <button role="menuitem" onClick={run(() => store.openDmWith(userId))}>
-            💬 Написать
+            <Icon icon={MessageCircle} size={16} />
+            Написать
           </button>
           <button
             role="menuitem"
             disabled={!callIdle}
             onClick={run(() => useCall.getState().start(userId, directory.byId.get(userId)?.display_name ?? userName(userId)))}
           >
-            📞 Позвонить
+            <Icon icon={Phone} size={16} anim="ring" />
+            Позвонить
           </button>
           {!friend && !outgoing && (
             <button
@@ -61,7 +66,8 @@ export function UserMenu() {
                   : friendAction(() => api.friendRequest(userId), 'Заявка в друзья отправлена'),
               )}
             >
-              ➕ {incoming ? 'Принять заявку в друзья' : 'Добавить в друзья'}
+              <Icon icon={UserPlus} size={16} />
+              {incoming ? 'Принять заявку в друзья' : 'Добавить в друзья'}
             </button>
           )}
         </>
@@ -70,7 +76,8 @@ export function UserMenu() {
         role="menuitem"
         onClick={run(async () => store.toast((await copyText(String(userId))) ? `ID ${userId} скопирован` : 'Не удалось скопировать'))}
       >
-        📋 Копировать ID
+        <Icon icon={Copy} size={16} />
+        Копировать ID
       </button>
     </Popover>
   );

@@ -1,3 +1,4 @@
+import { LogOut, Pencil, Trash2, UserPlus } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useChannelMembers } from '../lib/channelMembers';
 import { useStore } from '../lib/store';
@@ -5,7 +6,9 @@ import { userMenuProps } from '../lib/userMenu';
 import { AddMemberDialog } from './AddMemberDialog';
 import { Avatar } from './Avatar';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Icon } from './Icon';
 import { Modal } from './Modal';
+import { OwnerCrown } from './RoleChips';
 
 /** Панель беседы справа: участники, добавить, переименовать, покинуть, удалить (владелец) */
 export function GroupPanel({ channelId }: { channelId: number }) {
@@ -40,11 +43,12 @@ export function GroupPanel({ channelId }: { channelId: number }) {
           {group.name}
         </strong>
         <button className="icon-btn small" title="Переименовать беседу" aria-label="Переименовать беседу" onClick={() => setDialog('rename')}>
-          ✏️
+          <Icon icon={Pencil} size={16} anim="wiggle" />
         </button>
       </div>
       <button className="btn small block" onClick={() => setDialog('add')}>
-        ➕ Пригласить в беседу
+        <Icon icon={UserPlus} size={16} anim="bounce" />
+        Пригласить в беседу
       </button>
       <div className="side-section">Участники{members ? ` — ${members.length}` : ''}</div>
       {!members && <div className="side-empty">Загрузка…</div>}
@@ -55,17 +59,19 @@ export function GroupPanel({ channelId }: { channelId: number }) {
             <button className="plain member-main" onClick={() => showProfile(m.id)} {...userMenuProps(m.id)}>
               <Avatar name={m.display_name} src={m.avatar_path} id={m.id} size={32} presence={presence[m.id] ?? m.presence ?? 'offline'} />
               <span className="ellipsis">{m.display_name}</span>
-              {m.is_owner && <span title="Владелец беседы">👑</span>}
+              {m.is_owner && <OwnerCrown title="Владелец беседы" />}
             </button>
           </div>
         );
       })}
       <div className="group-panel-actions">
         <button className="btn small block" onClick={() => setDialog('leave')}>
-          🚪 Покинуть беседу
+          <Icon icon={LogOut} size={16} anim="bounce" />
+          Покинуть беседу
         </button>
         {amOwner && (
           <button className="btn small block danger" onClick={() => setDialog('delete')}>
+            <Icon icon={Trash2} size={16} anim="wiggle" />
             Удалить беседу
           </button>
         )}

@@ -1,9 +1,11 @@
+import { Hash, Users } from 'lucide-react';
 import { KeyboardEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useNotifySettings } from '../lib/notify';
 import { sortRecent } from '../lib/recent';
 import { useStore, View } from '../lib/store';
 import { Avatar } from './Avatar';
+import { Icon } from './Icon';
 import { Modal } from './Modal';
 
 interface Item {
@@ -71,7 +73,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
         go: go({ kind: 'dm', channelId: d.channel_id }),
       });
     for (const g of sortRecent(s.groups))
-      list.push({ key: `g${g.id}`, label: g.name, hint: 'Беседа', icon: '👥', unread: count(g.id), go: go({ kind: 'group', channelId: g.id }) });
+      list.push({ key: `g${g.id}`, label: g.name, hint: 'Беседа', icon: <Icon icon={Users} size={18} />, unread: count(g.id), go: go({ kind: 'group', channelId: g.id }) });
     for (const srv of s.servers)
       for (const c of s.channelsByServer[srv.id] ?? [])
         if (!c.is_voice)
@@ -79,7 +81,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
             key: `c${c.id}`,
             label: c.name,
             hint: srv.name,
-            icon: '#',
+            icon: <Icon icon={Hash} size={18} />,
             unread: count(c.id),
             go: go({ kind: 'server', serverId: srv.id, channelId: c.id }),
           });

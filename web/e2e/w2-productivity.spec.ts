@@ -137,7 +137,7 @@ test('role chips, user context menu, clickable mutual servers and friends in the
   // Правая кнопка на авторе сообщения: профиль, написать, в друзья, копировать id
   await page.locator('.msg-author', { hasText: 'Борис' }).click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Действия с пользователем' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['👤 Профиль', '💬 Написать', '📞 Позвонить', '➕ Добавить в друзья', '📋 Копировать ID']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Профиль', 'Написать', 'Позвонить', 'Добавить в друзья', 'Копировать ID']);
   await menu.getByRole('menuitem', { name: /Добавить в друзья/ }).click();
   await expect(page.locator('.toast', { hasText: 'Заявка в друзья отправлена' })).toBeVisible();
   await b.page.locator('.rail-item.home').click();

@@ -1,4 +1,4 @@
-import { AudioLines, Phone, PhoneOff } from 'lucide-react';
+import { AudioLines, Bell, BellOff, Hash, Menu, Phone, PhoneOff, Pin, UserPlus, Users } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useCall } from '../lib/call';
 import { useChannelMembers } from '../lib/channelMembers';
@@ -68,8 +68,8 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
   return (
     <div className="chat">
       <header className="chat-head">
-        <button className="icon-btn menu-btn" onClick={onMenu} aria-label="Меню">
-          ☰
+        <button className="icon-btn menu-btn" onClick={onMenu} aria-label="Меню" title="Меню">
+          <Icon icon={Menu} size={22} />
         </button>
         {dm ? (
           <button className="chat-title clickable" onClick={() => showProfile(dm.user_id)} {...userMenuProps(dm.user_id)}>
@@ -78,7 +78,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
           </button>
         ) : (
           <div className="chat-title">
-            <span className="muted">#</span>
+            <Icon icon={Hash} size={20} className="chat-title-icon" />
             <strong className="ellipsis">{title}</strong>
           </div>
         )}
@@ -107,7 +107,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
         )}
         {(view.kind === 'group' || view.kind === 'server') && (
           <button className="icon-btn" title="Добавить участника" aria-label="Добавить участника" onClick={() => setAdding(true)}>
-            ➕
+            <Icon icon={UserPlus} anim="bounce" />
           </button>
         )}
         {(view.kind === 'server' || view.kind === 'group') && (
@@ -118,7 +118,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
             aria-pressed={membersOpen}
             onClick={onToggleMembers}
           >
-            👥
+            <Icon icon={Users} anim="bounce" />
           </button>
         )}
         {channelId && (
@@ -132,7 +132,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
               aria-expanded={panel === 'pins'}
               onClick={() => setPanel((p) => (p === 'pins' ? null : 'pins'))}
             >
-              📌
+              <Icon icon={Pin} anim="wiggle" />
             </button>
             <button
               ref={notifyBtn}
@@ -143,7 +143,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
               aria-expanded={panel === 'notify'}
               onClick={() => setPanel((p) => (p === 'notify' ? null : 'notify'))}
             >
-              {muted ? '🔕' : '🔔'}
+              <Icon key={muted ? 'off' : 'on'} icon={muted ? BellOff : Bell} anim="pop" />
             </button>
           </>
         )}

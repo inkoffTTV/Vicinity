@@ -1,4 +1,17 @@
 // Вложения: что можно отправить (docs/API.md §2), как показать в ленте и подписать размер.
+import {
+  File as FileGeneric,
+  FileArchive,
+  FileAudio,
+  FileCode,
+  FileImage,
+  FilePen,
+  FileSpreadsheet,
+  FileText,
+  FileVideo,
+  type LucideIcon,
+  Presentation,
+} from 'lucide-react';
 
 /** Сервер принимает файлы до 15 МБ */
 const MAX_UPLOAD = 15 * 1024 * 1024;
@@ -32,21 +45,42 @@ export function mediaKind(name: string): 'video' | 'audio' | null {
   return null;
 }
 
-const ICONS: [string, string][] = [
-  ['pdf', '📕'],
-  ['doc docx odt rtf txt md', '📝'],
-  ['xls xlsx ods csv', '📊'],
-  ['ppt pptx odp key', '📽️'],
-  ['zip rar 7z tar gz bz2 xz', '🗜️'],
-  ['mp3 ogg wav flac m4a aac opus', '🎵'],
-  ['mp4 webm mkv mov avi', '🎬'],
-  ['png jpg jpeg gif webp bmp tiff ico heic', '🖼️'],
-  ['json yaml yml toml ini log c cc cpp h hpp py rs go java kt ts tsx css sql', '🧾'],
+export type FileKind = 'pdf' | 'doc' | 'sheet' | 'slides' | 'archive' | 'audio' | 'video' | 'image' | 'code' | 'file';
+
+const KINDS: [string, FileKind][] = [
+  ['pdf', 'pdf'],
+  ['doc docx odt rtf txt md', 'doc'],
+  ['xls xlsx ods csv', 'sheet'],
+  ['ppt pptx odp key', 'slides'],
+  ['zip rar 7z tar gz bz2 xz', 'archive'],
+  ['mp3 ogg wav flac m4a aac opus', 'audio'],
+  ['mp4 webm mkv mov avi', 'video'],
+  ['png jpg jpeg gif webp bmp tiff ico heic', 'image'],
+  ['json yaml yml toml ini log c cc cpp h hpp py rs go java kt ts tsx css sql', 'code'],
 ];
 
-export function fileIcon(name: string): string {
+/** Тип файла по расширению — для значка и его цвета (data-kind у .file-icon) */
+export function fileKind(name: string): FileKind {
   const ext = extOf(name);
-  return ICONS.find(([exts]) => exts.split(' ').includes(ext))?.[1] ?? '📄';
+  return KINDS.find(([exts]) => exts.split(' ').includes(ext))?.[1] ?? 'file';
+}
+
+const ICONS: Record<FileKind, LucideIcon> = {
+  pdf: FileText,
+  doc: FilePen,
+  sheet: FileSpreadsheet,
+  slides: Presentation,
+  archive: FileArchive,
+  audio: FileAudio,
+  video: FileVideo,
+  image: FileImage,
+  code: FileCode,
+  file: FileGeneric,
+};
+
+/** Значок файла (lucide) по его имени */
+export function fileIcon(name: string): LucideIcon {
+  return ICONS[fileKind(name)];
 }
 
 /** «512 Б», «1,4 КБ», «12,3 МБ» */

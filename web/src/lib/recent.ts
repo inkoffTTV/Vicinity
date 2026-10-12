@@ -18,16 +18,26 @@ export function sortRecent<T extends WithLast>(list: T[]): T[] {
   );
 }
 
-/** «Вы: текст», «Аня: текст» (в беседе) или просто текст; вложение — значком */
-export function previewText(lm: LastMessage, meId: number | undefined, group: boolean): string {
+export interface PreviewParts {
+  /** «Вы: », «Аня: » (в беседе) или '' */
+  who: string;
+  /** Вложение — показывается значком перед текстом */
+  attachment: 'file' | 'image' | null;
+  /** Текст сообщения; у вложения без текста — «Файл» или «Изображение» */
+  text: string;
+}
+
+/** Превью последнего сообщения по частям: кто, значок вложения, текст */
+export function previewParts(lm: LastMessage, meId: number | undefined, group: boolean): PreviewParts {
   const text = plainText(lm.text).replace(/\s+/g, ' ').trim();
+  let attachment: PreviewParts['attachment'] = null;
   let body = text;
   if (lm.attachment) {
-    const file = lm.attachment.startsWith('/uploads/files/');
-    body = text ? `📎 ${text}` : file ? '📎 Файл' : '🖼 Изображение';
+    attachment = lm.attachment.startsWith('/uploads/files/') ? 'file' : 'image';
+    if (!text) body = attachment === 'file' ? 'Файл' : 'Изображение';
   }
-  if (lm.author_id === meId) return `Вы: ${body}`;
-  return group ? `${lm.author_name}: ${body}` : body;
+  const who = lm.author_id === meId ? 'Вы: ' : group ? `${lm.author_name}: ` : '';
+  return { who, attachment, text: body };
 }
 
 /** Текущее время, обновляется раз в минуту — для «5 мин», «вчера» в списках */

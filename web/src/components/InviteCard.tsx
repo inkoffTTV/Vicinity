@@ -1,7 +1,9 @@
+import { Mail } from 'lucide-react';
 import { useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useInvite } from '../lib/router';
 import { useStore } from '../lib/store';
+import { Icon } from './Icon';
 import { Modal } from './Modal';
 import { ServerIcon } from './ServerRail';
 
@@ -66,7 +68,7 @@ export function InviteCard({ code }: { code: string }) {
         ) : (
           <>
             <span className="invite-card-icon" aria-hidden="true">
-              ✉️
+              <Icon icon={Mail} size={34} anim="pop" />
             </span>
             <div className="muted small">Вас пригласили на сервер</div>
             <h2>Приглашение {code}</h2>

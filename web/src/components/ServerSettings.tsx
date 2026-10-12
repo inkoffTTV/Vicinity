@@ -1,3 +1,4 @@
+import { Ban, Copy, LayoutDashboard, Link, LogOut, type LucideIcon, RefreshCw, Trash2, Users } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api, ApiError, BannedUser, Member } from '../lib/api';
 import { copyText } from '../lib/clipboard';
@@ -5,8 +6,9 @@ import { inviteLink } from '../lib/routes';
 import { useStore } from '../lib/store';
 import { Avatar } from './Avatar';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Icon } from './Icon';
 import { Modal } from './Modal';
-import { RoleChips } from './RoleChips';
+import { OwnerCrown, RoleChips } from './RoleChips';
 import { ServerIcon } from './ServerRail';
 
 export type ServerTab = 'overview' | 'invites' | 'members' | 'bans' | 'danger';
@@ -25,17 +27,17 @@ export function ServerSettings({ serverId, tab: initial, onClose }: { serverId: 
   }, [server, onClose]);
   if (!server) return null;
 
-  const tabs: [ServerTab, string][] = amOwner
+  const tabs: [ServerTab, string, LucideIcon][] = amOwner
     ? [
-        ['overview', 'Обзор'],
-        ['invites', 'Приглашения'],
-        ['members', 'Участники'],
-        ['bans', 'Баны'],
-        ['danger', 'Удаление сервера'],
+        ['overview', 'Обзор', LayoutDashboard],
+        ['invites', 'Приглашения', Link],
+        ['members', 'Участники', Users],
+        ['bans', 'Баны', Ban],
+        ['danger', 'Удаление сервера', Trash2],
       ]
     : [
-        ['invites', 'Приглашения'],
-        ['danger', 'Покинуть сервер'],
+        ['invites', 'Приглашения', Link],
+        ['danger', 'Покинуть сервер', LogOut],
       ];
   const current = tabs.some(([t]) => t === tab) ? tab : tabs[0][0];
 
@@ -43,7 +45,7 @@ export function ServerSettings({ serverId, tab: initial, onClose }: { serverId: 
     <Modal title={`Сервер «${server.name}»`} onClose={onClose} className="settings-modal">
       <div className="settings-layout">
         <div className="settings-tabs" role="tablist" aria-label="Разделы настроек сервера">
-          {tabs.map(([id, label]) => (
+          {tabs.map(([id, label, icon]) => (
             <button
               key={id}
               role="tab"
@@ -51,9 +53,13 @@ export function ServerSettings({ serverId, tab: initial, onClose }: { serverId: 
               aria-selected={current === id}
               aria-controls="server-panel"
               className={`${current === id ? 'on' : ''}${id === 'danger' ? ' danger-tab' : ''}`}
-              onClick={() => setTab(id)}
+              onClick={(e) => {
+                setTab(id);
+                e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+              }}
             >
-              {label}
+              <Icon icon={icon} size={18} anim="pop" />
+              <span>{label}</span>
             </button>
           ))}
         </div>
@@ -186,6 +192,7 @@ function Invites({ serverId, owner }: { serverId: number; owner: boolean }) {
       <div className="invite-link">
         <input readOnly value={link} aria-label="Ссылка-приглашение" onFocus={(e) => e.target.select()} />
         <button type="button" className="btn primary" onClick={() => copy(link, 'Ссылка-приглашение скопирована')}>
+          <Icon icon={Copy} size={16} anim="bounce" />
           Копировать ссылку
         </button>
       </div>
@@ -195,6 +202,7 @@ function Invites({ serverId, owner }: { serverId: number; owner: boolean }) {
         </button>
         {owner && (
           <button type="button" className="btn small" onClick={() => setConfirming(true)}>
+            <Icon icon={RefreshCw} size={14} anim="spin" />
             Создать новый код
           </button>
         )}
@@ -257,7 +265,7 @@ function Members({ serverId }: { serverId: number }) {
             <Avatar name={m.display_name} src={m.avatar_path} id={m.id} size={32} />
             <div className="grow">
               <div className="ellipsis">
-                {m.display_name} {m.is_owner && <span title="Владелец">👑</span>}
+                {m.display_name} {m.is_owner && <OwnerCrown />}
               </div>
               <div className="muted small ellipsis">@{m.username}</div>
               <RoleChips roles={m.roles} />

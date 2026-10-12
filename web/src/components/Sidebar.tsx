@@ -1,13 +1,31 @@
+import {
+  ChevronDown,
+  Hash,
+  Image,
+  Link,
+  LogOut,
+  MessagesSquare,
+  Paperclip,
+  Pencil,
+  Plus,
+  Settings,
+  ShieldQuestion,
+  UserRound,
+  Users,
+  Volume2,
+} from 'lucide-react';
 import { FormEvent, MouseEvent, ReactNode, useCallback, useEffect, useState } from 'react';
+import { ADMIN_USERNAME, isAdminUsername, openAdminDm } from '../lib/admin';
 import { api, ApiError, LastMessage, parseTs, Presence, ServerChannel } from '../lib/api';
 import { useNotifySettings } from '../lib/notify';
-import { previewText, sortRecent, useMinuteClock } from '../lib/recent';
+import { previewParts, sortRecent, useMinuteClock } from '../lib/recent';
 import { useStore } from '../lib/store';
 import { fullWhen, shortWhen } from '../lib/time';
 import { useVoice } from '../lib/voice';
 import { useVoiceVideo } from '../lib/voiceVideo';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Icon } from './Icon';
 import { Modal } from './Modal';
 import { NotifyMenu } from './NotifyMenu';
 import { ServerSettings, ServerTab } from './ServerSettings';
@@ -33,6 +51,7 @@ function HomeSide() {
   const presence = useStore((s) => s.presence);
   const incoming = useStore((s) => s.incoming);
   const open = useStore((s) => s.open);
+  const showAdmin = useStore((s) => !isAdminUsername(s.me?.username));
   const muted = useNotifySettings((s) => s.muted);
   const [creating, setCreating] = useState(false);
   const [menu, setMenu] = useChannelMenu();
@@ -48,10 +67,20 @@ function HomeSide() {
           className={`side-item${view.kind === 'friends' ? ' active' : ''}`}
           onClick={() => open({ kind: 'friends' })}
         >
-          <span className="side-icon">👥</span>
+          <span className="side-icon" aria-hidden="true">
+            <Icon icon={Users} />
+          </span>
           <span className="grow">Друзья</span>
           {incoming.length > 0 && <span className="badge inline">{incoming.length}</span>}
         </button>
+        {showAdmin && (
+          <button className="side-item admin-item" title={`Личные сообщения с администратором @${ADMIN_USERNAME}`} onClick={() => void openAdminDm()}>
+            <span className="side-icon" aria-hidden="true">
+              <Icon icon={ShieldQuestion} anim="wiggle" />
+            </span>
+            <span className="grow admin-item-label">Написать администратору</span>
+          </button>
+        )}
 
         <div className="side-section">Личные сообщения</div>
         {dms.length === 0 && <div className="side-empty">Найдите друга и напишите ему</div>}
@@ -73,7 +102,7 @@ function HomeSide() {
         <div className="side-section">
           Беседы
           <button className="icon-btn small" title="Создать беседу" aria-label="Создать беседу" onClick={() => setCreating(true)}>
-            +
+            <Icon icon={Plus} size={16} className="anim-turn" />
           </button>
         </div>
         {sortRecent(groups).map((g) => (
@@ -84,7 +113,7 @@ function HomeSide() {
               onContextMenu={(e) => setMenu(e, g.id, null)}
             >
               <span className="side-icon" aria-hidden="true">
-                #
+                <Icon icon={MessagesSquare} />
               </span>
               <ItemText name={g.name} last={g.last_message} group now={now} />
               {unread[g.id] > 0 && <span className="badge inline">{unread[g.id]}</span>}
@@ -112,7 +141,18 @@ function ItemText({ name, last, group, now }: { name: string; last?: LastMessage
           {shortWhen(when, now)}
         </time>
       </span>
-      <span className="side-preview ellipsis">{previewText(last, meId, group)}</span>
+      <SidePreview last={last} meId={meId} group={group} />
+    </span>
+  );
+}
+
+function SidePreview({ last, meId, group }: { last: LastMessage; meId: number | undefined; group: boolean }) {
+  const p = previewParts(last, meId, group);
+  return (
+    <span className="side-preview ellipsis">
+      {p.who}
+      {p.attachment && <Icon icon={p.attachment === 'file' ? Paperclip : Image} size={13} className="inline-ico" />}
+      {p.text}
     </span>
   );
 }
@@ -198,7 +238,8 @@ function ServerSide({ serverId }: { serverId: number }) {
               setEditing(channels.find((c) => c.id === id) ?? null);
             }}
           >
-            ✏️ Изменить канал
+            <Icon icon={Pencil} size={16} />
+            Изменить канал
           </button>
         )
       : undefined,
@@ -232,7 +273,7 @@ function ServerSide({ serverId }: { serverId: number }) {
         aria-label={`Изменить канал ${c.name}`}
         onClick={() => setEditing(c)}
       >
-        ⚙
+        <Icon icon={Settings} size={15} anim="spin" />
       </button>
     );
 
@@ -240,17 +281,34 @@ function ServerSide({ serverId }: { serverId: number }) {
     <>
       <button className="side-head clickable" onClick={() => setMenu((v) => !v)} aria-haspopup="true" aria-expanded={menu}>
         <strong className="ellipsis">{server.name}</strong>
-        <span>{menu ? '✕' : '▾'}</span>
+        <Icon icon={ChevronDown} size={18} className={`side-head-chevron${menu ? ' open' : ''}`} />
       </button>
       {menu && (
         <div className="dropdown">
-          {server.invite_code && <button onClick={pick(() => setSettings('invites'))}>🔗 Пригласить людей</button>}
-          {amOwner && <button onClick={pick(() => setSettings('overview'))}>⚙ Настройки сервера</button>}
-          <button onClick={pick(() => setAdding('text'))}># Создать текстовый канал</button>
-          <button onClick={pick(() => setAdding('voice'))}>🔊 Создать голосовой канал</button>
+          {server.invite_code && (
+            <button onClick={pick(() => setSettings('invites'))}>
+              <Icon icon={Link} size={16} anim="wiggle" />
+              Пригласить людей
+            </button>
+          )}
+          {amOwner && (
+            <button onClick={pick(() => setSettings('overview'))}>
+              <Icon icon={Settings} size={16} anim="spin" />
+              Настройки сервера
+            </button>
+          )}
+          <button onClick={pick(() => setAdding('text'))}>
+            <Icon icon={Hash} size={16} anim="wiggle" />
+            Создать текстовый канал
+          </button>
+          <button onClick={pick(() => setAdding('voice'))}>
+            <Icon icon={Volume2} size={16} anim="wiggle" />
+            Создать голосовой канал
+          </button>
           {!amOwner && (
             <button className="danger-item" onClick={pick(() => setLeaving(true))}>
-              🚪 Покинуть сервер
+              <Icon icon={LogOut} size={16} anim="bounce" />
+              Покинуть сервер
             </button>
           )}
         </div>
@@ -264,7 +322,9 @@ function ServerSide({ serverId }: { serverId: number }) {
               onClick={() => open({ kind: 'server', serverId, channelId: c.id })}
               onContextMenu={(e) => setChannelMenu(e, c.id, serverId)}
             >
-              <span className="side-icon">#</span>
+              <span className="side-icon" aria-hidden="true">
+                <Icon icon={Hash} />
+              </span>
               <span className="grow ellipsis">{c.name}</span>
               {mentions[c.id] > 0 && (
                 <span className="badge inline mention" title={`Упоминаний: ${mentions[c.id]}`}>
@@ -287,7 +347,9 @@ function ServerSide({ serverId }: { serverId: number }) {
                   openStage();
                 }}
               >
-                <span className="side-icon">🔊</span>
+                <span className="side-icon" aria-hidden="true">
+                  <Icon icon={Volume2} />
+                </span>
                 <span className="grow ellipsis">{c.name}</span>
               </button>
               {gear(c)}
@@ -328,7 +390,7 @@ function ChannelSettings({ channel, onClose }: { channel: ServerChannel; onClose
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const exists = useStore((s) => Object.values(s.channelsByServer).some((chs) => chs.some((c) => c.id === channel.id)));
-  const label = channel.is_voice ? `🔊 ${channel.name}` : `#${channel.name}`;
+  const label = channel.is_voice ? `«${channel.name}»` : `#${channel.name}`;
 
   // Канал удалили (в другой вкладке или вместе с сервером) — окно больше ни к чему
   useEffect(() => {
@@ -444,7 +506,16 @@ function UserPanel() {
               <span className={`presence-dot static p-${p}`} /> {PRESENCE_LABEL[p]}
             </button>
           ))}
-          <button onClick={() => (showProfile(me.user_id), setMenu(false))}>👤 Мой профиль</button>
+          <button onClick={() => (showProfile(me.user_id), setMenu(false))}>
+            <Icon icon={UserRound} size={16} />
+            Мой профиль
+          </button>
+          {!isAdminUsername(me.username) && (
+            <button onClick={() => (setMenu(false), void openAdminDm())}>
+              <Icon icon={ShieldQuestion} size={16} />
+              Написать администратору
+            </button>
+          )}
         </div>
       )}
       <button className="user-panel-me" onClick={() => setMenu((v) => !v)} title="Статус" aria-haspopup="true" aria-expanded={menu}>
@@ -455,7 +526,7 @@ function UserPanel() {
         </span>
       </button>
       <button className="icon-btn" title="Настройки" aria-label="Настройки" onClick={() => setSettingsOpen(true)}>
-        ⚙
+        <Icon icon={Settings} anim="spin" />
       </button>
     </div>
   );

@@ -52,7 +52,8 @@ test('files: queue of several files, card with size and download, media players,
   const card = msg(b, 'файлы к письму').locator('.file-card');
   await expect(card.locator('.file-name')).toHaveText('отчёт.pdf');
   await expect(card).toContainText('293 КБ');
-  await expect(card.locator('.file-icon')).toHaveText('📕');
+  await expect(card.locator('.file-icon')).toHaveAttribute('data-kind', 'pdf');
+  await expect(card.locator('.file-icon svg')).toBeVisible();
   const link = card.locator('a.file-name');
   await expect(link).toHaveAttribute('href', /^\/uploads\/files\/[0-9a-f]+\.pdf$/);
   await expect(link).toHaveAttribute('download', 'отчёт.pdf');
@@ -60,7 +61,7 @@ test('files: queue of several files, card with size and download, media players,
   expect(file.headers()['content-disposition']).toBe(`attachment; filename="_____.pdf"; filename*=UTF-8''${encodeURIComponent('отчёт.pdf')}`);
   expect((await file.body()).equals(report)).toBe(true);
   const notesCard = b.page.locator('.file-card', { hasText: 'notes.txt' });
-  await expect(notesCard.locator('.file-icon')).toHaveText('📝');
+  await expect(notesCard.locator('.file-icon')).toHaveAttribute('data-kind', 'doc');
   const [download] = await Promise.all([
     b.page.waitForEvent('download'),
     notesCard.getByRole('link', { name: 'Скачать «notes.txt»' }).click(),

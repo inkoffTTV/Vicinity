@@ -1,8 +1,10 @@
+import { Plus } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useNotifySettings } from '../lib/notify';
 import { useStore } from '../lib/store';
 import { homeUnread, serverHasUnread, serverMentions, useUnreadSlice } from '../lib/unread';
+import { Icon } from './Icon';
 import { Modal } from './Modal';
 
 export function ServerRail() {
@@ -53,7 +55,7 @@ export function ServerRail() {
         aria-label="Создать или вступить в сервер"
         onClick={() => setAdding(true)}
       >
-        +
+        <Icon icon={Plus} size={24} className="anim-turn" />
       </button>
       {adding && <AddServerDialog onClose={() => setAdding(false)} />}
     </nav>

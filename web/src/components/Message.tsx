@@ -1,3 +1,4 @@
+import { Copy, Paperclip, Pencil, Pin, PinOff, Plus, Reply, SmilePlus, Trash2 } from 'lucide-react';
 import { FocusEvent, KeyboardEvent, MouseEvent, useEffect, useRef, useState } from 'react';
 import { Message, parseTs, Reaction } from '../lib/api';
 import { copyText } from '../lib/clipboard';
@@ -9,6 +10,7 @@ import { useUserDirectory } from '../lib/users';
 import { Attachment } from './Attachment';
 import { Avatar } from './Avatar';
 import { EmojiPicker } from './EmojiPicker';
+import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 
 const QUICK_EMOJI = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'];
@@ -118,8 +120,8 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
             </div>
           )}
           {pinned && (
-            <span className="msg-pin-flag" title="Закреплённое сообщение" aria-label="Закреплённое сообщение">
-              📌
+            <span className="msg-pin-flag" title="Закреплённое сообщение" aria-label="Закреплённое сообщение" role="img">
+              <Icon icon={Pin} size={13} />
             </span>
           )}
           {editing ? (
@@ -178,7 +180,7 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
             aria-expanded={picker}
             onClick={() => setPicker((v) => !v)}
           >
-            😊
+            <Icon icon={SmilePlus} size={18} anim="wiggle" />
           </button>
           {/* Быстрые реакции сразу за кнопкой — следующие по Tab */}
           {picker && (
@@ -198,17 +200,17 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
                   setFullPicker(true);
                 }}
               >
-                ＋
+                <Icon icon={Plus} size={18} className="anim-turn" />
               </button>
             </div>
           )}
           {mine && msg.text && (
             <button className="icon-btn small" title="Изменить" aria-label="Изменить" onClick={() => setEditing(msg.id)}>
-              ✏️
+              <Icon icon={Pencil} size={18} anim="wiggle" />
             </button>
           )}
           <button className="icon-btn small" title="Ответить" aria-label="Ответить" onClick={() => setReplyingTo(msg.channel_id, msg)}>
-            ↩️
+            <Icon icon={Reply} size={18} anim="bounce" />
           </button>
           {canPin && (
             <button
@@ -217,17 +219,17 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
               aria-label={pinned ? 'Открепить' : 'Закрепить'}
               onClick={togglePin}
             >
-              📌
+              <Icon key={pinned ? 'unpin' : 'pin'} icon={pinned ? PinOff : Pin} size={18} anim="pop" />
             </button>
           )}
           {msg.text && (
             <button className="icon-btn small" title="Копировать текст" aria-label="Копировать текст" onClick={copy}>
-              📋
+              <Icon icon={Copy} size={18} anim="bounce" />
             </button>
           )}
           {(mine || canModerate) && (
-            <button className="icon-btn small" title="Удалить" aria-label="Удалить" onClick={remove}>
-              🗑️
+            <button className="icon-btn small danger" title="Удалить" aria-label="Удалить" onClick={remove}>
+              <Icon icon={Trash2} size={18} anim="wiggle" />
             </button>
           )}
         </div>
@@ -252,7 +254,16 @@ function ReplyQuote({ msg }: { msg: Message }) {
       </div>
     );
   const author = users.byId.get(r.author_id);
-  const preview = r.text ? plainText(r.text) : r.attachment ? '📎 Вложение' : '';
+  const preview = r.text ? (
+    plainText(r.text)
+  ) : r.attachment ? (
+    <>
+      <Icon icon={Paperclip} size={13} className="inline-ico" />
+      Вложение
+    </>
+  ) : (
+    ''
+  );
   return (
     <button
       className="reply-quote"

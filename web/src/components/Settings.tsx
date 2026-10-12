@@ -1,4 +1,19 @@
+import {
+  Bell,
+  Copy,
+  Headphones,
+  KeyRound,
+  Laptop,
+  LogOut,
+  type LucideIcon,
+  Palette,
+  RotateCcw,
+  ShieldCheck,
+  ShieldQuestion,
+  UserRound,
+} from 'lucide-react';
 import { CSSProperties, FormEvent, useCallback, useEffect, useState } from 'react';
+import { ADMIN_USERNAME, isAdminUsername, openAdminDm } from '../lib/admin';
 import { api, ApiError, parseTs, Presence, Session } from '../lib/api';
 import { copyText } from '../lib/clipboard';
 import { NOTIFY_LEVELS, serverLevel, useNotifySettings } from '../lib/notify';
@@ -7,16 +22,17 @@ import { useStore } from '../lib/store';
 import { fullWhen } from '../lib/time';
 import { AudioSettingsPanel } from './AudioSettings';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
+import { Icon } from './Icon';
 import { Modal } from './Modal';
 
 type Tab = 'profile' | 'account' | 'appearance' | 'notifications' | 'voice';
 
-const TABS: [Tab, string][] = [
-  ['profile', 'Профиль'],
-  ['account', 'Аккаунт'],
-  ['appearance', 'Внешний вид'],
-  ['notifications', 'Уведомления'],
-  ['voice', 'Голос и видео'],
+const TABS: [Tab, string, LucideIcon][] = [
+  ['profile', 'Профиль', UserRound],
+  ['account', 'Аккаунт', ShieldCheck],
+  ['appearance', 'Внешний вид', Palette],
+  ['notifications', 'Уведомления', Bell],
+  ['voice', 'Голос и видео', Headphones],
 ];
 
 export function Settings() {
@@ -28,7 +44,7 @@ export function Settings() {
     <Modal title="Настройки" onClose={close} className="settings-modal">
       <div className="settings-layout">
         <div className="settings-tabs" role="tablist" aria-label="Разделы настроек">
-          {TABS.map(([id, label]) => (
+          {TABS.map(([id, label, icon]) => (
             <button
               key={id}
               role="tab"
@@ -36,9 +52,14 @@ export function Settings() {
               aria-selected={tab === id}
               aria-controls="settings-panel"
               className={tab === id ? 'on' : ''}
-              onClick={() => setTab(id)}
+              onClick={(e) => {
+                setTab(id);
+                // На телефоне разделы — прокручиваемая строка: выбранный не прячется за краем
+                e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+              }}
             >
-              {label}
+              <Icon icon={icon} size={18} anim="pop" />
+              <span>{label}</span>
             </button>
           ))}
         </div>
@@ -178,8 +199,9 @@ function ProfileTab({ onClose }: { onClose: () => void }) {
         </label>
       </div>
 
-      <div className="row end">
+      <div className="row end settings-actions">
         <button type="button" className="btn danger" onClick={() => logout()}>
+          <Icon icon={LogOut} size={16} anim="bounce" />
           Выйти
         </button>
         <div className="grow" />
@@ -217,13 +239,35 @@ function AccountTab() {
         </div>
         <div className="stack-row wrap">
           <button type="button" className="btn small" onClick={() => copy(`@${me.username}`, 'Логин')}>
+            <Icon icon={Copy} size={14} anim="bounce" />
             Копировать @логин
           </button>
           <button type="button" className="btn small" onClick={() => copy(String(me.user_id), 'ID')}>
+            <Icon icon={Copy} size={14} anim="bounce" />
             Копировать ID
           </button>
         </div>
       </section>
+      {!isAdminUsername(me.username) && (
+        <section className="settings-card admin-card" aria-label="Связь с администратором">
+          <span className="admin-card-icon" aria-hidden="true">
+            <Icon icon={ShieldQuestion} size={22} />
+          </span>
+          <div className="grow">
+            <strong>Вопрос, ошибка или идея?</strong>
+            <div className="muted small">Напишите администратору @{ADMIN_USERNAME} в личные сообщения.</div>
+          </div>
+          <button
+            type="button"
+            className="btn small primary"
+            onClick={async () => {
+              if (await openAdminDm()) useStore.getState().setSettingsOpen(false);
+            }}
+          >
+            Написать администратору
+          </button>
+        </section>
+      )}
       <PasswordForm />
       <Sessions />
     </div>
@@ -361,7 +405,7 @@ function Sessions() {
         {(list ?? []).map((s) => (
           <li key={s.id} className="session">
             <span className="session-icon" aria-hidden="true">
-              {s.current ? '💻' : '🔑'}
+              <Icon icon={s.current ? Laptop : KeyRound} size={20} />
             </span>
             <div className="grow">
               <div>
@@ -487,6 +531,7 @@ function AppearanceTab() {
       <div className="row end">
         <div className="grow" />
         <button type="button" className="btn" onClick={a.reset}>
+          <Icon icon={RotateCcw} size={16} className="anim-turn-back" />
           Сбросить оформление
         </button>
       </div>

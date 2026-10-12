@@ -24,7 +24,7 @@ test('group panel: invite, rename by a member, leave with ownership handover, de
   // Панель открыта рядом с лентой; владелец отмечен короной
   await expect(panel(a)).toBeVisible();
   await expect(members(a)).toHaveCount(1);
-  await expect(members(a).first()).toContainText('👑');
+  await expect(members(a).first().locator('.owner-crown[title="Владелец беседы"]')).toBeVisible();
   await expect(panel(a).getByRole('button', { name: 'Удалить беседу' })).toBeVisible();
 
   // Пригласить: у приглашённого беседа появляется, у владельца растёт состав
@@ -57,7 +57,7 @@ test('group panel: invite, rename by a member, leave with ownership handover, de
   await expect(a.page.locator('.toast', { hasText: 'Вы покинули беседу' })).toBeVisible();
   await expect(a.page.locator('.toast', { hasText: 'больше недоступна' })).toHaveCount(0);
   await expect(members(b)).toHaveCount(2);
-  await expect(members(b).filter({ hasText: 'Боб' })).toContainText('👑');
+  await expect(members(b).filter({ hasText: 'Боб' }).locator('.owner-crown[title="Владелец беседы"]')).toBeVisible();
   await expect(panel(b).getByRole('button', { name: 'Удалить беседу' })).toBeVisible();
 
   // Новый владелец удаляет беседу — у Веры она пропадает

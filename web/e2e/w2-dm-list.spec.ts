@@ -40,7 +40,8 @@ test('previews with "Вы:" and author prefixes, attachment icon, live re-sort a
   // Вложение без текста — значком
   await b.page.locator('.composer input[type=file]').setInputFiles({ name: 'pic.png', mimeType: 'image/png', buffer: pngBuffer() });
   await b.page.locator('.composer textarea').press('Enter');
-  await expect(item(a, 'Борис').locator('.side-preview')).toHaveText('🖼 Изображение');
+  await expect(item(a, 'Борис').locator('.side-preview')).toHaveText('Изображение');
+  await expect(item(a, 'Борис').locator('.side-preview svg')).toBeVisible();
 
   // Правка последнего сообщения меняет превью, удаление — показывает предыдущее
   await item(a, 'Вера').click();

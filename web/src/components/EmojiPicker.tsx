@@ -1,6 +1,21 @@
+import { Apple, Car, Clock, Flag, Hand, Heart, Leaf, Lightbulb, type LucideIcon, Smile, Trophy } from 'lucide-react';
 import { KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Emoji, emojiCategories, findEmoji, recentEmoji, rememberEmoji, searchEmoji } from '../lib/emoji';
+import { Icon } from './Icon';
+
+// Разделы палитры — значками интерфейса, а не эмодзи (как остальные кнопки управления)
+const CATEGORY_ICON: Record<string, LucideIcon> = {
+  smileys: Smile,
+  people: Hand,
+  nature: Leaf,
+  food: Apple,
+  activity: Trophy,
+  travel: Car,
+  objects: Lightbulb,
+  symbols: Heart,
+  flags: Flag,
+};
 
 const WIDTH = 344;
 const HEIGHT = 384;
@@ -137,12 +152,12 @@ export function EmojiPicker({ anchor, onPick, onClose, closeOnPick = true }: Pro
         <div className="emoji-panel-tabs" role="toolbar" aria-label="Разделы">
           {recentList.length > 0 && (
             <button type="button" title="Недавние" aria-label="Недавние" onClick={() => jump('recent')}>
-              🕘
+              <Icon icon={Clock} size={18} />
             </button>
           )}
           {categories.map((c) => (
             <button key={c.id} type="button" title={c.name} aria-label={c.name} onClick={() => jump(c.id)}>
-              {c.icon}
+              {CATEGORY_ICON[c.id] ? <Icon icon={CATEGORY_ICON[c.id]} size={18} /> : c.icon}
             </button>
           ))}
         </div>

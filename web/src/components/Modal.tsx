@@ -1,4 +1,6 @@
+import { X } from 'lucide-react';
 import { ReactNode, useEffect, useRef } from 'react';
+import { Icon } from './Icon';
 
 interface Props {
   title?: string;
@@ -37,12 +39,13 @@ export function Modal({ title, onClose, children, wide, bare, className, label }
         {title && (
           <div className="modal-head">
             <h2>{title}</h2>
-            <button className="icon-btn" onClick={onClose} aria-label="Закрыть">
-              ✕
+            <button className="icon-btn modal-close" onClick={onClose} aria-label="Закрыть" title="Закрыть (Esc)">
+              <Icon icon={X} size={22} className="anim-turn" />
             </button>
           </div>
         )}
-        {children}
+        {/* Шапка окна стоит на месте, прокручивается только содержимое (на телефоне — тоже) */}
+        {bare ? children : <div className={`modal-body${title ? '' : ' no-head'}`}>{children}</div>}
       </div>
     </div>
   );

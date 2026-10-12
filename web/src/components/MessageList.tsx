@@ -1,8 +1,10 @@
+import { ArrowDown, ArrowUp } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Message, parseTs } from '../lib/api';
 import { canManagePins, usePins } from '../lib/pins';
 import { prefersReducedMotion } from '../lib/prefs';
 import { useStore } from '../lib/store';
+import { Icon } from './Icon';
 import { MessageRow } from './Message';
 import { Modal } from './Modal';
 
@@ -265,14 +267,16 @@ export function MessageList({ channelId }: { channelId: number }) {
       </div>
       {unreadAbove && (
         <button className="unread-pill" onClick={toFirstUnread}>
-          Новые сообщения ↑
+          Новые сообщения
+          <Icon icon={ArrowUp} size={15} anim="bounce" />
         </button>
       )}
       {(hasNewer || scrolledAway) && messages.length > 0 && (
         <div className="jump-present">
           <span className="ellipsis">Вы просматриваете старые сообщения</span>
           <button className="link-btn" onClick={toPresent}>
-            Перейти к последним ↓
+            Перейти к последним
+            <Icon icon={ArrowDown} size={15} anim="bounce" />
           </button>
         </div>
       )}

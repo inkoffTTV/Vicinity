@@ -1,8 +1,10 @@
+import { Menu, MessageCircle, UserMinus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, ApiError, UserSummary } from '../lib/api';
 import { useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
+import { Icon } from './Icon';
 import { SearchBox } from './Search';
 
 type Tab = 'online' | 'all' | 'pending' | 'add';
@@ -55,10 +57,13 @@ export function Friends({ onMenu }: { onMenu: () => void }) {
   return (
     <div className="chat">
       <header className="chat-head">
-        <button className="icon-btn menu-btn" onClick={onMenu} aria-label="Меню">
-          ☰
+        <button className="icon-btn menu-btn" onClick={onMenu} aria-label="Меню" title="Меню">
+          <Icon icon={Menu} size={22} />
         </button>
-        <strong>👥 Друзья</strong>
+        <strong className="chat-title">
+          <Icon icon={Users} size={20} className="chat-title-icon" />
+          Друзья
+        </strong>
         <div className="tabs">
           <button className={tab === 'online' ? 'on' : ''} onClick={() => setTab('online')}>
             В сети
@@ -92,7 +97,7 @@ export function Friends({ onMenu }: { onMenu: () => void }) {
                 f,
                 <>
                   <button className="icon-btn" title="Написать" aria-label="Написать" onClick={() => openDmWith(f.id)}>
-                    💬
+                    <Icon icon={MessageCircle} anim="wiggle" />
                   </button>
                   <button
                     className="icon-btn"
@@ -100,7 +105,7 @@ export function Friends({ onMenu }: { onMenu: () => void }) {
                     aria-label="Удалить из друзей"
                     onClick={() => confirm(`Удалить ${f.display_name} из друзей?`) && act(() => api.friendRemove(f.id))}
                   >
-                    ✕
+                    <Icon icon={UserMinus} anim="wiggle" />
                   </button>
                 </>,
               ),

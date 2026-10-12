@@ -1,7 +1,9 @@
+import { UserX } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
 import { Avatar } from './Avatar';
-import { RoleChips } from './RoleChips';
+import { Icon } from './Icon';
+import { OwnerCrown, RoleChips } from './RoleChips';
 
 export function MemberList({ serverId }: { serverId: number }) {
   const members = useStore((s) => s.membersByServer[serverId] ?? []);
@@ -40,7 +42,7 @@ export function MemberList({ serverId }: { serverId: number }) {
                     <span className="ellipsis" style={topRole ? { color: topRole.color } : undefined}>
                       {m.display_name}
                     </span>
-                    {m.is_owner && <span title="Владелец">👑</span>}
+                    {m.is_owner && <OwnerCrown />}
                   </span>
                   <RoleChips roles={m.roles} />
                 </span>
@@ -52,7 +54,7 @@ export function MemberList({ serverId }: { serverId: number }) {
                   aria-label={`Удалить ${m.display_name} с сервера`}
                   onClick={() => kick(m.id, m.display_name)}
                 >
-                  ✕
+                  <Icon icon={UserX} size={16} anim="wiggle" />
                 </button>
               )}
             </div>

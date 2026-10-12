@@ -1,9 +1,11 @@
+import { Paperclip, Pin, PinOff, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { parseTs } from '../lib/api';
 import { attachmentName } from '../lib/files';
 import { canManagePins, usePins } from '../lib/pins';
 import { useStore } from '../lib/store';
 import { Avatar } from './Avatar';
+import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 import { formatTime } from './Message';
 import { Popover } from './Popover';
@@ -30,9 +32,12 @@ export function PinsPanel({ channelId, anchor, onClose }: { channelId: number; a
   return (
     <Popover anchor={anchor} onClose={onClose} className="pins-panel" role="dialog" label="Закреплённые сообщения">
       <div className="popover-head">
-        <strong>📌 Закреплённые сообщения</strong>
-        <button className="icon-btn small" onClick={onClose} aria-label="Закрыть">
-          ✕
+        <strong className="popover-title">
+          <Icon icon={Pin} size={16} />
+          Закреплённые сообщения
+        </strong>
+        <button className="icon-btn small" onClick={onClose} aria-label="Закрыть" title="Закрыть">
+          <Icon icon={X} size={16} className="anim-turn" />
         </button>
       </div>
       <div className="popover-body">
@@ -41,7 +46,12 @@ export function PinsPanel({ channelId, anchor, onClose }: { channelId: number; a
         ) : pins.length === 0 ? (
           <div className="popover-empty muted">
             В этом канале пока ничего не закреплено.
-            {canPin && ' Наведите на сообщение и нажмите 📌.'}
+            {canPin && (
+              <>
+                {' '}
+                Наведите на сообщение и нажмите <Icon icon={Pin} size={14} className="inline-ico" />.
+              </>
+            )}
           </div>
         ) : (
           pins.map((p) => (
@@ -57,7 +67,12 @@ export function PinsPanel({ channelId, anchor, onClose }: { channelId: number; a
                     <Markdown text={p.text} />
                   </div>
                 )}
-                {p.attachment && <div className="muted small ellipsis">📎 {attachmentName(p.attachment_name, p.attachment)}</div>}
+                {p.attachment && (
+                  <div className="muted small ellipsis">
+                    <Icon icon={Paperclip} size={13} className="inline-ico" />
+                    {attachmentName(p.attachment_name, p.attachment)}
+                  </div>
+                )}
               </div>
               <div className="pin-actions">
                 <button
@@ -76,7 +91,7 @@ export function PinsPanel({ channelId, anchor, onClose }: { channelId: number; a
                     aria-label={`Открепить сообщение ${p.author_name}`}
                     onClick={() => void unpin(channelId, p.id)}
                   >
-                    ✕
+                    <Icon icon={PinOff} size={16} anim="wiggle" />
                   </button>
                 )}
               </div>
