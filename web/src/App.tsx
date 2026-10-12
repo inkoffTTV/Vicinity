@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { DesktopUpdateBanner } from './components/DesktopUpdate';
 import { useAppearance } from './lib/prefs';
 import { setAppBadge } from './lib/pwa';
 import { useInvite } from './lib/router';
@@ -84,6 +85,7 @@ export default function App() {
 
   return (
     <div className={`app${navOpen ? ' nav-open' : ''}${inVoice ? ' in-voice' : ''}`}>
+      <DesktopUpdateBanner />
       <div className="nav">
         <ServerRail />
         <Sidebar />

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'self'; script-src 'self'" />
+    <title>Показ экрана</title>
+    <link rel="stylesheet" href="picker.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Что показать?</h1>
+      <div class="tabs" role="tablist">
+        <button role="tab" data-kind="screen" aria-selected="true">Экраны</button>
+        <button role="tab" data-kind="window" aria-selected="false">Окна</button>
+      </div>
+    </header>
+    <main id="grid" class="grid" role="listbox" aria-label="Источники"></main>
+    <footer>
+      <span id="hint" class="muted">Экран показывается вместе со звуком компьютера</span>
+      <span class="grow"></span>
+      <button id="cancel" class="btn">Отмена</button>
+      <button id="share" class="btn primary" disabled>Показать</button>
+    </footer>
+    <script src="picker.js"></script>
+  </body>
+</html>

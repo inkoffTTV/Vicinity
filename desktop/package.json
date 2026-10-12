@@ -1,0 +1,65 @@
+{
+  "name": "vicinity-desktop",
+  "productName": "Vicinity",
+  "version": "1.0.0",
+  "description": "Vicinity — мессенджер для своих: чаты, серверы, голос и звонки",
+  "author": "Vicinity",
+  "license": "MIT",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "icons": "node tools/icons.mjs",
+    "dist": "electron-builder --win nsis --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "app.vicinity.desktop",
+    "productName": "Vicinity",
+    "copyright": "Vicinity",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "build/tray.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "Vicinity-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Vicinity",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "language": "1049",
+      "installerLanguages": ["ru_RU"]
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://chat.13-143-162-211.sslip.io/download/"
+      }
+    ]
+  }
+}

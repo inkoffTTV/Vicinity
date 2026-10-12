@@ -1,0 +1,149 @@
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: #161920;
+  color: #e8eaf0;
+  font: 14px/1.4 'Segoe UI', system-ui, sans-serif;
+  user-select: none;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px 12px;
+}
+h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  padding: 3px;
+  border-radius: 10px;
+  background: #1e222b;
+}
+.tabs button {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #a3a9b7;
+  font: inherit;
+  cursor: pointer;
+}
+.tabs button[aria-selected='true'] {
+  background: #2e3440;
+  color: #e8eaf0;
+  font-weight: 600;
+}
+.grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  align-content: start;
+  gap: 12px;
+  padding: 4px 20px 16px;
+  overflow-y: auto;
+}
+.src {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: #1e222b;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.src:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.src.on {
+  border-color: #2bc6a4;
+}
+.thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background: #0e1015;
+  overflow: hidden;
+}
+.thumb img {
+  max-width: 100%;
+  max-height: 100%;
+}
+.label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px 0;
+}
+.muted {
+  color: #8c93a3;
+  font-size: 12px;
+}
+footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.grow {
+  flex: 1;
+}
+.btn {
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #2a2f3a;
+  color: #e8eaf0;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn.primary {
+  background: #2bc6a4;
+  color: #06231c;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn:focus-visible,
+.src:focus-visible,
+.tabs button:focus-visible {
+  outline: 2px solid #e8eaf0;
+  outline-offset: 2px;
+}

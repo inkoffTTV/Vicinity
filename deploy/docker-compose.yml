@@ -65,6 +65,9 @@ services:
     container_name: vicinity-web
     depends_on:
       - vicinity
+    # Установщик ПК-приложения (/download/) — кладётся на хост, в образ не входит
+    volumes:
+      - ./downloads:/srv/download:ro
     ports:
       - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-80}:80"
     healthcheck:

@@ -937,3 +937,67 @@ select {
   font-weight: 600;
   color: var(--text-2);
 }
+
+/* Скачать ПК-приложение (экран входа) */
+.auth-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  align-self: flex-start;
+  padding: 10px 16px 10px 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text);
+  text-decoration: none;
+  transition: background 0.15s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: vc-pop 0.4s 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.auth-download:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  transform: translateY(-1px);
+}
+.auth-download svg {
+  flex: none;
+  color: var(--accent);
+}
+.auth-download > span {
+  display: flex;
+  flex-direction: column;
+}
+.auth-download > span > span {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.settings-download {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: var(--text-2);
+  font-size: 14px;
+  text-decoration: none;
+}
+.settings-download:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+/* ПК-приложение: готово обновление */
+.desktop-update {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px 10px 18px;
+  border-radius: 14px;
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  transform: translateX(-50%);
+  font-size: 14px;
+  animation: vc-pop 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}

@@ -1,4 +1,5 @@
-import { ChevronLeft, LogOut, Search, X } from 'lucide-react';
+import { ChevronLeft, Download, LogOut, Search, X } from 'lucide-react';
+import { offerDesktopApp, WINDOWS_INSTALLER } from '../lib/desktop';
 import { FormEvent, useCallback, useState } from 'react';
 import { api, ApiError, Presence } from '../lib/api';
 import { NOTIFY_LEVELS, serverLevel, useNotifySettings } from '../lib/notify';
@@ -109,6 +110,12 @@ export function Settings() {
             {visible.length === 0 && <span className="muted small settings-nothing">Ничего не нашлось</span>}
           </div>
           <div className="settings-nav-foot">
+            {offerDesktopApp && (
+              <a className="settings-download" href={WINDOWS_INSTALLER} download>
+                <Icon icon={Download} size={16} />
+                Приложение для Windows
+              </a>
+            )}
             <button type="button" className="settings-logout" onClick={() => void logout()}>
               <Icon icon={LogOut} size={16} />
               Выйти

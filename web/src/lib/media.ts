@@ -77,6 +77,8 @@ export async function openMic(deviceId: string): Promise<MediaStream> {
 export function mediaError(e: unknown, what: 'mic' | 'camera' | 'screen' = 'mic'): string {
   const device = what === 'mic' ? 'микрофон' : what === 'camera' ? 'камеру' : 'экран';
   const name = e instanceof DOMException ? e.name : '';
+  // В ПК-приложении отмена окна выбора экрана приходит как AbortError
+  if (what === 'screen' && name === 'AbortError') return 'Показ экрана отменён';
   if (name === 'NotAllowedError' || name === 'SecurityError')
     return what === 'screen' ? 'Показ экрана отменён' : `Нет доступа: разрешите ${device} в настройках сайта`;
   if (name === 'NotFoundError' || name === 'OverconstrainedError')

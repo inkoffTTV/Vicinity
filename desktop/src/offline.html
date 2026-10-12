@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'" />
+    <title>Vicinity</title>
+    <link rel="stylesheet" href="picker.css" />
+    <link rel="stylesheet" href="offline.css" />
+  </head>
+  <body class="offline">
+    <div class="box">
+      <div class="logo" aria-hidden="true">V</div>
+      <h1>Нет связи с сервером</h1>
+      <p class="muted">Проверьте интернет. Vicinity переподключится сам через несколько секунд.</p>
+      <button id="retry" class="btn primary">Повторить</button>
+    </div>
+    <script src="offline.js"></script>
+  </body>
+</html>
