@@ -1,7 +1,7 @@
-import { CSSProperties, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useThemeAccess } from '../lib/appearanceSync';
 import { usePlan } from '../lib/plan';
-import { ACCENTS, DEFAULT_ACCENT, FontSize, ServerTheme, useAppearance } from '../lib/prefs';
+import { FontSize, ServerTheme, useAppearance } from '../lib/prefs';
 import { BASE_THEMES, COLOR_THEMES, CustomTheme, gradientCss, themeById } from '../lib/themes';
 import { Segmented, Toggle } from './SettingControls';
 
@@ -62,7 +62,6 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
   const previewNeeds = preview?.customTheme ? 'Ultra' : 'Standard';
   const canKeepPreview = preview?.customTheme ? access.customTheme : access.colorThemes;
   const activeId = (preview ?? a).colorTheme;
-  const accent = a.accent || DEFAULT_ACCENT;
 
   return (
     <div className="settings theme-settings">
@@ -289,26 +288,6 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
           <option value="mine">Использовать мою тему</option>
           <option value="default">Стандартная тема Vicinity</option>
         </select>
-      </div>
-
-      <div className="setting-row">
-        <span className="setting-label">Акцентный цвет</span>
-        <div className="swatches">
-          {ACCENTS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className={`swatch${accent === c ? ' on' : ''}`}
-              aria-label={`Цвет ${c}`}
-              aria-pressed={accent === c}
-              style={{ '--swatch': c } as CSSProperties}
-              onClick={() => a.set({ accent: c === DEFAULT_ACCENT ? '' : c })}
-            />
-          ))}
-          <label className="swatch custom" title="Свой цвет">
-            <input type="color" aria-label="Свой цвет" value={accent} onChange={(e) => a.set({ accent: e.target.value })} />
-          </label>
-        </div>
       </div>
 
       <section className="theme-section" aria-label="Связанные настройки">

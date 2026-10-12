@@ -2,7 +2,7 @@
 // Хранится в localStorage и применяется атрибутами/переменными на <html> (CSS — styles.css, theme.css)
 // до первой отрисовки. С «Синхронизировать тему на моих устройствах» ещё и на сервере (lib/appearanceSync.ts).
 import { create } from 'zustand';
-import { BaseTheme, ColorTheme, CustomTheme, gradientCss, themeById } from './themes';
+import { accentForTheme, BaseTheme, ColorTheme, CustomTheme, gradientCss, themeById } from './themes';
 
 export type FontSize = 's' | 'm' | 'l';
 export type ServerTheme = 'mine' | 'default';
@@ -20,7 +20,7 @@ export interface Appearance {
   applyToProfiles: boolean;
   /** На серверах: моя тема или стандартная тёмная без цветовой темы */
   serverTheme: ServerTheme;
-  /** Акцентный цвет интерфейса (#rrggbb); пустая строка — стандартный */
+  /** Устарело: акцент теперь подбирается под тему; поле осталось для совместимости с сохранёнными настройками */
   accent: string;
   /** Компактная лента: меньше отступы и аватары */
   compact: boolean;
@@ -51,7 +51,6 @@ interface State extends Appearance {
 }
 
 export const DEFAULT_ACCENT = '#2bc6a4';
-export const ACCENTS = ['#2bc6a4', '#5865f2', '#3ba55c', '#eb459e', '#ed4245', '#9b59b6', '#e67e22', '#0f7bbf'];
 
 const KEY = 'vicinity.appearance';
 export const DEFAULTS: Appearance = {
@@ -183,11 +182,15 @@ function apply(s: State) {
     root.style.removeProperty('--theme-gradient');
     root.style.removeProperty('--theme-tint');
   }
-  if (s.accent) {
-    root.style.setProperty('--accent', s.accent);
-    root.style.setProperty('--accent-hover', darken(s.accent));
-    root.style.setProperty('--on-accent', onAccent(s.accent));
+  // Акцент — от темы: у цветовой темы вычисляется из её цветов, у базовых — свой в theme.css
+  const accent = g ? accentForTheme(g.gradient) : '';
+  if (accent) {
+    root.style.setProperty('--accent', accent);
+    root.style.setProperty('--accent-hover', darken(accent));
+    root.style.setProperty('--on-accent', onAccent(accent));
+    root.style.setProperty('--link', accent);
   } else {
+    root.style.removeProperty('--link');
     root.style.removeProperty('--accent');
     root.style.removeProperty('--accent-hover');
     root.style.removeProperty('--on-accent');
