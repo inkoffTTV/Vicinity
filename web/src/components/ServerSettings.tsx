@@ -80,6 +80,7 @@ export function ServerSettings({ serverId, tab: initial, onClose }: { serverId: 
 
 function Overview({ serverId }: { serverId: number }) {
   const server = useStore((s) => s.servers.find((x) => x.id === serverId))!;
+  const myName = useStore((s) => s.me?.display_name ?? '');
   const patchServer = useStore((s) => s.patchServer);
   const toast = useStore((s) => s.toast);
   const [name, setName] = useState(server.name);
@@ -155,7 +156,9 @@ function Overview({ serverId }: { serverId: number }) {
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={64} required />
         </label>
         <label>
-          Описание <span className="muted small">{description.length}/190</span>
+          <span className="row-between">
+            Описание <span className="muted small">{description.length}/190</span>
+          </span>
           <textarea value={description} maxLength={190} rows={2} placeholder="Чем живёт сервер — видно в карточке по тегу" onChange={(e) => setDescription(e.target.value)} />
         </label>
         <div className="server-tag-edit">
@@ -172,7 +175,7 @@ function Overview({ serverId }: { serverId: number }) {
           </div>
           {tag.trim() && tagOk && (
             <span className="server-tag-preview">
-              Так выглядит у ника: <strong>{server.name}</strong> <ServerTag tag={tag.trim().toUpperCase()} icon={tagIconId} />
+              Так выглядит у ника: <strong>{myName}</strong> <ServerTag tag={tag.trim().toUpperCase()} icon={tagIconId} />
             </span>
           )}
           <span className="muted small">

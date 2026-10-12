@@ -1631,3 +1631,18 @@ button.server-tag:hover {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
   cursor: pointer;
 }
+
+/* Строка HEX — в ряд (общий стиль label ставит столбик и капслок) */
+.cpick label.cpick-hex {
+  flex-direction: row;
+  align-items: center;
+  text-transform: none;
+}
+.cpick .cpick-hex input {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  font-size: 13px;
+}

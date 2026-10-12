@@ -111,7 +111,7 @@ function ServerCardPopover({ serverId, anchor, onClose }: { serverId: number; an
                 <i className="dot ok" /> {card.online} в сети
               </span>
               <span>
-                <i className="dot muted-dot" /> {card.members} участников
+                <i className="dot muted-dot" /> {card.members} {card.members % 10 === 1 && card.members % 100 !== 11 ? 'участник' : card.members % 10 >= 2 && card.members % 10 <= 4 && (card.members % 100 < 10 || card.members % 100 >= 20) ? 'участника' : 'участников'}
               </span>
             </div>
             {card.description && <p className="server-card-desc">{card.description}</p>}
