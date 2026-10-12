@@ -202,12 +202,12 @@ export function Login() {
                 maxLength={9}
                 placeholder="000000"
                 value={code}
-                onChange={(e) => setCode(e.target.value.replace(/[^dA-Za-z -]/g, ''))}
+                onChange={(e) => setCode(e.target.value.replace(/[^\dA-Za-z -]/g, ''))}
                 required
               />
             </label>
             {error && <div className="form-error">{error}</div>}
-            <button className="btn primary block" disabled={busy || code.replace(/[s-]/g, '').length < 6}>
+            <button className="btn primary block" disabled={busy || code.replace(/[\s-]/g, '').length < 6}>
               {busy ? '…' : 'Войти'}
             </button>
             <button type="button" className="link-btn" onClick={() => switchMode('login')}>
