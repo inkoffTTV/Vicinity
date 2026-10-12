@@ -6,7 +6,7 @@ import { useInvite } from '../lib/router';
 import { useStore } from '../lib/store';
 import { Icon } from './Icon';
 
-type Mode = 'login' | 'register' | 'verify';
+type Mode = 'login' | 'register' | 'verify' | 'twofa';
 type Captcha = 'idle' | 'solving' | 'done' | 'error';
 
 const errText = (err: unknown) => {
@@ -73,8 +73,27 @@ export function Login() {
     setError('');
   };
 
+  // Двухфакторная защита: после пароля — код из приложения или резервный
+  const [ticket, setTicket] = useState('');
+  const loginTwoFactor = useStore((s) => s.loginTwoFactor);
+
   const submitLogin = async () => {
-    await login(username.trim(), password);
+    const r = await login(username.trim(), password);
+    if (r) {
+      setTicket(r.ticket);
+      setCode('');
+      setMode('twofa');
+    }
+  };
+
+  const submitTwoFactor = async () => {
+    try {
+      await loginTwoFactor(ticket, code.trim());
+    } catch (err) {
+      // Билет истёк или попытки кончились — снова пароль
+      if (err instanceof ApiError && (err.status === 410 || err.status === 429)) setMode('login');
+      throw err;
+    }
   };
 
   const submitRegister = async () => {
@@ -156,6 +175,7 @@ export function Login() {
     setBusy(true);
     try {
       if (mode === 'login') await submitLogin();
+      else if (mode === 'twofa') await submitTwoFactor();
       else if (mode === 'register') await submitRegister();
       else await submitCode();
     } catch (err) {
@@ -164,6 +184,40 @@ export function Login() {
       setBusy(false);
     }
   };
+
+  if (mode === 'twofa') {
+    return (
+      <div className="auth-screen">
+        <AuthHero />
+        <div className="auth-side">
+          <form className="auth-card" onSubmit={submit}>
+            <p className="muted center">Двухфакторная защита</p>
+            <span className="muted">Откройте приложение-аутентификатор и введите 6-значный код для Vicinity. Нет телефона под рукой — введите резервный код.</span>
+            <label>
+              Код из приложения
+              <input
+                className="code-input"
+                autoFocus
+                autoComplete="one-time-code"
+                maxLength={9}
+                placeholder="000000"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/[^dA-Za-z -]/g, ''))}
+                required
+              />
+            </label>
+            {error && <div className="form-error">{error}</div>}
+            <button className="btn primary block" disabled={busy || code.replace(/[s-]/g, '').length < 6}>
+              {busy ? '…' : 'Войти'}
+            </button>
+            <button type="button" className="link-btn" onClick={() => switchMode('login')}>
+              Назад ко входу
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   if (mode === 'verify' && pending) {
     return (

@@ -102,7 +102,9 @@ interface State {
 
   boot: () => Promise<void>;
   retryBoot: () => void;
-  login: (u: string, p: string) => Promise<void>;
+  /** Вход; при двухфакторной защите — билет для loginTwoFactor вместо входа */
+  login: (u: string, p: string) => Promise<{ ticket: string } | void>;
+  loginTwoFactor: (ticket: string, code: string) => Promise<void>;
   register: (u: string, p: string, d: string) => Promise<void>;
   /** Войти с токеном, выданным регистрацией (/auth/register/start или /verify) */
   signInWithToken: (token: string) => Promise<void>;
@@ -1033,6 +1035,13 @@ export const useStore = create<State>((set, get) => {
 
     login: async (u, p) => {
       const r = await api.login(u, p);
+      if ('twofa_required' in r) return { ticket: r.ticket };
+      setToken(r.token);
+      await startSession();
+    },
+
+    loginTwoFactor: async (ticket, code) => {
+      const r = await api.loginTwoFactor(ticket, code);
       setToken(r.token);
       await startSession();
     },

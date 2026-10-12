@@ -1,28 +1,10 @@
-import {
-  Accessibility,
-  Bell,
-  Copy,
-  Headphones,
-  KeyRound,
-  Laptop,
-  LogOut,
-  type LucideIcon,
-  Palette,
-  ShieldCheck,
-  ShieldQuestion,
-  Sparkles,
-  UserRound,
-  Wrench,
-} from 'lucide-react';
-import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { ADMIN_USERNAME, isAdminUsername, openAdminDm } from '../lib/admin';
-import { api, ApiError, parseTs, Presence, Session } from '../lib/api';
-import { copyText } from '../lib/clipboard';
+import { ChevronLeft, LogOut, Search, X } from 'lucide-react';
+import { FormEvent, useCallback, useState } from 'react';
+import { api, ApiError, Presence } from '../lib/api';
 import { NOTIFY_LEVELS, serverLevel, useNotifySettings } from '../lib/notify';
 import { DEFAULT_ACCENT } from '../lib/prefs';
 import { usePlan } from '../lib/plan';
 import { useStore } from '../lib/store';
-import { fullWhen } from '../lib/time';
 import { AdminPanel } from './AdminPanel';
 import { AudioSettingsPanel } from './AudioSettings';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
@@ -31,62 +13,167 @@ import { Modal } from './Modal';
 import { Toggle } from './SettingControls';
 import { useProfileStudio } from './profile/ProfileStudio';
 import { AccessibilityTab, SubscriptionTab, ThemeTab } from './ThemeSettings';
+import { AccountScreen } from './settings/AccountScreen';
 
-type Tab = 'profile' | 'account' | 'theme' | 'accessibility' | 'subscription' | 'notifications' | 'voice' | 'admin';
+type Tab = 'account' | 'profile' | 'theme' | 'voice' | 'notifications' | 'hotkeys' | 'accessibility' | 'subscription' | 'admin';
 
-const TABS: [Tab, string, LucideIcon][] = [
-  ['profile', 'Профиль', UserRound],
-  ['account', 'Аккаунт', ShieldCheck],
-  ['theme', 'Тема', Palette],
-  ['accessibility', 'Специальные возможности', Accessibility],
-  ['subscription', 'Подписка', Sparkles],
-  ['notifications', 'Уведомления', Bell],
-  ['voice', 'Голос и видео', Headphones],
+interface NavItem {
+  id: Tab;
+  label: string;
+  /** Слова для поиска по настройкам */
+  keywords: string;
+}
+
+// Разделы — как в макете: учётная запись, приложение, подписка (+ администрирование для developer)
+const GROUPS: { title: string; items: NavItem[] }[] = [
+  {
+    title: 'Учётная запись',
+    items: [
+      { id: 'account', label: 'Аккаунт', keywords: 'логин почта пароль двухфакторная 2fa сеансы устройства безопасность' },
+      { id: 'profile', label: 'Профиль', keywords: 'имя аватар баннер о себе статус цвет рамка эффект ник бейджик' },
+    ],
+  },
+  {
+    title: 'Приложение',
+    items: [
+      { id: 'theme', label: 'Внешний вид', keywords: 'тема светлая тёмная графит чёрная цвет оформление' },
+      { id: 'voice', label: 'Голос и видео', keywords: 'микрофон динамик звук камера громкость' },
+      { id: 'notifications', label: 'Уведомления', keywords: 'звук оповещения упоминания' },
+      { id: 'hotkeys', label: 'Горячие клавиши', keywords: 'клавиатура сочетания ctrl alt' },
+      { id: 'accessibility', label: 'Доступность', keywords: 'контраст насыщенность шрифт анимация компактный' },
+    ],
+  },
+  { title: 'Подписка', items: [{ id: 'subscription', label: 'О подписке', keywords: 'basic standard ultra тариф' }] },
 ];
+
+const TIER_NAMES = ['', 'Basic', 'Standard', 'Ultra'];
 
 export function Settings() {
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
-  const [tab, setTab] = useState<Tab>('profile');
-  const isAdmin = useStore((s) => Boolean(s.me?.developer));
-  // Администрирование — только разработчикам (developer = 1)
-  const tabs: [Tab, string, LucideIcon][] = isAdmin ? [...TABS, ['admin', 'Администрирование', Wrench]] : TABS;
+  const me = useStore((s) => s.me)!;
+  const logout = useStore((s) => s.logout);
+  const tier = usePlan((s) => s.current.tier);
+  const isAdmin = Boolean(me.developer);
+  const [tab, setTab] = useState<Tab>('account');
+  // Телефон: сначала список разделов, потом раздел (кнопка «Назад»)
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const close = useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
 
+  const groups = isAdmin
+    ? [...GROUPS, { title: 'Сервер', items: [{ id: 'admin' as Tab, label: 'Администрирование', keywords: 'пользователи блокировка ip подписки' }] }]
+    : GROUPS;
+  const q = query.trim().toLowerCase();
+  const visible = groups
+    .map((g) => ({ ...g, items: g.items.filter((it) => !q || `${it.label} ${it.keywords}`.toLowerCase().includes(q)) }))
+    .filter((g) => g.items.length > 0);
+  const current = groups.flatMap((g) => g.items).find((it) => it.id === tab);
+
+  const go = (t: Tab) => {
+    setTab(t);
+    setMobileOpen(true);
+  };
+
   return (
-    <Modal title="Настройки" onClose={close} className="settings-modal">
-      <div className="settings-layout">
-        <div className="settings-tabs" role="tablist" aria-label="Разделы настроек">
-          {tabs.map(([id, label, icon]) => (
-            <button
-              key={id}
-              role="tab"
-              id={`settings-tab-${id}`}
-              aria-selected={tab === id}
-              aria-controls="settings-panel"
-              className={tab === id ? 'on' : ''}
-              onClick={(e) => {
-                setTab(id);
-                // На телефоне разделы — прокручиваемая строка: выбранный не прячется за краем
-                e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-              }}
-            >
-              <Icon icon={icon} size={18} anim="pop" />
-              <span>{label}</span>
+    <Modal onClose={close} bare label="Настройки">
+      <div className={`settings-shell${mobileOpen ? ' show-content' : ''}`}>
+        <nav className="settings-nav" aria-label="Разделы настроек">
+          <div className="settings-me">
+            <Avatar name={me.display_name} src={me.avatar_path} id={me.user_id} size={40} presence={me.presence} />
+            <div className="grow">
+              <strong className="ellipsis">{me.display_name}</strong>
+              <span className="ellipsis">{me.username}</span>
+            </div>
+            {tier > 0 && <span className={`tier-tag t${tier}`}>{TIER_NAMES[tier]}</span>}
+            <button type="button" className="icon-btn settings-nav-close" aria-label="Закрыть настройки" onClick={close}>
+              <Icon icon={X} size={20} />
             </button>
-          ))}
-        </div>
-        <div className="settings-panel" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${tab}`}>
-          {tab === 'profile' && <ProfileTab onClose={close} />}
-          {tab === 'account' && <AccountTab />}
-          {tab === 'theme' && <ThemeTab goTo={setTab} />}
-          {tab === 'accessibility' && <AccessibilityTab />}
-          {tab === 'subscription' && <SubscriptionTab />}
-          {tab === 'notifications' && <NotificationsTab />}
-          {tab === 'voice' && <AudioSettingsPanel />}
-          {tab === 'admin' && isAdmin && <AdminPanel />}
-        </div>
+          </div>
+          <label className="settings-search">
+            <Icon icon={Search} size={16} />
+            <input type="search" placeholder="Поиск по настройкам" aria-label="Поиск по настройкам" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </label>
+          <div className="settings-groups">
+            {visible.map((g) => (
+              <div key={g.title} className="settings-group">
+                <span className="settings-group-title">{g.title}</span>
+                {g.items.map((it) => (
+                  <button key={it.id} type="button" aria-current={tab === it.id ? 'page' : undefined} onClick={() => go(it.id)}>
+                    <span className="grow">{it.label}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+            {visible.length === 0 && <span className="muted small settings-nothing">Ничего не нашлось</span>}
+          </div>
+          <div className="settings-nav-foot">
+            <button type="button" className="settings-logout" onClick={() => void logout()}>
+              <Icon icon={LogOut} size={16} />
+              Выйти
+            </button>
+          </div>
+        </nav>
+        <main className="settings-main" aria-label={current?.label}>
+          <div className="settings-main-bar">
+            <button type="button" className="icon-btn settings-back" aria-label="К разделам" onClick={() => setMobileOpen(false)}>
+              <Icon icon={ChevronLeft} size={20} />
+            </button>
+            <span className="grow" />
+            <button type="button" className="icon-btn settings-close" aria-label="Закрыть настройки" onClick={close}>
+              <Icon icon={X} size={20} />
+            </button>
+          </div>
+          <div className="settings-main-body">
+            {tab === 'account' && <AccountScreen onEditProfile={() => go('profile')} />}
+            {tab === 'profile' && <ProfileTab onClose={close} />}
+            {tab === 'theme' && <ThemeTab goTo={(t) => go(t === 'accessibility' ? 'accessibility' : 'subscription')} />}
+            {tab === 'voice' && <AudioSettingsPanel />}
+            {tab === 'notifications' && <NotificationsTab />}
+            {tab === 'hotkeys' && <HotkeysScreen />}
+            {tab === 'accessibility' && <AccessibilityTab />}
+            {tab === 'subscription' && <SubscriptionTab />}
+            {tab === 'admin' && isAdmin && <AdminPanel />}
+          </div>
+        </main>
       </div>
     </Modal>
+  );
+}
+
+// ── Горячие клавиши (lib/shortcuts.ts) ──
+
+const HOTKEYS: [string[], string][] = [
+  [['Ctrl', 'K'], 'Быстрый переход к каналу или беседе'],
+  [['Alt', '↑'], 'Предыдущий канал в списке'],
+  [['Alt', '↓'], 'Следующий канал в списке'],
+  [['Alt', 'Shift', '↑'], 'Предыдущий канал с непрочитанным'],
+  [['Alt', 'Shift', '↓'], 'Следующий канал с непрочитанным'],
+  [['↑'], 'Изменить своё последнее сообщение (в пустом поле ввода)'],
+  [['Ctrl', 'V'], 'Вставить картинку из буфера в сообщение'],
+  [['Shift', 'Enter'], 'Новая строка в сообщении'],
+  [['Esc'], 'Закрыть окно, меню или панель'],
+];
+
+function HotkeysScreen() {
+  return (
+    <div className="settings">
+      <header className="settings-head">
+        <h1 className="display">Горячие клавиши</h1>
+        <p className="muted">На Mac вместо Ctrl — ⌘</p>
+      </header>
+      <ul className="hotkeys">
+        {HOTKEYS.map(([keys, what]) => (
+          <li key={what}>
+            <span className="grow">{what}</span>
+            <span className="hotkey-keys">
+              {keys.map((k) => (
+                <kbd key={k}>{k}</kbd>
+              ))}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -250,62 +337,6 @@ function ProfileTab({ onClose }: { onClose: () => void }) {
 
 // ── Аккаунт и безопасность ──
 
-function AccountTab() {
-  const me = useStore((s) => s.me)!;
-  const toast = useStore((s) => s.toast);
-
-  const copy = async (text: string, what: string) => {
-    if (await copyText(text)) toast(`${what} скопирован`);
-    else toast('Не удалось скопировать', 'error');
-  };
-
-  return (
-    <div className="settings">
-      <section className="settings-card account-card">
-        <Avatar name={me.display_name} src={me.avatar_path} id={me.user_id} size={48} />
-        <div className="grow">
-          <strong className="ellipsis">{me.display_name}</strong>
-          <div className="muted small">
-            @{me.username} · ID {me.user_id}
-          </div>
-        </div>
-        <div className="stack-row wrap">
-          <button type="button" className="btn small" onClick={() => copy(`@${me.username}`, 'Логин')}>
-            <Icon icon={Copy} size={14} anim="bounce" />
-            Копировать @логин
-          </button>
-          <button type="button" className="btn small" onClick={() => copy(String(me.user_id), 'ID')}>
-            <Icon icon={Copy} size={14} anim="bounce" />
-            Копировать ID
-          </button>
-        </div>
-      </section>
-      {!isAdminUsername(me.username) && (
-        <section className="settings-card admin-card" aria-label="Связь с администратором">
-          <span className="admin-card-icon" aria-hidden="true">
-            <Icon icon={ShieldQuestion} size={22} />
-          </span>
-          <div className="grow">
-            <strong>Вопрос, ошибка или идея?</strong>
-            <div className="muted small">Напишите администратору @{ADMIN_USERNAME} в личные сообщения.</div>
-          </div>
-          <button
-            type="button"
-            className="btn small primary"
-            onClick={async () => {
-              if (await openAdminDm()) useStore.getState().setSettingsOpen(false);
-            }}
-          >
-            Написать администратору
-          </button>
-        </section>
-      )}
-      <PasswordForm />
-      <Sessions />
-    </div>
-  );
-}
-
 /** Оценка пароля для подсказки: 0 — пусто, 1..4 — от слабого к надёжному */
 function strength(p: string): number {
   if (!p) return 0;
@@ -317,7 +348,11 @@ function strength(p: string): number {
 }
 const STRENGTH = ['', 'Слабый', 'Средний', 'Хороший', 'Надёжный'];
 
-function PasswordForm() {
+// Смена пароля завершает другие сеансы — открытые списки сеансов перечитываются
+const SESSIONS_CHANGED = 'vicinity:sessions-changed';
+
+/** Смена пароля (Настройки → Аккаунт → Пароль) */
+export function PasswordForm() {
   const toast = useStore((s) => s.toast);
   const [oldPw, setOldPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -384,86 +419,6 @@ function PasswordForm() {
   );
 }
 
-// Смена пароля завершает другие сеансы — список надо перечитать
-const SESSIONS_CHANGED = 'vicinity:sessions-changed';
-
-function Sessions() {
-  const toast = useStore((s) => s.toast);
-  const [list, setList] = useState<Session[] | null>(null);
-  const [error, setError] = useState('');
-
-  const load = useCallback(
-    () =>
-      api.sessions().then(
-        (s) => (setList(s), setError('')),
-        (e) => setError(errText(e)),
-      ),
-    [],
-  );
-  useEffect(() => {
-    void load();
-    window.addEventListener(SESSIONS_CHANGED, load);
-    return () => window.removeEventListener(SESSIONS_CHANGED, load);
-  }, [load]);
-
-  const act = async (fn: () => Promise<unknown>, ok: string) => {
-    try {
-      await fn();
-      toast(ok);
-    } catch (e) {
-      toast(errText(e), 'error');
-    }
-    await load();
-  };
-
-  const others = (list ?? []).filter((s) => !s.current).length;
-
-  return (
-    <section className="settings-card stack" aria-label="Активные сеансы">
-      <div className="row-between center-y">
-        <h3>Активные сеансы</h3>
-        <button
-          type="button"
-          className="btn small danger"
-          disabled={others === 0}
-          onClick={() => act(() => api.revokeOtherSessions(), 'Выполнен выход на других устройствах')}
-        >
-          Выйти на других устройствах
-        </button>
-      </div>
-      {error && <div className="form-error">{error}</div>}
-      {list === null && !error && <div className="muted small">Загрузка…</div>}
-      <ul className="session-list">
-        {(list ?? []).map((s) => (
-          <li key={s.id} className="session">
-            <span className="session-icon" aria-hidden="true">
-              <Icon icon={s.current ? Laptop : KeyRound} size={20} />
-            </span>
-            <div className="grow">
-              <div>
-                {s.current ? <strong>Это устройство</strong> : <span>Сеанс {s.id.slice(0, 6)}</span>}
-              </div>
-              <div className="muted small">
-                Вход {fullWhen(parseTs(s.created_at))} · действует до {fullWhen(parseTs(s.expires_at))}
-              </div>
-            </div>
-            {!s.current && (
-              <button
-                type="button"
-                className="btn small"
-                onClick={() => act(() => api.revokeSession(s.id), 'Сеанс завершён')}
-              >
-                Завершить
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-// ── Внешний вид ──
 
 // ── Уведомления ──
 

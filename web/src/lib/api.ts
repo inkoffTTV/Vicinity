@@ -284,7 +284,26 @@ export interface Session {
   created_at: string;
   expires_at: string;
   current: boolean;
+  /** Браузер или приложение, из которого вошли ("" — сеанс старше этой функции) */
+  user_agent?: string;
+  ip?: string;
 }
+
+/** Настройки → Аккаунт (GET /account) */
+export interface AccountInfo {
+  username: string;
+  has_email: boolean;
+  email_masked: string;
+  totp_enabled: boolean;
+  /** Секунд до следующей смены логина (0 — можно) */
+  username_wait: number;
+  password_changed_at: string;
+  /** На сервере настроена отправка почты */
+  mail: boolean;
+}
+
+/** Ответ входа: токен — или нужен код двухфакторной защиты */
+export type LoginResult = { token: string; user_id: number } | { twofa_required: true; ticket: string };
 
 export interface BannedUser {
   id: number;
@@ -476,7 +495,22 @@ const del = <T>(p: string) => request<T>('DELETE', p);
 export const api = {
   // ── Аккаунт ──
   login: (username: string, password: string) =>
-    post<{ token: string; user_id: number }>('/auth/login', { username, password }),
+    post<LoginResult>('/auth/login', { username, password, supports_2fa: true }),
+  loginTwoFactor: (ticket: string, code: string) => post<{ token: string; user_id: number }>('/auth/login/2fa', { ticket, code }),
+
+  // ── Аккаунт ──
+  account: () => get<AccountInfo>('/account'),
+  checkUsername: (u: string) =>
+    get<{ available: boolean; reason: '' | 'taken' | 'invalid' | 'same'; suggestions: string[] }>(`/account/username/check?u=${encodeURIComponent(u)}`),
+  setUsername: (username: string, password: string) => post<{ username: string }>('/account/username', { username, password }),
+  accountEmail: () => get<{ email: string }>('/account/email').then((r) => r.email),
+  emailStart: (email: string, password: string) =>
+    post<{ email_masked: string; send_to: string; resend_in: number }>('/account/email/start', { email, password }),
+  emailVerify: (code: string) => post<{ email: string }>('/account/email/verify', { code }),
+  emailResend: () => post<{ resend_in: number }>('/account/email/resend'),
+  totpSetup: (password: string) => post<{ secret: string; uri: string }>('/account/2fa/setup', { password }),
+  totpEnable: (code: string) => post<{ backup_codes: string[] }>('/account/2fa/enable', { code }),
+  totpDisable: (code: string) => post<{ status: string }>('/account/2fa/disable', { code }),
   register: (username: string, password: string, display_name: string) =>
     post<{ token: string; user_id: number }>('/auth/register', { username, password, display_name }),
   registrationInfo: () => get<RegistrationInfo>('/auth/registration'),
