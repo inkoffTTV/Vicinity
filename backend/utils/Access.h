@@ -37,4 +37,10 @@ extern const char* const kAccessibleChannels;
 // Друзья (accepted) или общая личка — условие для звонков 1:1
 bool canCall(const drogon::orm::DbClientPtr& db, int64_t userId, int64_t otherId);
 
+// Один из двоих заблокировал другого — между ними нет личных сообщений, звонков и заявок в друзья
+bool blockedBetween(const drogon::orm::DbClientPtr& db, int64_t a, int64_t b);
+
+// Личка (2 участника) и её второй участник; 0 — канал не личка
+int64_t dmPeer(const drogon::orm::DbClientPtr& db, int64_t channelId, int64_t userId);
+
 } // namespace Access

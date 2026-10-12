@@ -9,11 +9,17 @@ public:
     ADD_METHOD_TO(UserController::search,   "/api/v1/users/search", Get,  Options, "AuthFilter");
     ADD_METHOD_TO(UserController::profile,   "/api/v1/users/{id}/profile", Get, Options, "AuthFilter");
     ADD_METHOD_TO(UserController::startDm,   "/api/v1/dms",          Post, Options, "AuthFilter");
+    ADD_METHOD_TO(UserController::block,     "/api/v1/users/{id}/block", Post,   Options, "AuthFilter");
+    ADD_METHOD_TO(UserController::unblock,   "/api/v1/users/{id}/block", Delete, Options, "AuthFilter");
+    ADD_METHOD_TO(UserController::blocks,    "/api/v1/blocks",       Get,  Options, "AuthFilter");
     ADD_METHOD_TO(UserController::listDms,   "/api/v1/dms",          Get,  Options, "AuthFilter");
     METHOD_LIST_END
 
     void search (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void profile(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
     void startDm(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void block  (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void unblock(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void blocks (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void listDms(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
 };

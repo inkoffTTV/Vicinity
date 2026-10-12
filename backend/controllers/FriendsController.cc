@@ -2,6 +2,7 @@
 #include "../managers/UserRateLimiter.h"
 #include "../utils/Broadcast.h"
 #include "../utils/JsonUtils.h"
+#include "../utils/Access.h"
 #include "../utils/PresenceUtil.h"
 #include <drogon/HttpResponse.h>
 
@@ -93,6 +94,7 @@ void FriendsController::request(const HttpRequestPtr& req,
     try {
         auto u = db->execSqlSync("SELECT id FROM users WHERE id=?", target);
         if (u.empty()) { cb(errResp("Пользователь не найден", k404NotFound)); return; }
+        if (Access::blockedBetween(db, self, target)) { cb(errResp("Нельзя отправить заявку этому пользователю", k403Forbidden)); return; }
 
         auto ex = db->execSqlSync(
             "SELECT requester_id, status FROM friendships "

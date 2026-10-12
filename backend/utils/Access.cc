@@ -48,7 +48,23 @@ const char* const kAccessibleChannels =
     "SELECT c.id FROM channels c JOIN server_members sm ON sm.server_id = c.server_id "
     "WHERE sm.user_id = ?";
 
+bool blockedBetween(const drogon::orm::DbClientPtr& db, int64_t a, int64_t b) {
+    return !db->execSqlSync(
+                  "SELECT 1 FROM user_blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?) LIMIT 1",
+                  a, b, b, a)
+                .empty();
+}
+
+int64_t dmPeer(const drogon::orm::DbClientPtr& db, int64_t channelId, int64_t userId) {
+    auto r = db->execSqlSync(
+        "SELECT m.user_id FROM channels c JOIN channel_members m ON m.channel_id = c.id "
+        "WHERE c.id = ? AND c.type = 'dm' AND m.user_id != ? LIMIT 1",
+        channelId, userId);
+    return r.empty() ? 0 : r[0]["user_id"].as<int64_t>();
+}
+
 bool canCall(const drogon::orm::DbClientPtr& db, int64_t userId, int64_t otherId) {
+    if (blockedBetween(db, userId, otherId)) return false;
     auto r = db->execSqlSync(
         "SELECT 1 FROM friendships "
         "WHERE ((requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?)) "

@@ -1,5 +1,6 @@
 #include "UserController.h"
 #include "../models/User.h"
+#include "../utils/Access.h"
 #include "../utils/PresenceUtil.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/Messages.h"
@@ -129,6 +130,8 @@ void UserController::profile(const HttpRequestPtr& req,
         } catch (...) {}
     }
     resp["mutual_friends"] = mfriends;
+    resp["blocked"] = id != self &&
+        !db->execSqlSync("SELECT 1 FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?", self, id).empty();
 
     // Бейджик — сервер, который человек выбрал: название и иконка (если он всё ещё в нём состоит)
     resp["badge"] = Json::nullValue;
@@ -153,6 +156,61 @@ void UserController::profile(const HttpRequestPtr& req,
 
 // POST /api/v1/dms  { user_id: <target> }
 // Creates (or returns existing) 1-on-1 DM channel between caller and target.
+// POST /api/v1/users/{id}/block — заблокировать: дружба и заявки удаляются, личка и звонки закрыты
+void UserController::block(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id) {
+    const int64_t self = req->attributes()->get<int64_t>("user_id");
+    if (id == self) { cb(errResp("Нельзя заблокировать себя", k400BadRequest)); return; }
+    try {
+        auto db = app().getDbClient();
+        if (!UserModel::findById(id)) { cb(errResp("Пользователь не найден", k404NotFound)); return; }
+        db->execSqlSync("INSERT OR IGNORE INTO user_blocks(blocker_id, blocked_id) VALUES(?, ?)", self, id);
+        db->execSqlSync("DELETE FROM friendships WHERE (requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?)",
+                        self, id, id, self);
+        Json::Value resp;
+        resp["blocked"] = true;
+        cb(jsonResp(resp));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
+// DELETE /api/v1/users/{id}/block
+void UserController::unblock(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id) {
+    const int64_t self = req->attributes()->get<int64_t>("user_id");
+    try {
+        app().getDbClient()->execSqlSync("DELETE FROM user_blocks WHERE blocker_id = ? AND blocked_id = ?", self, id);
+        Json::Value resp;
+        resp["blocked"] = false;
+        cb(jsonResp(resp));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
+// GET /api/v1/blocks → {users:[{id, username, display_name, avatar_path}]} — кого я заблокировал
+void UserController::blocks(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
+    const int64_t self = req->attributes()->get<int64_t>("user_id");
+    try {
+        auto rows = app().getDbClient()->execSqlSync(
+            "SELECT u.id, u.username, u.display_name, u.avatar_path FROM user_blocks b JOIN users u ON u.id = b.blocked_id "
+            "WHERE b.blocker_id = ? ORDER BY b.created_at DESC", self);
+        Json::Value arr(Json::arrayValue);
+        for (const auto& r : rows) {
+            Json::Value u;
+            u["id"]           = static_cast<Json::Int64>(r["id"].as<int64_t>());
+            u["username"]     = r["username"].as<std::string>();
+            u["display_name"] = r["display_name"].as<std::string>();
+            u["avatar_path"]  = r["avatar_path"].isNull() ? std::string() : r["avatar_path"].as<std::string>();
+            arr.append(u);
+        }
+        Json::Value resp;
+        resp["users"] = arr;
+        cb(jsonResp(resp));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
 void UserController::startDm(const HttpRequestPtr& req,
                             std::function<void(const HttpResponsePtr&)>&& cb) {
     int64_t selfId = req->attributes()->get<int64_t>("user_id");
@@ -168,6 +226,9 @@ void UserController::startDm(const HttpRequestPtr& req,
     try {
         auto target = UserModel::findById(targetId);
         if (!target) { cb(errResp("User not found", k404NotFound)); return; }
+        if (Access::blockedBetween(db, selfId, targetId)) {
+            cb(errResp("Нельзя написать: один из вас заблокировал другого", k403Forbidden)); return;
+        }
 
         // Существующая личка ровно этих двоих: канал с третьим участником (подсунутый
         // кем-то «dm») не подходит — иначе переписка шла бы через чужой канал

@@ -240,6 +240,15 @@ void initialize() {
     // Устройство и адрес входа — для «Активных сеансов»
     exec("ALTER TABLE sessions ADD COLUMN user_agent TEXT DEFAULT NULL");
     exec("ALTER TABLE sessions ADD COLUMN ip TEXT DEFAULT NULL");
+    // Блокировки: blocker не получает от blocked личных сообщений, звонков и заявок в друзья (и наоборот)
+    exec("CREATE TABLE IF NOT EXISTS user_blocks ("
+         "blocker_id INTEGER NOT NULL,"
+         "blocked_id INTEGER NOT NULL,"
+         "created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "PRIMARY KEY(blocker_id, blocked_id),"
+         "FOREIGN KEY(blocker_id) REFERENCES users(id) ON DELETE CASCADE,"
+         "FOREIGN KEY(blocked_id) REFERENCES users(id) ON DELETE CASCADE)");
+    exec("CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked ON user_blocks(blocked_id)");
     // Смена почты: ждём код, отправленный на новый адрес
     exec("CREATE TABLE IF NOT EXISTS email_changes ("
          "user_id INTEGER PRIMARY KEY,"

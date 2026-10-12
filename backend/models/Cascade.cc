@@ -57,6 +57,7 @@ void deleteUser(const drogon::orm::DbClientPtr& db, int64_t userId) {
         tr->execSqlSync("DELETE FROM friendships WHERE requester_id = ? OR addressee_id = ?", userId, userId);
         tr->execSqlSync("DELETE FROM sessions WHERE user_id = ?", userId);
         tr->execSqlSync("DELETE FROM user_settings WHERE user_id = ?", userId);
+        tr->execSqlSync("DELETE FROM user_blocks WHERE blocker_id = ? OR blocked_id = ?", userId, userId);
         // Беседы и роли, которые он создал, остаются без владельца
         tr->execSqlSync("UPDATE channels SET owner_id = NULL WHERE owner_id = ?", userId);
         tr->execSqlSync("UPDATE roles SET created_by = NULL WHERE created_by = ?", userId);

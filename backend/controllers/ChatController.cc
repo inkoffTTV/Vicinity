@@ -177,6 +177,10 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
         if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Message, userId)) {
             cb(tooManyRequests()); return;
         }
+        // Личка с заблокированным (в любую сторону) — писать нельзя, переписка остаётся видна
+        if (const int64_t peer = Access::dmPeer(db, channelId, userId); peer && Access::blockedBetween(db, userId, peer)) {
+            cb(error("Нельзя написать: один из вас заблокировал другого", k403Forbidden)); return;
+        }
         // Отвечать можно только на сообщение этого же канала
         if (replyTo > 0 &&
             db->execSqlSync("SELECT 1 FROM messages WHERE id = ? AND channel_id = ?", replyTo, channelId).empty()) {
