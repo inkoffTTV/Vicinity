@@ -5,6 +5,8 @@
 #include "../utils/JsonUtils.h"
 #include "../utils/Messages.h"
 #include "../utils/ProfileExt.h"
+#include "../utils/TextUtils.h"
+#include "../managers/UserRateLimiter.h"
 #include <drogon/HttpResponse.h>
 
 using namespace drogon;
@@ -36,18 +38,21 @@ static HttpResponsePtr errResp(const std::string& msg, HttpStatusCode code) {
 void UserController::search(const HttpRequestPtr& req,
                            std::function<void(const HttpResponsePtr&)>&& cb) {
     int64_t selfId = req->attributes()->get<int64_t>("user_id");
-    std::string q = req->getParameter("q");
-    if (q.empty()) { cb(errResp("query required", k400BadRequest)); return; }
-
-    // Strip leading @ if present
-    if (q[0] == '@') q.erase(0, 1);
+    // Только точный ник целиком (без учёта регистра): по части ника или по имени людей не найти —
+    // чтобы аккаунты нельзя было перебирать поиском. Ведущий @ и пробелы по краям убираются.
+    std::string q = TextUtils::trim(req->getParameter("q"));
+    if (!q.empty() && q[0] == '@') q.erase(0, 1);
+    if (q.empty() || q.size() > 64) { cb(errResp("Введите ник полностью", k400BadRequest)); return; }
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Search, selfId)) {
+        cb(errResp("Слишком много запросов — подождите минуту", k429TooManyRequests)); return;
+    }
 
     auto db = app().getDbClient();
     try {
         auto result = db->execSqlSync(
             "SELECT id, username, display_name, avatar_path FROM users "
-            "WHERE (username LIKE ? OR display_name LIKE ?) AND id != ? LIMIT 20",
-            "%" + q + "%", "%" + q + "%", selfId);
+            "WHERE username = ? COLLATE NOCASE AND id != ? LIMIT 1",
+            q, selfId);
         Json::Value arr(Json::arrayValue);
         for (const auto& row : result) {
             Json::Value u;

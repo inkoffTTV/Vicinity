@@ -14,20 +14,22 @@ export function AddMemberDialog({ target, onClose }: { target: AddTarget; onClos
   const refreshServer = useStore((s) => s.refreshServer);
   const toast = useStore((s) => s.toast);
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<UserSummary[] | null>(null);
+  // Точное совпадение ника с сервера (не друг) — поиск по части ника отключён
+  const [exact, setExact] = useState<UserSummary | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const query = q.trim();
-    if (!query) return setResults(null);
+    const query = q.trim().replace(/^@/, '');
+    setExact(null);
+    if (query.length < 2) return;
     // Ответ на устаревший запрос (пользователь уже печатает дальше) не должен перетереть свежий
     let current = true;
     const t = window.setTimeout(() => {
       api.searchUsers(query).then(
-        (r) => current && setResults(r),
-        () => current && setResults([]),
+        (r) => current && setExact(r[0] ?? null),
+        () => {},
       );
-    }, 250);
+    }, 400);
     return () => {
       current = false;
       window.clearTimeout(t);
@@ -53,13 +55,16 @@ export function AddMemberDialog({ target, onClose }: { target: AddTarget; onClos
     }
   };
 
-  const list = results ?? friends;
+  // Друзей ищем у себя по нику и имени; остальных — только по полному нику
+  const needle = q.trim().replace(/^@/, '').toLowerCase();
+  const mine = needle ? friends.filter((f) => f.username.toLowerCase().includes(needle) || f.display_name.toLowerCase().includes(needle)) : friends;
+  const list = exact && !mine.some((f) => f.id === exact.id) ? [...mine, exact] : mine;
   return (
     <Modal title="Добавить участника" onClose={onClose}>
-      <input autoFocus placeholder="Поиск по логину или имени" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input autoFocus placeholder="Друг или полный ник" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="user-list">
-        {results === null && <div className="muted small">Друзья</div>}
-        {list.length === 0 && <div className="muted">Никого не найдено</div>}
+        {!needle && <div className="muted small">Друзья</div>}
+        {list.length === 0 && <div className="muted">{needle ? 'Среди друзей нет. Другого человека найдёт только полный ник.' : 'Пока нет друзей'}</div>}
         {list.map((u) => (
           <div key={u.id} className="user-row">
             <Avatar name={u.display_name} src={u.avatar_path} id={u.id} size={32} />

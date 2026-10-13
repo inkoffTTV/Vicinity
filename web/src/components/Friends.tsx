@@ -1,5 +1,5 @@
 import { Menu, MessageCircle, UserMinus, Users } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { api, ApiError, UserSummary } from '../lib/api';
 import { useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
@@ -139,69 +139,70 @@ export function Friends({ onMenu }: { onMenu: () => void }) {
             )}
           </>
         )}
-        {tab === 'add' && <AddFriend onAdd={(u) => act(() => api.friendRequest(u.id), `Заявка отправлена: ${u.display_name}`)} />}
+        {tab === 'add' && <AddFriend />}
       </div>
     </div>
   );
 }
 
-function AddFriend({ onAdd }: { onAdd: (u: UserSummary) => void }) {
-  const openDmWith = useStore((s) => s.openDmWith);
+/** Добавить в друзья — как в Discord: только по полному нику, без подсказок и списков людей */
+function AddFriend() {
+  const refreshFriends = useStore((s) => s.refreshFriends);
   const friends = useStore((s) => s.friends);
-  const outgoing = useStore((s) => s.outgoing);
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<UserSummary[]>([]);
-  const [searched, setSearched] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
-  useEffect(() => {
-    const query = q.trim();
-    if (!query) {
-      setResults([]);
-      setSearched(false);
-      return;
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const nick = q.trim().replace(/^@/, '');
+    if (!nick || busy) return;
+    setBusy(true);
+    setResult(null);
+    try {
+      const [u] = await api.searchUsers(nick);
+      if (!u) {
+        setResult({ ok: false, text: `Пользователь «${nick}» не найден. Проверьте ник — его нужно ввести полностью, как в профиле.` });
+      } else if (friends.some((f) => f.id === u.id)) {
+        setResult({ ok: true, text: `${u.display_name} уже у вас в друзьях` });
+      } else {
+        await api.friendRequest(u.id);
+        await refreshFriends();
+        setResult({ ok: true, text: `Заявка отправлена: ${u.display_name} (@${u.username})` });
+        setQ('');
+      }
+    } catch (err) {
+      setResult({ ok: false, text: err instanceof ApiError ? err.message : 'Не удалось отправить заявку' });
+    } finally {
+      setBusy(false);
     }
-    // Ответ на устаревший запрос (пользователь уже печатает дальше) не должен перетереть свежий
-    let current = true;
-    const t = window.setTimeout(() => {
-      api.searchUsers(query).then(
-        (r) => current && (setResults(r), setSearched(true)),
-        () => current && (setResults([]), setSearched(true)),
-      );
-    }, 300);
-    return () => {
-      current = false;
-      window.clearTimeout(t);
-    };
-  }, [q]);
+  };
 
   return (
-    <div className="add-friend">
-      <p className="muted">Найдите человека по логину или имени.</p>
-      <input autoFocus placeholder="Например, @username" value={q} onChange={(e) => setQ(e.target.value)} />
-      <div className="user-list">
-        {searched && results.length === 0 && <div className="muted">Никого не найдено</div>}
-        {results.map((u) => {
-          const isFriend = friends.some((f) => f.id === u.id);
-          const sent = outgoing.some((f) => f.id === u.id);
-          return (
-            <div key={u.id} className="user-row">
-              <Avatar name={u.display_name} src={u.avatar_path} id={u.id} size={32} />
-              <div className="grow">
-                <div>{u.display_name}</div>
-                <div className="muted small">@{u.username}</div>
-              </div>
-              <button className="btn small" onClick={() => openDmWith(u.id)}>
-                Написать
-              </button>
-              {!isFriend && (
-                <button className="btn small primary" disabled={sent} onClick={() => onAdd(u)}>
-                  {sent ? 'Отправлено' : 'В друзья'}
-                </button>
-              )}
-            </div>
-          );
-        })}
+    <form className="add-friend" onSubmit={submit}>
+      <p className="muted">Введите ник человека полностью — например, inkoff. Найти кого-то по части ника или по имени нельзя: так никто не увидит ваш аккаунт случайно.</p>
+      <div className={`add-friend-row${result ? (result.ok ? ' ok' : ' bad') : ''}`}>
+        <input
+          autoFocus
+          placeholder="Полный ник"
+          value={q}
+          maxLength={64}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setResult(null);
+          }}
+        />
+        <button className="btn primary" disabled={busy || !q.trim().replace(/^@/, '')}>
+          Отправить заявку
+        </button>
       </div>
-    </div>
+      {result && (
+        <div className={`add-friend-result small${result.ok ? ' ok' : ' bad'}`} role="status">
+          {result.text}
+        </div>
+      )}
+    </form>
   );
 }

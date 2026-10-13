@@ -4792,3 +4792,42 @@ a:focus-visible > .ico {
   align-items: center;
   gap: 4px;
 }
+
+/* Добавить в друзья: поле с кнопкой, итог под ним */
+.add-friend-row {
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  transition: border-color 0.15s;
+}
+.add-friend-row:focus-within {
+  border-color: var(--accent);
+}
+.add-friend-row.ok {
+  border-color: var(--ok);
+}
+.add-friend-row.bad {
+  border-color: var(--danger);
+}
+.add-friend-row input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+}
+.add-friend-row input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.add-friend-result {
+  margin-top: 8px;
+}
+.add-friend-result.ok {
+  color: var(--ok);
+}
+.add-friend-result.bad {
+  color: var(--danger);
+}
