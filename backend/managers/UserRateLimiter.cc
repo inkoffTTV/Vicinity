@@ -22,6 +22,8 @@ Limit limitFor(UserRateLimiter::Action a) {
         case A::CallSignal:    return {100, 20};
         case A::VoiceMedia:    return {20, 60};
         case A::VoiceBytes:    return {64000, 64000.0 / 48000.0};
+        case A::ActivityJoin:  return {30, 60};
+        case A::ActivityMsg:   return {240, 4};
     }
     return {10, 60};
 }

@@ -31,6 +31,7 @@ add_executable(VicinityServer
     managers/UserRateLimiter.cc
     managers/WSManager.cc
     managers/VoiceManager.cc
+    managers/ActivityManager.cc
     models/Cascade.cc
     models/Database.cc
     models/User.cc

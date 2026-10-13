@@ -1,6 +1,7 @@
 #include "WSController.h"
 #include "../managers/WSManager.h"
 #include "../managers/VoiceManager.h"
+#include "../managers/ActivityManager.h"
 #include "../managers/UserRateLimiter.h"
 #include "../utils/Access.h"
 #include "../utils/Broadcast.h"
@@ -10,6 +11,7 @@
 #include <trantor/net/TcpConnection.h>
 #include <trantor/utils/Logger.h>
 #include <chrono>
+#include <cctype>
 #include <cstring>
 #include <map>
 #include <set>
@@ -232,6 +234,122 @@ static void handleCallSignal(int64_t userId, const WebSocketConnectionPtr& conn,
     WSManager::instance().sendToUser(to, JsonUtils::write(out));
 }
 
+// ── Активности (игры в голосовом канале и звонке) ──
+// Сервер не считает игру: держит участников (ActivityManager) и пересылает их сообщения друг другу.
+
+static constexpr size_t kMaxActivityMsg = 16 * 1024;
+
+static bool validGame(const std::string& g) {
+    if (g.empty() || g.size() > 32) return false;
+    for (unsigned char c : g)
+        if (!(std::islower(c) || std::isdigit(c) || c == '-')) return false;
+    return true;
+}
+
+static std::string compact(const Json::Value& v) {
+    Json::StreamWriterBuilder w;
+    w["indentation"] = "";
+    return Json::writeString(w, v);
+}
+
+static void sendPeers(const std::vector<ActivityManager::Peer>& peers, const std::string& payload) {
+    for (const auto& p : peers)
+        if (wsUsable(p.conn)) p.conn->send(payload);
+}
+
+static Json::Value peerEvent(int64_t channelId, const std::string& game, const char* event, int64_t peerId, int64_t userId) {
+    Json::Value ev;
+    ev["type"]       = "activity_peer";
+    ev["channel_id"] = static_cast<Json::Int64>(channelId);
+    ev["game"]       = game;
+    ev["event"]      = event;
+    ev["peer_id"]    = static_cast<Json::Int64>(peerId);
+    ev["user_id"]    = static_cast<Json::Int64>(userId);
+    return ev;
+}
+
+// activity_join {channel_id, game} — голосовой канал сервера, личка или беседа, к которой есть доступ
+static void handleActivityJoin(int64_t userId, const WebSocketConnectionPtr& conn, const Json::Value& root) {
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::ActivityJoin, userId)) return;
+    const int64_t ch = JsonUtils::getInt(root, "channel_id");
+    const std::string game = JsonUtils::getStr(root, "game");
+    if (ch <= 0 || !validGame(game)) return;
+    auto db = app().getDbClient();
+    Access::ChannelInfo info;
+    if (Access::channel(db, ch, userId, &info) != Access::Result::Ok) return;
+    if (info.serverId != 0 && !info.isVoice) return;
+
+    std::vector<ActivityManager::Peer> others;
+    const int64_t self = ActivityManager::instance().join(ch, game, userId, conn, others);
+
+    Json::Value ok;
+    ok["type"]       = "activity_joined";
+    ok["channel_id"] = static_cast<Json::Int64>(ch);
+    ok["game"]       = game;
+    ok["peer_id"]    = static_cast<Json::Int64>(self);
+    ok["peers"]      = Json::Value(Json::arrayValue);
+    for (const auto& p : others) {
+        Json::Value v;
+        v["peer_id"] = static_cast<Json::Int64>(p.peerId);
+        v["user_id"] = static_cast<Json::Int64>(p.userId);
+        ok["peers"].append(v);
+    }
+    if (wsUsable(conn)) conn->send(compact(ok));
+    sendPeers(others, compact(peerEvent(ch, game, "join", self, userId)));
+
+    // Первый в игре — позвать остальных: тех, кто в этом голосовом канале, или собеседников лички/беседы
+    if (!others.empty()) return;
+    std::set<int64_t> audience;
+    if (info.serverId != 0) {
+        for (const auto& m : VoiceManager::instance().membersIn(ch)) audience.insert(m.userId);
+    } else {
+        for (const auto& r : db->execSqlSync("SELECT user_id FROM channel_members WHERE channel_id = ?", ch))
+            audience.insert(r["user_id"].as<int64_t>());
+    }
+    audience.erase(userId);
+    Json::Value inv;
+    inv["type"]       = "activity_invite";
+    inv["channel_id"] = static_cast<Json::Int64>(ch);
+    inv["game"]       = game;
+    inv["user_id"]    = static_cast<Json::Int64>(userId);
+    const std::string payload = compact(inv);
+    for (int64_t u : audience) WSManager::instance().sendToUser(u, payload);
+}
+
+static void handleActivityLeave(const WebSocketConnectionPtr& conn, int64_t userId, const Json::Value& root) {
+    const int64_t ch = JsonUtils::getInt(root, "channel_id");
+    const std::string game = JsonUtils::getStr(root, "game");
+    if (ch <= 0 || !validGame(game)) return;
+    std::vector<ActivityManager::Peer> rest;
+    const int64_t self = ActivityManager::instance().leave(ch, game, conn, rest);
+    if (self) sendPeers(rest, compact(peerEvent(ch, game, "leave", self, userId)));
+}
+
+// activity {channel_id, game, data, to?} — сообщение игры остальным её участникам (или одному: to = peer_id)
+static void handleActivityMsg(int64_t userId, const WebSocketConnectionPtr& conn, const Json::Value& root) {
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::ActivityMsg, userId)) return;
+    const int64_t ch = JsonUtils::getInt(root, "channel_id");
+    const std::string game = JsonUtils::getStr(root, "game");
+    if (ch <= 0 || !validGame(game)) return;
+    const Json::Value& data = root["data"];
+    if (!data.isObject() && !data.isArray()) return;
+    std::vector<ActivityManager::Peer> others;
+    const int64_t self = ActivityManager::instance().peersOf(ch, game, conn, others);
+    if (!self || others.empty()) return;
+    Json::Value out;
+    out["type"]       = "activity";
+    out["channel_id"] = static_cast<Json::Int64>(ch);
+    out["game"]       = game;
+    out["from"]       = static_cast<Json::Int64>(self);
+    out["user_id"]    = static_cast<Json::Int64>(userId);
+    out["data"]       = data;
+    const std::string payload = compact(out);
+    if (payload.size() > kMaxActivityMsg) return;
+    const int64_t to = JsonUtils::getInt(root, "to");
+    for (const auto& p : others)
+        if ((!to || p.peerId == to) && wsUsable(p.conn)) p.conn->send(payload);
+}
+
 void WSController::handleNewConnection(const HttpRequestPtr& req, const WebSocketConnectionPtr& conn) {
     try {
         auto s = std::make_shared<WSSession>();
@@ -302,6 +420,9 @@ void WSController::handleNewMessage(const WebSocketConnectionPtr& conn,
         else if (t == "typing")         handleTyping(userId, root);
         else if (t == "set_presence")   handleSetPresence(userId, root);
         else if (kCallTypes.count(t))   handleCallSignal(userId, conn, t, root);
+        else if (t == "activity")       handleActivityMsg(userId, conn, root);
+        else if (t == "activity_join")  handleActivityJoin(userId, conn, root);
+        else if (t == "activity_leave") handleActivityLeave(conn, userId, root);
     } catch (const std::exception& e) {
         LOG_WARN << "WS message dropped: " << e.what();
     } catch (...) {
@@ -313,6 +434,9 @@ void WSController::handleConnectionClosed(const WebSocketConnectionPtr& conn) {
     try {
         auto s = conn->getContext<WSSession>();
         if (!s) return;
+        // Игры этого подключения — остальные участники узнают, что игрок вышел
+        for (const auto& l : ActivityManager::instance().dropConnection(conn))
+            sendPeers(l.rest, compact(peerEvent(l.channelId, l.game, "leave", l.peerId, s->userId)));
         // Закрылось голосовое подключение — выход из канала; другие подключения голос не трогают
         int64_t ch = VoiceManager::instance().leaveIfOwner(s->userId, conn);
         if (ch != 0) Broadcast::voiceState(ch);
