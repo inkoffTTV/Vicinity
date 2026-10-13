@@ -180,7 +180,7 @@ function AddFriend() {
 
   return (
     <form className="add-friend" onSubmit={submit}>
-      <p className="muted">Введите ник человека полностью — например, inkoff. Найти кого-то по части ника или по имени нельзя: так никто не увидит ваш аккаунт случайно.</p>
+      <p className="muted">Введите ник человека полностью — так, как он написан в его профиле. По части ника или по имени никого не найти: так ваш аккаунт никто не увидит случайно.</p>
       <div className={`add-friend-row${result ? (result.ok ? ' ok' : ' bad') : ''}`}>
         <input
           autoFocus
