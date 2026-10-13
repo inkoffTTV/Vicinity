@@ -714,7 +714,7 @@ function draw(){
  if(!trans){drawMinimap();const b=enemies.find(e=>e.boss&&e.spawn<=0);if(b){const bw=120,bx=CX-60,by=RY1-9;px(bx-2,by-2,bw+4,8,PAL.k);px(bx,by,bw,4,'#3d1c25');const fw=Math.round(bw*Math.max(0,b.hp)/b.maxhp);px(bx,by,fw,4,PAL.r);px(bx,by,fw,1,PAL.P);ctx.drawImage(SP.skull,bx-9,by-2);}}
  drawPop();
  if(hint){const w=txt(hint.t,'#fee761').width+10,x=Math.round(CX-w/2),y=RY1-26;px(x,y,w,13,PAL.k);px(x+1,y+1,w-2,11,'#2a2433');text(hint.t,x+5,y+3,'#fee761');}
- const me=meP();if(me&&me.dead&&state==='play'&&PL.length>1){const s='Вы погибли — друг вернёт вас, постояв рядом';const w=txt(s,'#e8e0d0').width+10,x=Math.round(CX-w/2),y=RY1-40;px(x,y,w,13,PAL.k);text(s,x+5,y+3,'#e8e0d0');}
+ const me=meP();if(me&&me.dead&&state==='play'&&PL.length>1&&playMode!=='pvp'){const s='Друг вернёт вас, если постоит рядом';const w=txt(s,'#e8e0d0').width+10,x=Math.round(CX-w/2),y=RY1-40;px(x,y,w,13,PAL.k);text(s,x+5,y+3,'#e8e0d0');}
  drawIntro();
  if(team.task&&state==='play'&&!bossIntro)text('Дневник: '+diaryText(team.task),RX0+4,RY1-11,'#fee761','left','#120e17');
  {const mm=meP(),d=mm&&(mm.mergeWith?mm:mm.merged?PL.find(q=>q.peer===mm.merged):null);if(d&&d.mergeT>0)text('Слияние: '+Math.ceil(d.mergeT/60)+' с',CX,RY0+4,'#fee761','center','#120e17');}

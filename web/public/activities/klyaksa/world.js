@@ -232,7 +232,7 @@ function updWorld() {
         if (Q) {
           e.stuck = Q.peer;
           S('slam');
-          showHint('Прилипла жвачка! Друг отдерёт её выстрелом', Q.peer);
+          showHint('Жвачка! Друг отстрелит её', Q.peer);
         }
       }
       if (e.stuck) {

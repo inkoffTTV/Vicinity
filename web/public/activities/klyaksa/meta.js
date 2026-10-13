@@ -32,7 +32,7 @@ genFloor=function(){if(playMode!=='daily')return _genFloor();const r=Math.random
 
 const _newGame=newGame;
 newGame=function(){
- if(playMode==='pvp'&&(!window.Net||!Net.self||Net.all().length<2)){titleMsg={t:'Для дуэли нужен второй игрок в звонке',life:150};sfx('nope');return;}
+ if(playMode==='pvp'&&(!window.Net||!Net.self||Net.all().length<2)){titleMsg={t:'Для дуэли нужен второй игрок',life:150};sfx('nope');return;}
  if(playMode==='daily'){dailyDay=utcDay();mode='normal';runLen='short';const r=Math.random;Math.random=mulberry32(hashStr('klyaksa-pool:'+dailyDay));try{_newGame();}finally{Math.random=r;}}
  else _newGame();
  pvp=null;bossFight=0;
@@ -70,10 +70,12 @@ function pvpTick(){
  const live=PL.filter(p=>!p.dead);
  if(PL.length<2&&!pvp.winner){pvp.winner=PL[0]?PL[0].peer:-1;pvp.endT=1;}
  if(!pvp.endT&&live.length<=1){const w=live[0];
-  if(w){pvp.score[w.peer]=(pvp.score[w.peer]||0)+1;if(pvp.score[w.peer]>=3)pvp.winner=w.peer;popup((w.name||'Игрок')+' берёт раунд',scoreText(),null,130);}
+  if(w){pvp.score[w.peer]=(pvp.score[w.peer]||0)+1;if(pvp.score[w.peer]>=3)pvp.winner=w.peer;popup(fit(w.name||'Игрок',150)+' берёт раунд',scoreText(),null,130);}
   pvp.endT=150;S('task');slowT=40;}
  if(pvp.endT){for(const p of live)p.inv=Math.max(p.inv,2);if(--pvp.endT<=0){if(pvp.winner)state='win';else pvpRound();}}}
-function scoreText(){return PL.map(p=>(p.name||'Игрок')+' '+((pvp&&pvp.score[p.peer])||0)).join(' · ');}
+function scoreText(){const sc=p=>(pvp&&pvp.score[p.peer])||0;
+ if(PL.length===2)return fit(PL[0].name||'Игрок',64)+' '+sc(PL[0])+':'+sc(PL[1])+' '+fit(PL[1].name||'Игрок',64);
+ return PL.map(p=>fit(p.name||'Игрок',40)+' '+sc(p)).join(' ');}
 const _coop=coop;
 coop=function(){if(playMode==='pvp'&&pvp)pvpTick();else _coop();};
 // последний живой в раунде не гибнет от того же взрыва — ничьих нет
@@ -84,7 +86,7 @@ hurt=function(P,n){if(playMode==='pvp'&&pvp&&!P.dead&&P.hp-n<=0&&PL.every(q=>q==
 /* ================= достижения ================= */
 function grant(P,id){if(!P)return;if(P.peer===SELF())addAch(id);else if(MP())Net.send({t:'ach',id},P.peer);}
 function addAch(id){if(!ACH.some(a=>a.id===id)||runAch.has(id))return;runAch.add(id);
- if(stats&&stats.unlocks.includes(id))return;pop={t:'Достижение!',s:ACH.find(a=>a.id===id).t+' → '+achName(id),icon:null,life:200,max:200};sfx('task');}
+ if(stats&&stats.unlocks.includes(id))return;pop={t:'Открыто: '+achName(id),s:ACH.find(a=>a.id===id).t,icon:null,life:200,max:200};sfx('task');}
 const _doMerge=doMerge;
 doMerge=function(a,b){_doMerge(a,b);grant(a,'merge');grant(b,'merge');};
 const _spawnBoss=spawnBoss;
@@ -143,7 +145,7 @@ const HERO={};
 function drawHero(fi,x,y){const c=myCos,key=(c.color||'')+fi;
  if(!HERO[key]){const cs=colorSet(c.color);if(!cs)HERO[key]=PICON[fi];else{const k=mk(16,16),g=k.getContext('2d');g.drawImage(cs.player[fi],0,0);const ey=[6,7,5][fi];for(const ex of [4,10]){g.fillStyle=PAL.w;g.fillRect(ex,ey,2,3);g.fillStyle=PAL.k;g.fillRect(ex+(ex===4?1:0),ey+1,1,2);}HERO[key]=k;}}
  // в шапке герой чуть меньше — чтобы шапка не наезжала на подзаголовок
- const hat=HATS[c.hat],s=hat?2.5:3,ox=hat?4:0,oy=hat?8:0;ctx.drawImage(HERO[key],x+ox,y+oy,16*s,16*s);
+ const hat=HATS[c.hat],s=hat?2:3,ox=hat?8:0,oy=hat?16:0;ctx.drawImage(HERO[key],x+ox,y+oy,16*s,16*s);
  if(hat){ctx.save();ctx.translate(x+ox,y+oy);ctx.scale(s,s);drawHat(c.hat,0,[1,2,0][fi],1);ctx.restore();}}
 function cycleCos(kind){if(!stats){titleMsg={t:inMessenger()?'Загрузка наград…':'Награды — в Vicinity',life:90};return;}
  const list=['',...(kind==='hat'?stats.hats:stats.colors)];if(list.length<2){titleMsg={t:'Пока не открыто — N: список наград',life:120};sfx('nope');return;}
@@ -155,34 +157,36 @@ function cycleCos(kind){if(!stats){titleMsg={t:inMessenger()?'Загрузка �
 const MODES=[['run','Забег'],['daily','Ежедневный'],['endless','Бесконечный'],['pvp','Дуэль']];
 const modeKey=()=>playMode==='run'&&runLen==='endless'?'endless':playMode;
 function drawModeLine(n){
- const host=HOST(),parts=MODES.map(([k,name],i)=>[(host?i+1+' ':'')+name,k===modeKey()]);
- const sep=' · ',w=parts.reduce((s,[t])=>s+txt(t,'#3e8948').width,0)+txt(sep,'#5a6988').width*(parts.length-1);let x=Math.round(CX-w/2);
- parts.forEach(([t,on],i)=>{x+=text(t,x,166,on?'#e43b44':'#5a6988','left',on?'#120e17':null);if(i<parts.length-1)x+=text(sep,x,166,'#5a6988');});
+ const host=HOST(),m=MODES.find(([k])=>k===modeKey());
+ text('Режим: '+(m?m[1]:'Забег')+(host?' (1-4)':''),CX,166,'#e43b44','center','#120e17');
  text((n>1?'Игроков: '+n+' · ':'')+(mode==='classes'?'Классы':'Без классов')+(host?' (C)':''),CX,177,'#3e8948','center');}
 function cosLine(){if(!inMessenger())return;const h=HATS[myCos.hat],c=COLORS[myCos.color];
- text('H шапка: '+(h||'нет')+' · G цвет: '+(c||'обычный')+' · N награды',CX,220,'#5a6988','center');}
+ text(fit((h||'шапка')+' (H) · '+(c||'цвет')+' (G) · награды (N)',BW-8),CX,220,'#5a6988','center');}
+/** Обрезать строку с «…», чтобы влезла в ширину (пиксельный шрифт широкий) */
+function fit(s,w){s=String(s);if(txt(s,'#fff').width<=w)return s;while(s.length>1&&txt(s+'.','#fff').width>w)s=s.slice(0,-1);return s+'.';}
 function panel(x,y,w,h){px(x,y,w,h,'rgba(18,14,23,0.86)');px(x,y,w,1,'#4a405e');}
-function drawDaily(){if(modeKey()!=='daily')return;const rows=dailyTop&&dailyTop.rows||[],x=BW-104,y=64;panel(x,y,100,28+Math.max(0,Math.min(5,rows.length)-1)*10);text('Сегодня',x+50,y+3,'#fee761','center');
- if(!rows.length)text(inMessenger()?'пока никого':'только в Vicinity',x+50,y+20,'#8a8296','center');
- rows.slice(0,5).forEach((r,i)=>{const nm=String(r.name||'').slice(0,9),col=r.me?'#63c74d':'#e8e0d0';text(r.place+'. '+nm,x+4,y+15+i*10,col);text(r.won?'поб.':String(r.floor),x+96,y+15+i*10,col,'right');});}
+function drawDaily(){if(modeKey()!=='daily')return;const rows=dailyTop&&dailyTop.rows||[],W=124,x=BW-W-4,y=64;panel(x,y,W,28+Math.max(0,Math.min(5,rows.length)-1)*10);text('Сегодня',x+W/2,y+3,'#fee761','center');
+ if(!rows.length)text(inMessenger()?'пока никого':'нет связи',x+W/2,y+17,'#8a8296','center');
+ // этаж справа; победители — золотом
+ rows.slice(0,5).forEach((r,i)=>{const col=r.me?'#63c74d':'#e8e0d0',fl=String(r.floor),fw=txt(fl,col).width;text(fit(r.place+'. '+(r.name||''),W-fw-10),x+4,y+15+i*10,col);text(fl,x+W-4,y+15+i*10,r.won?'#fee761':col,'right');});}
 function drawAwards(){drawOverlay(1);panel(CX-140,16,280,200);text('НАГРАДЫ',CX,22,'#fee761','center','#120e17',2);
- const have=new Set(stats?stats.unlocks:[]);ACH.forEach((a,i)=>{const y=52+i*20,ok=have.has(a.id);text((ok?'+ ':'- ')+a.t,CX-132,y,ok?'#63c74d':'#e8e0d0');text(a.r,CX-132,y+9,'#8a8296');});
- text('Подписка: Standard — кепка и «Небо», Ultra — нимб и «Чёрный»',CX,196,'#9cc3ff','center');text('N — закрыть',CX,206,'#5a6988','center');}
+ const have=new Set(stats?stats.unlocks:[]);ACH.forEach((a,i)=>{const y=46+i*20,ok=have.has(a.id);text((ok?'+ ':'- ')+a.t,CX-132,y,ok?'#63c74d':'#e8e0d0');text(a.r,CX-132,y+9,'#8a8296');});
+ text('Standard: кепка и «Небо»',CX,190,'#9cc3ff','center');text('Ultra: нимб и «Чёрный»',CX,199,'#9cc3ff','center');text('N — закрыть',CX,208,'#5a6988','center');}
 const _drawTitle=drawTitle;
 drawTitle=function(){_drawTitle();drawDaily();cosLine();if(titleMsg&&!showAwards){px(0,186,BW,12,'#120e17');text(titleMsg.t,CX,188,'#fee761','center');}if(showAwards)drawAwards();};
 function endExtra(y){if(!endInfo)return;
- if(endInfo.fresh.length)text('Открыто: '+endInfo.fresh.map(achName).join(', '),CX,y,'#63c74d','center','#120e17');
+ if(endInfo.fresh.length)text(endInfo.fresh.length>1?'Открыто наград: '+endInfo.fresh.length:'Открыто: '+achName(endInfo.fresh[0]),CX,y,'#63c74d','center','#120e17');
  if(inMessenger())text(endInfo.sent?'Итоги отправлены в чат':endInfo.err?endInfo.err:'T — поделиться итогами в чат',CX,y+12,endInfo.sent?'#63c74d':'#9cc3ff','center','#120e17');}
 const _drawOver=drawOver;
 drawOver=function(){_drawOver();endExtra(144);};
 const _drawWin=drawWin;
 drawWin=function(){if(playMode!=='pvp'||!pvp){_drawWin();endExtra(140);return;}
  drawOverlay(1);panel(CX-124,36,248,150);text('ДУЭЛЬ',CX,48,'#fee761','center','#120e17',2);
- const w=PL.find(p=>p.peer===pvp.winner);text(w?'Победа: '+(w.name||'игрок'):'Соперник вышел',CX,76,'#63c74d','center','#120e17');
- PL.forEach((p,i)=>text((p.name||'Игрок')+' — '+(pvp.score[p.peer]||0),CX,96+i*12,'#e8e0d0','center','#120e17'));
+ const w=PL.find(p=>p.peer===pvp.winner);text(w?fit('Победа: '+(w.name||'игрок'),236):'Соперник вышел',CX,76,'#63c74d','center','#120e17');
+ PL.forEach((p,i)=>text(fit(p.name||'Игрок',190)+' — '+(pvp.score[p.peer]||0),CX,96+i*12,'#e8e0d0','center','#120e17'));
  endExtra(144);if(Math.floor(frame/30)%2===0)text('R или Enter — ещё раз',CX,170,'#fee761','center','#120e17');};
 const _drawHUD=drawHUD;
-drawHUD=function(){_drawHUD();if(playMode!=='pvp'||!pvp||!meP())return;px(CX-70,0,140,HUD,PAL.k);text('Дуэль · до 3',CX,3,'#e8e0d0','center');text(scoreText(),CX,13,'#fee761','center');};
+drawHUD=function(){_drawHUD();if(playMode!=='pvp'||!pvp||!meP())return;px(CX-90,0,180,HUD,PAL.k);text('Дуэль · до 3',CX,3,'#e8e0d0','center');text(scoreText(),CX,13,'#fee761','center');};
 const _drawRoom=drawRoom;
 drawRoom=function(){_drawRoom();if(!pvp)return;for(const m of pvp.marks){const k=m.t/70,r=3+k*7;if(Math.floor(m.t/4)%2)pring(m.x,m.y,r,'#fee761');shad(m.x,m.y,Math.round(5-k*3));px(m.x,Math.round(m.y-6-k*60),2,3,m.kind==='heart'?'#e43b44':m.kind==='bomb'?'#c0cbdc':'#fee761');}};
 const _draw=draw;
