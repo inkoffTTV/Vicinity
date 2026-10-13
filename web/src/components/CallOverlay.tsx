@@ -175,6 +175,8 @@ const NET: Record<NetQuality, { icon: typeof Signal; text: string }> = {
 function CallWindow() {
   const c = useCall();
   const avatar = usePeerAvatar(c.peerId);
+  // Игры в звонке идут в личке с собеседником
+  const dmChannel = useStore((s) => s.dms.find((d) => d.user_id === c.peerId)?.channel_id ?? null);
   const timer = useCallTimer();
   const [settings, setSettings] = useState(false);
   const [focus, setFocus] = useState<SourceKey | null>(null);
@@ -354,7 +356,7 @@ function CallWindow() {
             onToggle={() => void c.toggleScreen()}
           />
         )}
-        <ActivitiesButton btnClass="call-btn" />
+        <ActivitiesButton btnClass="call-btn" channelId={c.phase === 'active' ? dmChannel : null} />
         <button className="call-btn" title="Настройки звука" aria-label="Настройки звука" onClick={() => setSettings(true)}>
           <Icon icon={Settings} anim="spin" size={22} />
         </button>

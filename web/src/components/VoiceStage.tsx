@@ -142,7 +142,7 @@ export function VoiceStage({ onMenu }: { onMenu: () => void }) {
           activeLabel={screenLabel}
           onToggle={() => void vv.toggleScreen()}
         />
-        <ActivitiesButton btnClass="stage-btn" />
+        <ActivitiesButton btnClass="stage-btn" channelId={live ? channelId : null} />
         <button className="stage-btn" title="Настройки звука" aria-label="Настройки звука" onClick={() => setSettings(true)}>
           <Icon icon={Settings} anim="spin" size={22} />
         </button>

@@ -13,8 +13,9 @@ const SHELL = [
   '/worklets/voice-processor.js',
 ];
 const CACHE = `vicinity-${VERSION}`;
-// Живые данные: никогда не кэшируются и не проходят через service worker
-const LIVE = /^\/(api|uploads)\/|^\/ws$/;
+// Живые данные и отдельные страницы (игры «Активностей», установщик): никогда не кэшируются
+// и не проходят через service worker — иначе страница игры стала бы офлайн-оболочкой приложения
+const LIVE = /^\/(api|uploads|activities|download)\/|^\/ws$/;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll([...SHELL, ...ASSETS])));

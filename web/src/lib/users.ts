@@ -70,3 +70,9 @@ export function resolveLogin(dir: Directory, name: string): { user: KnownUser; r
   }
   return null;
 }
+
+/** Известный пользователь по id — вне React (то же, что useUserDirectory().byId) */
+export function knownUser(id: number): KnownUser | undefined {
+  const s = useStore.getState();
+  return build([s.me, s.dms, s.friends, s.incoming, s.outgoing, s.membersByServer, useChannelMembers.getState().byChannel]).byId.get(id);
+}
