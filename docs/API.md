@@ -285,6 +285,19 @@ POST `/profile/extras` — расширенный профиль целиком 
 - GET `/games/{appid}/cover` (без токена — для `<img>`) → 302 на `/uploads/games/{appid}.jpg`; при первом запросе
   сервер скачивает обложку Steam (вертикальную, иначе горизонтальную). Нет обложки — 404, занято — 503.
 
+### 10.3 Игры «Активностей» **[new]**
+
+`{game}` — `klyaksa` или `hookduel`. Игра зовёт их не сама, а через мессенджер (`Net.api` → `ActivityFrame`).
+
+- GET `/play/{game}/me` → `{best_floor, runs, wins, kills, unlocks: [...], hats: [...], colors: [...], cosmetic: {hat, color}}` —
+  `hats`/`colors` — что можно надеть сейчас (за достижения и по подписке: Standard — `cap`/`sky`, Ultra — `halo`/`black`).
+- POST `/play/{game}/result` `{floor, kills, won, time_ms, daily?: "YYYY-MM-DD", ach: [...]}` → то же + `fresh` (новые
+  достижения). Ежедневный забег принимается за сегодня и вчера (UTC); хранится лучший результат дня.
+- POST `/play/{game}/cosmetic` `{hat, color}` — только открытое, иначе 403.
+- GET `/play/{game}/daily?day=` → `{day, rows: [{place, me, name, floor, kills, time_ms, won}]}` — до 10 строк:
+  я и те, чей профиль мне виден (место — в общей таблице).
+- В профиле (`GET /users/{id}`) — `games: {klyaksa: {best_floor, runs, wins}}`.
+
 ## 11. Голос **[new]**
 - Несколько WS-подключений одного пользователя работают одновременно (десктоп + вкладки браузера):
   события уходят во все подключения; пользователь «в сети», пока открыто хотя бы одно;

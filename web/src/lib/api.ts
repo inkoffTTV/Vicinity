@@ -386,6 +386,8 @@ export interface Profile {
   profile_ext?: Partial<ProfileExt>;
   /** Сервер-бейджик (выбран в профиле) */
   badge?: { id: number; name: string; icon: string; tag?: string; tag_icon?: string } | null;
+  /** Рекорды в играх «Активностей» (только сыгранные) */
+  games?: Record<string, { best_floor: number; runs: number; wins: number }>;
 }
 
 /** Игра из каталога Steam: обложку отдаёт наш сервер (/api/v1/games/{appid}/cover) */
@@ -460,6 +462,18 @@ export class ApiError extends Error {
 }
 
 const TOKEN_KEY = 'vicinity.token';
+
+/** Рекорды и награды игрока в игре (GET /play/{game}/me) */
+export interface PlayStats {
+  best_floor: number;
+  runs: number;
+  wins: number;
+  kills: number;
+  unlocks: string[];
+  hats: string[];
+  colors: string[];
+  cosmetic: { hat: string; color: string };
+}
 
 export function loadToken(): string | null {
   try {
@@ -656,6 +670,14 @@ export const api = {
   react: (channelId: number, mid: number, emoji: string) =>
     post<{ reactions: Reaction[] }>(`/channels/${channelId}/messages/${mid}/react`, { emoji }),
   uploadAttachment,
+
+  // ── Игры «Активностей» (рекорды, награды, ежедневный забег) ──
+  play: {
+    me: (game: string) => get<PlayStats>(`/play/${game}/me`),
+    result: (game: string, r: unknown) => post<PlayStats & { fresh: string[] }>(`/play/${game}/result`, r),
+    cosmetic: (game: string, c: unknown) => post<PlayStats>(`/play/${game}/cosmetic`, c),
+    daily: (game: string, day: string) => get<unknown>(`/play/${game}/daily?day=${encodeURIComponent(day)}`),
+  },
 
   // ── Серверы ──
   listServers: () => get<{ servers: Server[] }>('/servers').then((r) => r.servers),

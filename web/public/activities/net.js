@@ -5,6 +5,7 @@
 //   Net.on('join'|'leave', p) — игрок пришёл или ушёл
 //   Net.on('msg', data, from) — сообщение от игрока с номером from
 //   Net.send(data, to?)       — отправить всем остальным (или одному)
+//   Net.api(kind, data)       — рекорды и награды игрока, таблица дня, «поделиться» (Promise)
 (function () {
   'use strict';
   const listeners = {};
@@ -41,7 +42,21 @@
     peer(id) {
       return Net.all().find((p) => p.peerId === id) || null;
     },
+    /** Запрос к мессенджеру: 'me' | 'result' | 'cosmetic' | 'daily' | 'share' → Promise с ответом сервера */
+    api(kind, data) {
+      if (!Net.inFrame) return Promise.reject(new Error('Нет мессенджера'));
+      const id = ++apiSeq;
+      window.parent.postMessage({ type: 'api', id, kind, data: data || {} }, '*');
+      return new Promise((resolve, reject) => {
+        apiWait.set(id, { resolve, reject });
+        setTimeout(() => {
+          if (apiWait.delete(id)) reject(new Error('Нет ответа'));
+        }, 15000);
+      });
+    },
   };
+  let apiSeq = 0;
+  const apiWait = new Map();
   window.addEventListener('message', (e) => {
     if (e.source !== window.parent) return;
     const m = e.data;
@@ -59,6 +74,12 @@
       emit('leave', m.peer);
     } else if (m.type === 'msg') {
       emit('msg', m.data, m.from);
+    } else if (m.type === 'api_res') {
+      const w = apiWait.get(m.id);
+      if (!w) return;
+      apiWait.delete(m.id);
+      if (m.ok) w.resolve(m.data);
+      else w.reject(new Error(m.error || 'Ошибка'));
     }
   });
   window.Net = Net;

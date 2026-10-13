@@ -97,6 +97,15 @@ export function ProfileModal({ userId }: { userId: number }) {
           {card.status_text && <> · {card.status_text}</>}
         </p>
       </section>
+      {p.games?.klyaksa && (
+        <section className="widget">
+          <strong>Клякса</strong>
+          <p className="muted">
+            Рекорд — этаж {p.games.klyaksa.best_floor}
+            {p.games.klyaksa.wins > 0 && <> · побед: {p.games.klyaksa.wins}</>} · забегов: {p.games.klyaksa.runs}
+          </p>
+        </section>
+      )}
       {roles.length > 0 && (
         <section className="widget">
           <strong>Роли</strong>

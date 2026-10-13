@@ -1,6 +1,7 @@
 import { Gamepad2, LogOut, Play, Rocket, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ACTIVITY_GAMES, ActivityGame, gameById, onFrameMessage, peerInfo, sendFromFrame, useActivity } from '../lib/activity';
+import { api, ApiError } from '../lib/api';
 import { useCall } from '../lib/call';
 import { useStore } from '../lib/store';
 import { useVoice } from '../lib/voice';
@@ -61,6 +62,41 @@ function ActivitiesDialog({ channelId, onClose }: { channelId: number; onClose: 
   );
 }
 
+/** Куда отправлять итоги забега: личка/беседа звонка — туда же, голосовой канал — в первый текстовый канал сервера */
+function shareChannel(ch: number): number {
+  const s = useStore.getState();
+  if (s.dms.some((d) => d.channel_id === ch) || s.groups.some((g) => g.id === ch)) return ch;
+  for (const chs of Object.values(s.channelsByServer))
+    if (chs.some((c) => c.id === ch)) return chs.find((c) => !c.is_voice)?.id ?? 0;
+  return 0;
+}
+
+let lastShare = 0;
+
+/** Запрос игры к мессенджеру (Net.api): рекорды, награды, таблица дня, «поделиться итогами» */
+async function frameApi(game: string, channelId: number, kind: string, data: Record<string, unknown>): Promise<unknown> {
+  switch (kind) {
+    case 'me':
+      return api.play.me(game);
+    case 'result':
+      return api.play.result(game, data);
+    case 'cosmetic':
+      return api.play.cosmetic(game, data);
+    case 'daily':
+      return api.play.daily(game, String(data.day ?? ''));
+    case 'share': {
+      const text = String(data.text ?? '').trim().slice(0, 400);
+      const ch = shareChannel(channelId);
+      if (!text || !ch) throw new ApiError(400, 'Некуда отправить');
+      if (Date.now() - lastShare < 20000) throw new ApiError(429, 'Подождите немного');
+      lastShare = Date.now();
+      useStore.getState().sendMessage(ch, text, null);
+      return { ok: true };
+    }
+  }
+  throw new ApiError(400, 'Неизвестный запрос');
+}
+
 /** Окно игры поверх приложения: фрейм /activities/<id>/ и мост сообщений с сервером */
 export function ActivityFrame() {
   const session = useActivity((s) => s.session);
@@ -78,9 +114,16 @@ export function ActivityFrame() {
     const off = onFrameMessage((msg) => (ready ? post(msg) : queue.push(msg)));
     const onMsg = (e: MessageEvent) => {
       if (!ref.current || e.source !== ref.current.contentWindow) return;
-      const m = e.data as { type?: string; data?: unknown; to?: number } | null;
+      const m = e.data as { type?: string; data?: unknown; to?: number; id?: number; kind?: string } | null;
       if (!m || typeof m !== 'object') return;
       if (m.type === 'send') sendFromFrame(m.data, typeof m.to === 'number' ? m.to : undefined);
+      else if (m.type === 'api' && typeof m.id === 'number' && typeof m.kind === 'string') {
+        const data = m.data && typeof m.data === 'object' ? (m.data as Record<string, unknown>) : {};
+        frameApi(session.game, session.channelId, m.kind, data).then(
+          (res) => post({ type: 'api_res', id: m.id, ok: true, data: res }),
+          (err) => post({ type: 'api_res', id: m.id, ok: false, error: err instanceof Error ? err.message : 'Ошибка' }),
+        );
+      }
       else if (m.type === 'exit') useActivity.getState().leave();
       else if (m.type === 'ready') {
         ready = true;

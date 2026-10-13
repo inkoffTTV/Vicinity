@@ -401,7 +401,7 @@ function snapWire(){
   bm:bombs.map(b=>[b.id,r1(b.x),r1(b.y),b.t]),
   fi:fires.map(f=>[r1(f.x),r1(f.y),f.life]),
   il:inkLines.map(l=>[r1(l.x),r1(l.y),l.life,l.idx]),
-  mo:mode,rl:runLen,tk:team.task,ch:team.cheat?1:0,w:worldWire(),
+  mo:mode,rl:runLen,tk:team.task,ch:team.cheat?1:0,w:worldWire(),mt:metaWire(),
   ev:EV};}
 let sendAcc=0;
 function hostNet(){if(!MP()||!HOST()||!floor)return;if(++sendAcc<3)return;sendAcc=0;const s=snapWire();EV=[];Net.send(s);}
@@ -440,7 +440,7 @@ function onSnap(s){
  bombs=s.bm.map(a=>({id:a[0],x:a[1],y:a[2],t:a[3]}));
  fires=s.fi.map(a=>({x:a[0],y:a[1],life:a[2]}));
  inkLines=(s.il||[]).map(a=>({x:a[0],y:a[1],life:a[2],idx:a[3]}));
- if(s.mo)mode=s.mo;if(s.rl)runLen=s.rl;team.task=s.tk||null;team.cheat=!!s.ch;
+ if(s.mo)mode=s.mo;if(s.rl)runLen=s.rl;applyMeta(s.mt);team.task=s.tk||null;team.cheat=!!s.ch;
  const po=new Map(room.pickups.map(p=>[p.id,p]));
  room.pickups=s.pk.map(a=>{const p=po.get(a[0])||{id:a[0]};Object.assign(p,{x:a[1],y:a[2],z:a[3],kind:a[4],t:a[5],r:3});return p;});
  if(s.tr&&!trans){trans={dir:s.tr.d,t:s.tr.t,snap:null};}
@@ -682,12 +682,12 @@ function drawTitle(){if(!titleBG){titleBG=mk(BW,BH);const g=titleBG.getContext('
   for(let i=0;i<6;i++){g.globalAlpha=0.6;blobInto(g,40+rng()*(BW-80),20+rng()*(BH-40),2+rng()*5,PAL.b,rng);}g.globalAlpha=1;}
  ctx.drawImage(titleBG,0,0);const t=frame;
  text('КЛЯКСА',CX,16,'#1d2b53','center','#9cc3ff',4);text('подвал тетрадки',CX,54,'#9e2835','center');
- const bob=Math.round(Math.abs(Math.sin(t*0.06))*-6),fi=bob<-4?2:bob>-1?1:0;pell(CX,118,18,4,'rgba(18,14,23,0.25)');ctx.drawImage(PICON[fi],CX-24,70+bob,48,48);
+ const bob=Math.round(Math.abs(Math.sin(t*0.06))*-6),fi=bob<-4?2:bob>-1?1:0;pell(CX,118,18,4,'rgba(18,14,23,0.25)');drawHero(fi,CX-24,70+bob);
  for(let i=0;i<3;i++){const a=t*0.03+i*TAU/3,x=CX+Math.cos(a)*56,y=94+Math.sin(a)*18;ctx.drawImage(SP.fly[Math.floor(t/3+i)%2],Math.round(x-5),Math.round(y-4));}
  const lines=isTouch?['Левый палец — ходить','Правый палец — стрелять','Кнопка справа внизу — бомба']:['WASD — ходить','Стрелки — стрелять','E — бомба, F — метка'];
  lines.forEach((l,i)=>text(l,CX,134+i*12,'#2a2433','center'));
  const n=window.Net&&Net.self?Net.all().length:1;
- text((n>1?'Игроков: '+n+' · ':'')+(mode==='classes'?'Классы':'Обычный')+(HOST()?' (C)':'')+' · '+(runLen==='endless'?'Бесконечно':'5 этажей')+(HOST()?' (V)':''),CX,172,'#3e8948','center');
+ drawModeLine(n);
  const msg=isTouch?'Коснись, чтобы начать':'Нажми любую клавишу';
  if(Math.floor(t/30)%2===0)text(msg,CX,188,'#e43b44','center','#120e17');
  if(best)text('Рекорд: этаж '+best,CX,208,'#5a6988','center');}
@@ -733,6 +733,7 @@ addEventListener('keydown',e=>{if(GK.includes(e.code))e.preventDefault();actx();
  K[e.code]=true;
  if(e.code==='KeyC'&&!e.repeat&&HOST()&&(state==='title'||state==='over'||state==='win')){mode=mode==='classes'?'normal':'classes';sfx('coin');if(MP())Net.send({t:'mode',m:mode,rl:runLen});return;}
  if(e.code==='KeyV'&&!e.repeat&&HOST()&&(state==='title'||state==='over'||state==='win')){runLen=runLen==='endless'?'short':'endless';sfx('coin');if(MP())Net.send({t:'mode',m:mode,rl:runLen});return;}
+ if(!e.repeat&&metaKey(e))return;
  if(state==='title'||state==='wait'){if(!e.repeat)startOrAsk();return;}
  if(state==='over'||state==='win'){if(e.code==='KeyR'||e.code==='Enter'||e.code==='Space')startOrAsk();return;}
  if(e.code==='KeyR'&&!e.repeat&&!MP()){newGame();return;}
