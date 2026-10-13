@@ -237,6 +237,9 @@ void initialize() {
     exec("ALTER TABLE users ADD COLUMN totp_pending TEXT DEFAULT NULL");   // секрет до подтверждения кодом
     exec("ALTER TABLE users ADD COLUMN totp_backup TEXT DEFAULT NULL");    // JSON-массив sha256 резервных кодов
     exec("ALTER TABLE users ADD COLUMN email_display TEXT DEFAULT NULL");  // почта как её ввели (email — нормализованная)
+    // Секретная ссылка на профиль (/u/<код>): по ней профиль открывают те, с кем им поделились
+    exec("ALTER TABLE users ADD COLUMN profile_link TEXT DEFAULT NULL");
+    exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_profile_link ON users(profile_link)");
     // Устройство и адрес входа — для «Активных сеансов»
     exec("ALTER TABLE sessions ADD COLUMN user_agent TEXT DEFAULT NULL");
     exec("ALTER TABLE sessions ADD COLUMN ip TEXT DEFAULT NULL");

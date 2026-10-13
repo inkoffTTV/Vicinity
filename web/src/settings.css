@@ -1042,3 +1042,18 @@ input.invalid {
     position: static;
   }
 }
+
+/* Ссылка на профиль (Аккаунт) */
+.acc-link {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--bg-input);
+  font-size: 12px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: all;
+}

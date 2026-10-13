@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import {
+import { Reach,
   api,
   ApiError,
   Dm,
@@ -73,6 +73,8 @@ interface State {
 
   view: View;
   profileUserId: number | null;
+  /** Профиль открыт по ссылке /u/<код> — код нужен, чтобы загрузить его, написать и добавить в друзья */
+  profileLink: string | null;
   settingsOpen: boolean;
   toasts: Toast[];
   editing: number | null;
@@ -115,7 +117,7 @@ interface State {
   refreshDms: () => Promise<void>;
   refreshFriends: () => Promise<void>;
   open: (v: View) => void;
-  openDmWith: (userId: number) => Promise<void>;
+  openDmWith: (userId: number, via?: Reach) => Promise<void>;
   loadMessages: (channelId: number) => Promise<void>;
   loadOlder: (channelId: number) => Promise<void>;
   sendMessage: (channelId: number, text: string, file: File | null, replyTo?: Message | null) => void;
@@ -141,7 +143,7 @@ interface State {
   setPresence: (p: Presence, auto?: boolean) => void;
   /** Текущий «Не активен» поставлен автоматически — снимается сам, когда пользователь вернётся */
   presenceAuto: boolean;
-  showProfile: (id: number | null) => void;
+  showProfile: (id: number | null, link?: string | null) => void;
   setSettingsOpen: (v: boolean) => void;
   toast: (text: string, kind?: 'info' | 'error') => void;
   setEditing: (id: number | null) => void;
@@ -845,6 +847,12 @@ export const useStore = create<State>((set, get) => {
     get().open(v);
     // Ссылка на профиль (/users/<id>) — открыть его поверх последнего экрана
     if (route?.kind === 'user') get().showProfile(route.userId);
+    // Ссылка «Поделиться профилем» (/u/<код>) — работает у всех, у кого она есть
+    if (route?.kind === 'profileLink')
+      api.userByLink(route.code).then(
+        (id) => e === epoch && get().showProfile(id, route.code),
+        (err) => e === epoch && get().toast(err instanceof ApiError ? err.message : 'Не удалось открыть профиль', 'error'),
+      );
     void get().loadUnread();
     // Тема с других устройств и что даёт подписка
     void startAppearanceSync((msg) => get().toast(msg, 'error'));
@@ -888,6 +896,7 @@ export const useStore = create<State>((set, get) => {
     unread: {},
     view: { kind: 'friends' } as View,
     profileUserId: null,
+    profileLink: null,
     settingsOpen: false,
     editing: null,
     mentions: {},
@@ -1172,14 +1181,14 @@ export const useStore = create<State>((set, get) => {
       }
     },
 
-    openDmWith: async (userId) => {
+    openDmWith: async (userId, via) => {
       const e = epoch;
       try {
-        const r = await api.startDm(userId);
+        const r = await api.startDm(userId, via);
         if (!get().dms.some((d) => d.channel_id === r.channel_id)) await get().refreshDms();
         if (e !== epoch) return;
         get().open({ kind: 'dm', channelId: r.channel_id });
-        set({ profileUserId: null });
+        set({ profileUserId: null, profileLink: null });
       } catch (e) {
         errorToast(e);
       }
@@ -1434,7 +1443,7 @@ export const useStore = create<State>((set, get) => {
       set({ me: { ...me, presence: p }, presence: { ...get().presence, [me.user_id]: p }, presenceAuto: auto && p === 'idle' });
     },
 
-    showProfile: (id) => set({ profileUserId: id }),
+    showProfile: (id, link = null) => set({ profileUserId: id, profileLink: id === null ? null : link }),
     setSettingsOpen: (v) => set({ settingsOpen: v }),
 
     toast: (text, kind = 'info') => {

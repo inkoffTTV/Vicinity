@@ -29,7 +29,7 @@ export async function openAdminDm(): Promise<boolean> {
       st.toast(`Аккаунт администратора @${ADMIN_USERNAME} не найден`, 'error');
       return false;
     }
-    await useStore.getState().openDmWith(admin.id);
+    await useStore.getState().openDmWith(admin.id, { username: ADMIN_USERNAME });
     return true;
   } catch (e) {
     st.toast(`Не удалось связаться с администратором: ${e instanceof ApiError ? e.message : 'нет связи с сервером'}`, 'error');

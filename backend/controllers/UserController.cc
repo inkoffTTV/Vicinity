@@ -7,6 +7,7 @@
 #include "../utils/ProfileExt.h"
 #include "../utils/TextUtils.h"
 #include "../managers/UserRateLimiter.h"
+#include <random>
 #include <drogon/HttpResponse.h>
 
 using namespace drogon;
@@ -69,12 +70,83 @@ void UserController::search(const HttpRequestPtr& req,
     }
 }
 
+// Код ссылки на профиль: 20 букв и цифр (≈119 бит), подобрать нельзя
+static std::string newLinkCode() {
+    static const char abc[] = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    std::random_device rd;
+    std::uniform_int_distribution<size_t> pick(0, sizeof(abc) - 2);
+    std::string s;
+    for (int i = 0; i < 20; ++i) s += abc[pick(rd)];
+    return s;
+}
+
+static std::string ensureLink(const drogon::orm::DbClientPtr& db, int64_t userId, bool reset) {
+    if (!reset) {
+        auto r = db->execSqlSync("SELECT profile_link FROM users WHERE id = ?", userId);
+        if (!r.empty() && !r[0]["profile_link"].isNull()) return r[0]["profile_link"].as<std::string>();
+    }
+    std::string code = newLinkCode();
+    db->execSqlSync("UPDATE users SET profile_link = ? WHERE id = ?", code, userId);
+    return code;
+}
+
+// GET /api/v1/profile-link → {code} — своя ссылка на профиль (/u/<код>), создаётся при первом запросе
+void UserController::myLink(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
+    const int64_t self = req->attributes()->get<int64_t>("user_id");
+    try {
+        Json::Value v;
+        v["code"] = ensureLink(app().getDbClient(), self, false);
+        cb(jsonResp(v));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
+// POST /api/v1/profile-link/reset → {code} — новая ссылка, старая перестаёт работать
+void UserController::resetLink(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
+    const int64_t self = req->attributes()->get<int64_t>("user_id");
+    try {
+        Json::Value v;
+        v["code"] = ensureLink(app().getDbClient(), self, true);
+        cb(jsonResp(v));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
+// GET /api/v1/users/by-link/{code} → {user_id} — чей профиль по ссылке; дальше /users/{id}/profile?link=<код>
+void UserController::byLink(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, const std::string& code) {
+    const int64_t self = req->attributes()->get<int64_t>("user_id");
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Search, self)) {
+        cb(errResp("Слишком много запросов — подождите минуту", k429TooManyRequests)); return;
+    }
+    try {
+        const int64_t owner = Access::profileLinkOwner(app().getDbClient(), code);
+        if (!owner) { cb(errResp("Ссылка на профиль недействительна", k404NotFound)); return; }
+        Json::Value v;
+        v["user_id"] = static_cast<Json::Int64>(owner);
+        cb(jsonResp(v));
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError));
+    }
+}
+
 // GET /api/v1/users/{id} — полный профиль пользователя
 void UserController::profile(const HttpRequestPtr& req,
                             std::function<void(const HttpResponsePtr&)>&& cb, int64_t id) {
     int64_t self = req->attributes()->get<int64_t>("user_id");
     auto u = UserModel::findById(id);
     if (!u) { cb(errResp("Пользователь не найден", k404NotFound)); return; }
+    // Чужой профиль по номеру — только знакомым (друзья, собеседники, общий сервер) или по ссылке ?link=.
+    // Остальным — тот же ответ, что для несуществующего: перебором номеров людей не найти.
+    try {
+        auto adb = app().getDbClient();
+        if (!Access::canSeeProfile(adb, self, id) && Access::profileLinkOwner(adb, req->getParameter("link")) != id) {
+            cb(errResp("Пользователь не найден", k404NotFound)); return;
+        }
+    } catch (const std::exception& e) {
+        cb(errResp(e.what(), k500InternalServerError)); return;
+    }
 
     Json::Value resp;
     resp["id"]                = u->id;
@@ -233,6 +305,10 @@ void UserController::startDm(const HttpRequestPtr& req,
     try {
         auto target = UserModel::findById(targetId);
         if (!target) { cb(errResp("User not found", k404NotFound)); return; }
+        // Незнакомцу — только по его ссылке или полному нику (не перебором номеров)
+        if (!Access::canReach(db, selfId, targetId, JsonUtils::getStr(*json, "link"), JsonUtils::getStr(*json, "username"))) {
+            cb(errResp("Пользователь не найден", k404NotFound)); return;
+        }
         if (Access::blockedBetween(db, selfId, targetId)) {
             cb(errResp("Нельзя написать: один из вас заблокировал другого", k403Forbidden)); return;
         }

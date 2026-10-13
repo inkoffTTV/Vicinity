@@ -12,7 +12,7 @@ const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Ошибк
 
 /** Кнопки карточки профиля и меню «⋯» (макет «7 · Кнопки карточки профиля»):
  *  не в друзьях / заявка отправлена / входящая заявка / друзья / это я */
-export function ProfileActions({ p, onChanged, onClose, onEdit }: { p: Profile; onChanged: () => Promise<unknown>; onClose: () => void; onEdit: () => void }) {
+export function ProfileActions({ p, link, onChanged, onClose, onEdit }: { p: Profile; link?: string | null; onChanged: () => Promise<unknown>; onClose: () => void; onEdit: () => void }) {
   const toast = useStore((s) => s.toast);
   const openDmWith = useStore((s) => s.openDmWith);
   const refreshFriends = useStore((s) => s.refreshFriends);
@@ -37,11 +37,20 @@ export function ProfileActions({ p, onChanged, onClose, onEdit }: { p: Profile; 
     }
   };
 
+  // Ссылка /u/<код> откроет профиль любому, кому её дали. Свою — берём с сервера; чужой профиль
+  // можно переслать, только если он сам открыт по ссылке (по номеру профиль видят лишь знакомые)
+  const canShare = self || !!link;
   const share = async () => {
     setMenu(null);
-    const ok = await copyText(`${location.origin}/users/${p.id}`);
-    toast(ok ? 'Ссылка скопирована' : 'Не удалось скопировать', ok ? 'info' : 'error');
+    try {
+      const code = self ? await api.profileLink() : link!;
+      const ok = await copyText(`${location.origin}/u/${code}`);
+      toast(ok ? 'Ссылка на профиль скопирована' : 'Не удалось скопировать', ok ? 'info' : 'error');
+    } catch (e) {
+      toast(errText(e), 'error');
+    }
   };
+  const via = link ? { link } : undefined;
   const copyId = async () => {
     setMenu(null);
     toast((await copyText(String(p.id))) ? 'ID скопирован' : 'Не удалось скопировать');
@@ -51,7 +60,7 @@ export function ProfileActions({ p, onChanged, onClose, onEdit }: { p: Profile; 
     if (self || p.blocked) return null;
     if (status === 'none' || status === 'declined')
       return (
-        <button type="button" className="icon-btn pa-square" aria-label="Добавить в друзья" title="Добавить в друзья" disabled={!!busy} onClick={() => act('friend', () => api.friendRequest(p.id), 'Заявка отправлена')}>
+        <button type="button" className="icon-btn pa-square" aria-label="Добавить в друзья" title="Добавить в друзья" disabled={!!busy} onClick={() => act('friend', () => api.friendRequest(p.id, via), 'Заявка отправлена')}>
           <Icon icon={busy === 'friend' ? Loader2 : UserPlus} size={18} className={busy === 'friend' ? 'spin-now' : ''} />
         </button>
       );
@@ -95,7 +104,7 @@ export function ProfileActions({ p, onChanged, onClose, onEdit }: { p: Profile; 
             Разблокировать
           </button>
         ) : (
-          <button type="button" className="btn primary pa-main" onClick={() => openDmWith(p.id)}>
+          <button type="button" className="btn primary pa-main" onClick={() => openDmWith(p.id, via)}>
             <Icon icon={MessageCircle} size={16} /> Сообщение
           </button>
         )}
@@ -107,9 +116,11 @@ export function ProfileActions({ p, onChanged, onClose, onEdit }: { p: Profile; 
 
       {menu && (
         <Popover anchor={menu} onClose={() => setMenu(null)} className="menu pa-menu" role="menu" label="Действия с профилем">
-          <button role="menuitem" onClick={share}>
-            <Icon icon={Link2} size={16} /> Поделиться профилем
-          </button>
+          {canShare && (
+            <button role="menuitem" onClick={share}>
+              <Icon icon={Link2} size={16} /> Поделиться профилем
+            </button>
+          )}
           {!self && status === 'friends' && !p.blocked && (
             <button
               role="menuitem"

@@ -94,6 +94,10 @@ void FriendsController::request(const HttpRequestPtr& req,
     try {
         auto u = db->execSqlSync("SELECT id FROM users WHERE id=?", target);
         if (u.empty()) { cb(errResp("Пользователь не найден", k404NotFound)); return; }
+        // Незнакомцу — только по полному нику или его ссылке на профиль (не перебором номеров)
+        if (!Access::canReach(db, self, target, JsonUtils::getStr(*json, "link"), JsonUtils::getStr(*json, "username"))) {
+            cb(errResp("Пользователь не найден", k404NotFound)); return;
+        }
         if (Access::blockedBetween(db, self, target)) { cb(errResp("Нельзя отправить заявку этому пользователю", k403Forbidden)); return; }
 
         auto ex = db->execSqlSync(

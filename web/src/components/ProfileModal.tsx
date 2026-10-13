@@ -31,12 +31,13 @@ export function ProfileModal({ userId }: { userId: number }) {
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState('');
 
+  const link = useStore((s) => s.profileLink);
   const load = () =>
-    api.profile(userId).then(setP, (e) => setError(e instanceof ApiError ? e.message : 'Ошибка'));
+    api.profile(userId, link).then(setP, (e) => setError(e instanceof ApiError ? e.message : 'Ошибка'));
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, link]);
 
   const close = () => showProfile(null);
 
@@ -77,6 +78,7 @@ export function ProfileModal({ userId }: { userId: number }) {
   const actions = (
     <ProfileActions
       p={p}
+      link={link}
       onChanged={load}
       onClose={close}
       onEdit={() => {

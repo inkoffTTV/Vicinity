@@ -125,6 +125,12 @@ export interface BlockedIp {
   accounts: number;
 }
 
+/** Как дотянуться до незнакомца: код его ссылки на профиль или полный ник */
+export interface Reach {
+  link?: string;
+  username?: string;
+}
+
 export interface UserSummary {
   id: number;
   username: string;
@@ -592,10 +598,16 @@ export const api = {
   // ── Пользователи / лички ──
   searchUsers: (q: string) =>
     get<{ users: UserSummary[] }>(`/users/search?q=${encodeURIComponent(q)}`).then((r) => r.users),
-  profile: (id: number) => get<Profile>(`/users/${id}/profile`),
+  /** Чужой профиль по номеру виден только знакомым; иначе — по коду ссылки (/u/<код>) */
+  profile: (id: number, link?: string | null) => get<Profile>(`/users/${id}/profile${link ? `?link=${encodeURIComponent(link)}` : ''}`),
+  /** Своя ссылка на профиль: код для /u/<код> */
+  profileLink: () => get<{ code: string }>('/profile-link').then((r) => r.code),
+  resetProfileLink: () => post<{ code: string }>('/profile-link/reset').then((r) => r.code),
+  userByLink: (code: string) => get<{ user_id: number }>(`/users/by-link/${encodeURIComponent(code)}`).then((r) => r.user_id),
   listDms: () => get<{ dms: Dm[] }>('/dms').then((r) => r.dms),
-  startDm: (user_id: number) =>
-    post<{ channel_id: number; display_name: string; username: string }>('/dms', { user_id }),
+  /** Незнакомцу пишут, только зная его ссылку или полный ник (via) */
+  startDm: (user_id: number, via?: Reach) =>
+    post<{ channel_id: number; display_name: string; username: string }>('/dms', { user_id, ...via }),
 
   // ── Группы (беседы вне серверов) ──
   listGroups: () => get<{ channels: Group[] }>('/channels').then((r) => r.channels),
@@ -678,7 +690,7 @@ export const api = {
   // ── Друзья ──
   friends: () => get<{ friends: UserSummary[] }>('/friends').then((r) => r.friends),
   pending: () => get<{ incoming: UserSummary[]; outgoing: UserSummary[] }>('/friends/pending'),
-  friendRequest: (user_id: number) => post<{ status: string }>('/friends/request', { user_id }),
+  friendRequest: (user_id: number, via?: Reach) => post<{ status: string }>('/friends/request', { user_id, ...via }),
   friendRespond: (user_id: number, accept: boolean) =>
     post<{ status: string }>('/friends/respond', { user_id, accept }),
   friendRemove: (id: number) => del(`/friends/${id}`),

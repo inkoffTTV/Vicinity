@@ -1,4 +1,4 @@
-import { ChevronRight, Copy, Download, KeyRound, Laptop, MonitorSmartphone, Pencil, ShieldCheck, ShieldQuestion, Smartphone, UserX } from 'lucide-react';
+import { ChevronRight, Copy, Download, KeyRound, Laptop, MonitorSmartphone, Pencil, ShieldCheck, ShieldQuestion, Smartphone, UserX, Link2 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { ADMIN_USERNAME, isAdminUsername, openAdminDm } from '../../lib/admin';
@@ -147,6 +147,8 @@ export function AccountScreen({ onEditProfile }: { onEditProfile: () => void }) 
             <span className="muted">{devicesLabel(sessions.length)}</span>
             <Icon icon={ChevronRight} size={18} />
           </button>
+          <div className="acc-sep inset" />
+          <ProfileLinkRow />
           <div className="acc-sep inset" />
           <button type="button" className="acc-row link" onClick={() => setDialog('blocks')}>
             <span className="acc-icon"><Icon icon={UserX} size={18} /></span>
@@ -698,6 +700,67 @@ export function deviceOf(ua: string | undefined): { name: string; kind: 'pc' | '
   const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '';
   const phone = /iPhone|Android|Mobile/.test(ua);
   return { name: os ? `${browser} · ${os}` : browser, kind: phone ? 'phone' : 'pc' };
+}
+
+/** Ссылка на профиль: по номеру профиль видят только знакомые, по этой ссылке — любой, кому вы её дали */
+function ProfileLinkRow() {
+  const toast = useStore((s) => s.toast);
+  const [code, setCode] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.profileLink().then(setCode, () => {});
+  }, []);
+
+  const url = code ? `${location.origin}/u/${code}` : '';
+  const copy = async () => toast((await copyText(url)) ? 'Ссылка на профиль скопирована' : 'Не удалось скопировать');
+  const reset = async () => {
+    setBusy(true);
+    try {
+      setCode(await api.resetProfileLink());
+      toast('Новая ссылка готова — старая больше не работает');
+    } catch (e) {
+      toast(errText(e), 'error');
+    } finally {
+      setBusy(false);
+      setConfirmReset(false);
+    }
+  };
+
+  return (
+    <div className="acc-row">
+      <span className="acc-icon"><Icon icon={Link2} size={18} /></span>
+      <span className="grow">
+        <span className="acc-title">Ссылка на профиль</span>
+        <span className="muted small">
+          {confirmReset
+            ? 'Старая ссылка перестанет работать у всех, кому вы её давали.'
+            : 'Других находят только по полному нику. По этой ссылке профиль откроет любой, кому вы её дадите.'}
+        </span>
+        {url && !confirmReset && <code className="acc-link">{url}</code>}
+      </span>
+      {confirmReset ? (
+        <>
+          <button type="button" className="btn small" onClick={() => setConfirmReset(false)} disabled={busy}>
+            Отмена
+          </button>
+          <button type="button" className="btn small danger" onClick={reset} disabled={busy}>
+            Сбросить
+          </button>
+        </>
+      ) : (
+        <>
+          <button type="button" className="btn small" onClick={() => setConfirmReset(true)} disabled={!code}>
+            Сбросить
+          </button>
+          <button type="button" className="btn small primary" onClick={copy} disabled={!code}>
+            <Icon icon={Copy} size={14} /> Копировать
+          </button>
+        </>
+      )}
+    </div>
+  );
 }
 
 function BlocksDialog({ onClose }: { onClose: () => void }) {

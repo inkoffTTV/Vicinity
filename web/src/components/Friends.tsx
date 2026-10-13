@@ -166,7 +166,7 @@ function AddFriend() {
       } else if (friends.some((f) => f.id === u.id)) {
         setResult({ ok: true, text: `${u.display_name} уже у вас в друзьях` });
       } else {
-        await api.friendRequest(u.id);
+        await api.friendRequest(u.id, { username: nick });
         await refreshFriends();
         setResult({ ok: true, text: `Заявка отправлена: ${u.display_name} (@${u.username})` });
         setQ('');

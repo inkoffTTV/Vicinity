@@ -8,6 +8,9 @@ public:
     METHOD_LIST_BEGIN
     ADD_METHOD_TO(UserController::search,   "/api/v1/users/search", Get,  Options, "AuthFilter");
     ADD_METHOD_TO(UserController::profile,   "/api/v1/users/{id}/profile", Get, Options, "AuthFilter");
+    ADD_METHOD_TO(UserController::byLink,    "/api/v1/users/by-link/{code}", Get, Options, "AuthFilter");
+    ADD_METHOD_TO(UserController::myLink,    "/api/v1/profile-link",       Get,  Options, "AuthFilter");
+    ADD_METHOD_TO(UserController::resetLink, "/api/v1/profile-link/reset", Post, Options, "AuthFilter");
     ADD_METHOD_TO(UserController::startDm,   "/api/v1/dms",          Post, Options, "AuthFilter");
     ADD_METHOD_TO(UserController::block,     "/api/v1/users/{id}/block", Post,   Options, "AuthFilter");
     ADD_METHOD_TO(UserController::unblock,   "/api/v1/users/{id}/block", Delete, Options, "AuthFilter");
@@ -16,6 +19,9 @@ public:
     METHOD_LIST_END
 
     void search (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void byLink (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, const std::string& code);
+    void myLink (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void resetLink(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void profile(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
     void startDm(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void block  (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
