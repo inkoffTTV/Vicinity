@@ -22,6 +22,102 @@ let tray = null;
 let quitting = false;
 
 const asset = (name) => path.join(__dirname, '..', 'build', name);
+
+// ── Значок приложения (Настройки → Значок приложения) ──
+// Выбранный значок хранится в userData: appicon.png (окно и трей) и appicon-<id>.ico (ярлыки).
+const iconPng = () => path.join(app.getPath('userData'), 'appicon.png');
+function currentIcon() {
+  try {
+    const img = nativeImage.createFromPath(iconPng());
+    if (!img.isEmpty()) return img;
+  } catch {
+    /* исходный */
+  }
+  return nativeImage.createFromPath(asset('icon.png'));
+}
+const trayIcon = (img) => img.resize({ width: 32, height: 32, quality: 'best' });
+
+/** ICO из нескольких PNG (Windows Vista+ читает PNG внутри ICO) */
+function icoFrom(img) {
+  const sizes = [256, 48, 32, 16];
+  const pngs = sizes.map((s) => img.resize({ width: s, height: s, quality: 'best' }).toPNG());
+  const head = Buffer.alloc(6 + 16 * pngs.length);
+  head.writeUInt16LE(0, 0);
+  head.writeUInt16LE(1, 2);
+  head.writeUInt16LE(pngs.length, 4);
+  let offset = head.length;
+  pngs.forEach((buf, i) => {
+    const o = 6 + i * 16;
+    head.writeUInt8(sizes[i] >= 256 ? 0 : sizes[i], o);
+    head.writeUInt8(sizes[i] >= 256 ? 0 : sizes[i], o + 1);
+    head.writeUInt16LE(1, o + 4);
+    head.writeUInt16LE(32, o + 6);
+    head.writeUInt32LE(buf.length, o + 8);
+    head.writeUInt32LE(offset, o + 12);
+    offset += buf.length;
+  });
+  return Buffer.concat([head, ...pngs]);
+}
+
+/** Ярлыки Vicinity: рабочий стол, «Пуск», закреплённый на панели задач */
+function shortcuts() {
+  const appData = app.getPath('appData');
+  return [
+    path.join(app.getPath('desktop'), 'Vicinity.lnk'),
+    path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Vicinity.lnk'),
+    path.join(appData, 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar', 'Vicinity.lnk'),
+  ].filter((p) => {
+    try {
+      // Только наши ярлыки — те, что ведут на этот Vicinity.exe
+      return fs.existsSync(p) && path.resolve(shell.readShortcutLink(p).target) === path.resolve(process.execPath);
+    } catch {
+      return false;
+    }
+  });
+}
+
+function setAppIcon(id, png) {
+  const dir = app.getPath('userData');
+  // Тот же значок, что уже стоит (каждый запуск приложения) — ярлыки не трогаем
+  const same = png ? fs.existsSync(path.join(dir, `appicon-${id.replace(/[^\w-]/g, '')}.ico`)) : !fs.existsSync(iconPng());
+  if (same) return;
+  // Старые .ico — убрать (у каждого значка своё имя: Windows кэширует значки по пути)
+  for (const f of fs.readdirSync(dir)) if (/^appicon-[\w-]+\.ico$/.test(f)) fs.rmSync(path.join(dir, f), { force: true });
+  let ico = null;
+  if (png) {
+    const img = nativeImage.createFromDataURL(png);
+    if (img.isEmpty()) return;
+    fs.writeFileSync(iconPng(), img.toPNG());
+    ico = path.join(dir, `appicon-${id.replace(/[^\w-]/g, '')}.ico`);
+    fs.writeFileSync(ico, icoFrom(img));
+  } else {
+    fs.rmSync(iconPng(), { force: true });
+  }
+  const img = currentIcon();
+  if (win && !win.isDestroyed()) win.setIcon(img);
+  if (tray) tray.setImage(trayIcon(img));
+  if (!app.isPackaged || process.platform !== 'win32') return;
+  for (const lnk of shortcuts()) {
+    try {
+      shell.writeShortcutLink(lnk, 'update', ico ? { icon: ico, iconIndex: 0 } : { icon: process.execPath, iconIndex: 0 });
+    } catch {
+      /* ярлык только для чтения — пропускаем */
+    }
+  }
+}
+
+let lastIcon = null;
+ipcMain.on('icon:set', (e, id, png) => {
+  if (!win || e.sender !== win.webContents || !sameOrigin(e.sender.getURL())) return;
+  if (typeof id !== 'string' || !/^[\w-]{1,32}$/.test(id) || (png !== null && (typeof png !== 'string' || !png.startsWith('data:image/png;base64,') || png.length > 2_000_000))) return;
+  if (id === lastIcon) return;
+  lastIcon = id;
+  try {
+    setAppIcon(id, png);
+  } catch {
+    /* значок останется прежним */
+  }
+});
 const sameOrigin = (url) => {
   try {
     return new URL(url).origin === ORIGIN;
@@ -74,7 +170,7 @@ function createWindow() {
     minWidth: 940,
     minHeight: 560,
     title: 'Vicinity',
-    icon: asset('icon.png'),
+    icon: currentIcon(),
     backgroundColor: '#0e1015',
     show: false,
     autoHideMenuBar: true,
@@ -155,7 +251,7 @@ function createWindow() {
 }
 
 function createTray() {
-  tray = new Tray(nativeImage.createFromPath(asset('tray.png')));
+  tray = new Tray(fs.existsSync(iconPng()) ? trayIcon(currentIcon()) : nativeImage.createFromPath(asset('tray.png')));
   tray.setToolTip('Vicinity');
   tray.setContextMenu(
     Menu.buildFromTemplate([

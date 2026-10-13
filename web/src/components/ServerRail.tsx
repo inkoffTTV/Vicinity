@@ -3,6 +3,8 @@ import { FormEvent, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useNotifySettings } from '../lib/notify';
 import { useStore } from '../lib/store';
+import { appIconSrc } from '../lib/appIcon';
+import { useAppearance } from '../lib/prefs';
 import { homeUnread, serverHasUnread, serverMentions, useUnreadSlice } from '../lib/unread';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
@@ -14,6 +16,8 @@ export function ServerRail() {
   const state = useUnreadSlice();
   const muted = useNotifySettings((s) => s.muted);
   const [adding, setAdding] = useState(false);
+  // Логотип — выбранный значок приложения (Настройки → Значок приложения)
+  const appIcon = useAppearance((s) => s.appIcon);
 
   const home = homeUnread(state);
   const homeActive = view.kind !== 'server';
@@ -26,7 +30,7 @@ export function ServerRail() {
         aria-label="Личные сообщения"
         onClick={() => open({ kind: 'friends' })}
       >
-        <img src="/favicon.svg" alt="" width={28} height={28} />
+        <img src={appIconSrc(appIcon)} alt="" width={48} height={48} />
         {home > 0 && <span className="badge">{home}</span>}
       </button>
       <div className="rail-sep" />

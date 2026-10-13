@@ -5,6 +5,8 @@ interface DesktopBridge {
   platform: string;
   installUpdate: () => void;
   retry: () => void;
+  /** С версии 1.0.1: значок окна, трея и ярлыков (png 256×256; null — исходный) */
+  setIcon?: (id: string, png: string | null) => void;
 }
 
 export const desktop: DesktopBridge | undefined = (window as unknown as { vicinityDesktop?: DesktopBridge }).vicinityDesktop;

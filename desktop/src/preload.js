@@ -5,4 +5,6 @@ contextBridge.exposeInMainWorld('vicinityDesktop', {
   platform: process.platform,
   installUpdate: () => ipcRenderer.send('update:install'),
   retry: () => ipcRenderer.send('offline:retry'),
+  // Значок приложения из настроек: png 256×256 (data:) или null — исходный
+  setIcon: (id, png) => ipcRenderer.send('icon:set', String(id), typeof png === 'string' ? png : null),
 });

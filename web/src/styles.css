@@ -488,9 +488,25 @@ label select {
   border-radius: inherit;
   object-fit: cover;
 }
+/* Логотип — значок приложения целиком (свой фон у каждого значка) */
+.rail-item.home,
+.rail-item.home:hover,
+.rail-item.home.active {
+  background: none;
+  overflow: visible;
+}
 .rail-item.home img {
-  width: 28px;
-  height: 28px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  transition: border-radius 0.15s, transform 0.15s;
+}
+.rail-item.home:hover img,
+.rail-item.home.active img {
+  border-radius: 16px;
+}
+.rail-item.home:active img {
+  transform: translateY(1px);
 }
 .rail-item:hover,
 .rail-item.active {

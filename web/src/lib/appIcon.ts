@@ -172,10 +172,40 @@ export function appIconUrl(icon: AppIcon): string {
   return u;
 }
 
-/** Поставить значок во вкладку браузера */
+/** Адрес картинки значка для интерфейса (логотип в боковой панели) */
+export const appIconSrc = (id: string) => (id === DEFAULT_APP_ICON ? '/favicon.svg' : appIconUrl(appIconById(id)));
+
+let applied = '';
+
+/** Поставить значок во вкладку браузера и — в ПК-приложении — на окно, панель задач, трей и ярлыки */
 export function applyFavicon(id: string) {
-  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-  if (!link) return;
-  const href = id === DEFAULT_APP_ICON ? '/favicon.svg' : appIconUrl(appIconById(id));
-  if (link.getAttribute('href') !== href) link.setAttribute('href', href);
+  if (applied === id) return;
+  applied = id;
+  // Новый <link>, а не смена href: так браузеры надёжнее перерисовывают значок вкладки
+  const old = document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]');
+  const link = document.createElement('link');
+  link.rel = 'icon';
+  link.type = 'image/svg+xml';
+  link.href = appIconSrc(id);
+  document.head.append(link);
+  old.forEach((l) => l.remove());
+  void sendToDesktop(id);
+}
+
+/** ПК-приложение: растр 256×256 для значка окна и ярлыков (классический — свой из установщика) */
+async function sendToDesktop(id: string) {
+  const bridge = (window as unknown as { vicinityDesktop?: { setIcon?: (id: string, png: string | null) => void } }).vicinityDesktop;
+  if (!bridge?.setIcon) return;
+  if (id === DEFAULT_APP_ICON) return bridge.setIcon(id, null);
+  try {
+    const img = new Image();
+    img.src = appIconUrl(appIconById(id));
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 256;
+    canvas.getContext('2d')!.drawImage(img, 0, 0, 256, 256);
+    if (applied === id) bridge.setIcon(id, canvas.toDataURL('image/png'));
+  } catch {
+    /* значок окна останется прежним */
+  }
 }
