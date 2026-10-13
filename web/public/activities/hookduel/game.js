@@ -1,4 +1,5 @@
-// Хук-дуэль: двое мясников на берегах ледяной речки. WASD — ходить, курсор — прицел, Q/ЛКМ — хук.
+// Хук-дуэль: двое мясников на берегах ледяной речки. WASD — ходить, курсор — прицел, Q/ЛКМ — хук,
+// E — фаза (как Phase Shift у Пака): на секунду исчезаешь, хук пролетает насквозь.
 // Три заряда хука, каждый перезаряжается. Попадание тянет соперника через речку и снимает половину
 // здоровья; два попадания — очко. До 5 очков.
 // Сеть (../net.js): каждый ведёт своего мясника и свой хук и 20 раз в секунду рассылает состояние;
@@ -13,6 +14,7 @@
   };
   const R = 28, SPEED = 235, HOOK_SPEED = 1180, HOOK_RANGE = 620, HOOK_R = 15, PULL_SPEED = 980;
   const CHARGES = 3, RECHARGE = 2.6, DMG = 50, CAST = 0.12, WIN = 5, SEND_EVERY = 0.05, INTERP = 0.1;
+  const PHASE = 1.0, PHASE_CD = 6;
   const TAU = Math.PI * 2;
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -101,6 +103,11 @@
     win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.14, 'square', 0.035, 0, i * 0.09)),
     lose: () => [392, 330, 262, 196].forEach((f, i) => tone(f, 0.18, 'triangle', 0.05, 0, i * 0.1)),
     charge: () => tone(880, 0.06, 'triangle', 0.02, 220),
+    phase: () => {
+      tone(620, 0.35, 'sine', 0.05, 900);
+      tone(1240, 0.3, 'triangle', 0.02, 1400, 0.05);
+    },
+    unphase: () => tone(1500, 0.18, 'sine', 0.03, -900),
   };
 
   /* ───────── фон: снег, ёлки, лёд ───────── */
@@ -445,7 +452,7 @@
 
   /* ───────── игроки ───────── */
   function newPudge(side) {
-    return { side, x: SIDES[side].spawnX, y: H / 2, a: side === 'left' ? 0 : Math.PI, hp: 100, charges: CHARGES, rech: 0, hook: null, pulled: null, inv: 0, dead: 0, walk: 0, cast: 0, flash: 0 };
+    return { side, x: SIDES[side].spawnX, y: H / 2, a: side === 'left' ? 0 : Math.PI, hp: 100, charges: CHARGES, rech: 0, hook: null, pulled: null, inv: 0, dead: 0, walk: 0, cast: 0, flash: 0, phase: 0, phaseCd: 0 };
   }
 
   let role = 'left'; // моя сторона: left | right | spec
@@ -492,12 +499,13 @@
 
   /* ───────── ввод ───────── */
   const keys = {};
-  let mouse = { x: W / 2, y: H / 2 }, wantHook = false;
+  let mouse = { x: W / 2, y: H / 2 }, wantHook = false, wantPhase = false;
   addEventListener('keydown', (e) => {
     if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     actx();
     keys[e.code] = true;
     if (e.code === 'KeyQ' && !e.repeat) wantHook = true;
+    if (e.code === 'KeyE' && !e.repeat) wantPhase = true;
     if (e.code === 'KeyM' && !e.repeat) muted = !muted;
   });
   addEventListener('keyup', (e) => (keys[e.code] = false));
@@ -548,7 +556,7 @@
       case 'hit': {
         // меня поймали: тянемся к бросившему (если можно поймать)
         if (role === 'spec' || !side || side !== oppSide()) return;
-        if (me.dead > 0 || me.inv > 0 || me.pulled) return Net.send({ t: 'miss', id: d.id }, from);
+        if (me.dead > 0 || me.inv > 0 || me.pulled || me.phase > 0) return Net.send({ t: 'miss', id: d.id }, from);
         me.pulled = { phase: 'drag', by: side, t: 0, hookId: d.id };
         me.hook = null;
         me.flash = 0.25;
@@ -598,6 +606,8 @@
       c: me.charges,
       d: me.dead > 0 ? 1 : 0,
       i: me.inv > 0 ? 1 : 0,
+      f: me.phase > 0 ? 1 : 0,
+      fc: Math.round(me.phaseCd * 10) / 10,
       p: me.pulled ? 1 : 0,
       h: h ? { x: Math.round(h.x), y: Math.round(h.y), st: h.state } : null,
     });
@@ -631,6 +641,9 @@
     v.charges = sb.c;
     v.dead = sb.d ? 1 : 0;
     v.inv = sb.i ? 1 : 0;
+    if (sb.f && !(v.phase > 0)) sfx.phase();
+    v.phase = sb.f ? 1 : 0;
+    v.phaseCd = sb.fc || 0;
     v.pulled = sb.p ? {} : null;
     v.walk += Math.hypot(v.x - px, v.y - py) / 120;
     if (sb.h) {
@@ -695,6 +708,15 @@
         sfx.charge();
       }
     }
+    if (p.phaseCd > 0) p.phaseCd -= dt;
+    if (p.phase > 0) {
+      p.phase -= dt;
+      if (p.phase <= 0) {
+        p.phase = 0;
+        sfx.unphase();
+        burst(p.x, p.y, '#c9a6ff', 14, 200, 0.6);
+      }
+    }
     // меня тянут
     if (p.pulled) {
       const pl = p.pulled, hk = target();
@@ -733,6 +755,21 @@
         p.inv = 1.0;
         burst(p.x, p.y, '#cfe9ff', 16, 220);
       }
+      return;
+    }
+    // фаза: на секунду пропадаем, хук пролетает насквозь
+    if (wantPhase && p.phaseCd <= 0 && p.phase <= 0) {
+      p.phase = PHASE;
+      p.phaseCd = PHASE_CD;
+      sfx.phase();
+      burst(p.x, p.y, '#c9a6ff', 18, 240, 0.7);
+      sendState();
+    }
+    wantPhase = false;
+    if (p.phase > 0) {
+      p.a = Math.atan2(mouse.y - p.y, mouse.x - p.x);
+      wantHook = false;
+      updHook(dt);
       return;
     }
     // ходьба
@@ -779,7 +816,7 @@
           h.state = 'back';
           sfx.clash();
           burst(h.x, h.y, '#ffd36b', 22, 320, 0.6);
-        } else if (!v.dead && !v.inv && !v.pulled && Math.hypot(v.x - h.x, v.y - h.y) < R + HOOK_R) {
+        } else if (!v.dead && !v.inv && !v.pulled && !(v.phase > 0) && Math.hypot(v.x - h.x, v.y - h.y) < R + HOOK_R) {
           h.state = 'pull';
           h.t = 0;
           sfx.hit();
@@ -870,6 +907,23 @@
   function drawBars(p, x, y, mine) {
     if (p.dead > 0) return;
     const w = 64, bx = x - w / 2, by = y - R - 26;
+    // фаза: фиолетовый ромб справа от зарядов, по кругу — перезарядка
+    {
+      const cx = x + 30, cy = by + 16, ready = !(p.phaseCd > 0);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = ready ? '#a77bff' : 'rgba(10,14,26,0.45)';
+      ctx.fillRect(-4, -4, 8, 8);
+      ctx.restore();
+      if (mine && !ready) {
+        ctx.strokeStyle = '#a77bff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 7, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - p.phaseCd / PHASE_CD));
+        ctx.stroke();
+      }
+    }
     ctx.fillStyle = 'rgba(10,14,26,0.7)';
     roundRect(bx - 2, by - 2, w + 4, 10, 4);
     ctx.fill();
@@ -922,8 +976,30 @@
     if (remote[side]) return remote[side].name || 'Соперник';
     return side === 'right' && role === 'left' ? 'Манекен' : '—';
   }
+  function drawPhase(p, t) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    for (let i = 0; i < 3; i++) {
+      const r = 34 + i * 7 + Math.sin(t * 9 + i) * 3;
+      ctx.strokeStyle = `rgba(${i === 1 ? '120,210,255' : '183,140,255'},${0.55 - i * 0.14})`;
+      ctx.lineWidth = 3 - i * 0.7;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r, r * 0.82, t * (i % 2 ? -2 : 2), 0, TAU);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = t * 3 + (i / 8) * TAU, r = 30 + Math.sin(t * 7 + i * 2) * 8;
+      ctx.fillStyle = i % 2 ? '#d8c4ff' : '#9fe3ff';
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * r, Math.sin(a) * r * 0.8, 2.2, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
   function drawPlayer(p, mine) {
-    const alpha = p.dead > 0 ? 0 : p.inv > 0 ? (Math.floor(p.inv * 12) % 2 ? 0.45 : 0.9) : 1;
+    const phased = p.phase > 0 && p.dead <= 0;
+    const alpha = p.dead > 0 ? 0 : phased ? 0.28 : p.inv > 0 ? (Math.floor(p.inv * 12) % 2 ? 0.45 : 0.9) : 1;
+    if (phased) drawPhase(p, performance.now() / 1000);
     if (p.hook) drawHook(p.x + Math.cos(p.a - 0.6) * 22, p.y + Math.sin(p.a - 0.6) * 22, p.hook.x, p.hook.y);
     if (alpha > 0) drawPudge(p, p.x, p.y, p.a, { mine, alpha, walk: p.walk, hookOut: !!p.hook, flash: p.flash || 0 });
     drawBars(p, p.x, p.y, mine);
