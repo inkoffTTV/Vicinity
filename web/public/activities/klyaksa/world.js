@@ -53,6 +53,7 @@ let zones = [], slick = [], dust = [];
 /** Отладка (#debug): все особые комнаты на каждом этаже */
 const DBG_ALL = location.hash === '#debug';
 function resetWorld() {
+  resetBoss();
   zones = [];
   slick = [];
   dust = [];
@@ -174,6 +175,8 @@ function aiExt(e, P, dx, dy, d) {
       vx = (dx / d) * e.spd;
       vy = (dy / d) * e.spd;
       break;
+    default:
+      return bossAI(e, P, dx, dy, d);
     case 'chalk': {
       const want = d < 60 ? -1 : d > 100 ? 1 : 0;
       vx = (dx / d) * e.spd * want;
@@ -220,6 +223,7 @@ function updWorld() {
   for (let i = dust.length - 1; i >= 0; i--) if (--dust[i].life <= 0) dust.splice(i, 1);
   for (const P of PL) if (P.sellLock && !(room.items || []).some((it) => it.kind === 'sell' && Math.hypot(it.x - P.x, it.y - P.y) < 16)) P.sellLock = false;
   for (const P of PL) P.gummed = false;
+  updBossWorld();
   for (const e of enemies) {
     if (e.dead || e.spawn > 0) continue;
     if (e.type === 'gum') {
@@ -416,6 +420,7 @@ function worldWire() {
     sf: floor.list.map((r) => (r.found ? 1 : 0)).join(''),
     dk: room.dark ? 1 : 0,
     wv: room.wave || 0,
+    bw: bossWire(),
   };
 }
 function applyWorld(w) {
@@ -427,6 +432,7 @@ function applyWorld(w) {
   if (w.sf) floor.list.forEach((r, i) => (r.found = w.sf[i] === '1'));
   room.dark = !!w.dk;
   room.wave = w.wv;
+  applyBoss(w.bw);
 }
 
 /* ================= отрисовка ================= */
@@ -454,6 +460,7 @@ function drawWorldFloor() {
       shad(p.x, p.y + 1, 3);
       ctx.drawImage(SP.flask[p.fx], Math.round(p.x - 3), Math.round(p.y - 9));
     }
+  drawBossFloor();
 }
 function drawWorldTop() {
   for (const d of dust) {
@@ -464,6 +471,7 @@ function drawWorldTop() {
     }
   }
   ctx.globalAlpha = 1;
+  drawBossTop();
 }
 /** Темнота: светло только вокруг клякс, у огня, бомб, пуль и мела */
 const DARKC = mk(BW, BH);
@@ -550,6 +558,8 @@ function drawEnemyExt(e) {
       if (!r.partial && !fl) eyes(r.x - 2, r.y, 1, 5, 2, lk, true, false);
       break;
     }
+    default:
+      drawBoss(e);
   }
 }
 /** Дверь особой комнаты: цвет и значок; ещё не найденная секретная — трещина в стене */
