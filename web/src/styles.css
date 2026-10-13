@@ -488,7 +488,7 @@ label select {
   border-radius: inherit;
   object-fit: cover;
 }
-/* Логотип — значок приложения целиком (свой фон у каждого значка) */
+/* Картинка точно по кнопке: та же форма, что у рамки выбора, без зазоров */
 .rail-item.home,
 .rail-item.home:hover,
 .rail-item.home.active {
@@ -496,17 +496,10 @@ label select {
   overflow: visible;
 }
 .rail-item.home img {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  transition: border-radius 0.15s, transform 0.15s;
-}
-.rail-item.home:hover img,
-.rail-item.home.active img {
-  border-radius: 16px;
-}
-.rail-item.home:active img {
-  transform: translateY(1px);
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
 }
 .rail-item:hover,
 .rail-item.active {
