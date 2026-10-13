@@ -488,10 +488,12 @@ let snapPrev=null,snapCur=null,snapAt=0,floorKnown=-1;
 const byId=a=>{const m=new Map();for(const x of a)m.set(x[0],x);return m;};
 function applyFloor(d){level=d.lv;const list=d.rooms.map(([gx,gy,type,seed])=>({gx,gy,type,seed,cleared:true,visited:false,rocks:[],items:[],pickups:[],trap:null,trapT:0,floorC:null,doorT:1}));
  const start=list.find(r=>r.gx===d.start[0]&&r.gy===d.start[1])||list[0];floor=linkFloor(list,start);room=start;floorKnown=level;}
+let helloAt=0;
 function onSnap(s){
  const evs=s.ev||[];
  for(const e of evs)if(e.f==='floor'||e.f==='room')replay(e);
- if(!floor)return;
+ // карты этажа нет (сообщение потерялось) — попросить у ведущего, не чаще раза в 2 с
+ if(!floor){const now=performance.now();if(now-helloAt>2000){helloAt=now;Net.send({t:'hello'});}return;}
  const r=floor.map[key(s.rm[0],s.rm[1])];if(!r)return;
  state=s.st;level=s.lv;kills=s.k;team.coins=s.co;team.bombs=s.bo;
  if(s.vis)floor.list.forEach((x,i)=>{x.visited=s.vis[i]==='1';});
@@ -548,7 +550,7 @@ function sendInput(){const p={peer:SELF()};const i=inputOf(p),s=JSON.stringify([
  if((s!==lastIn&&inAcc>=2)||inAcc>=6){lastIn=s;inAcc=0;Net.send({t:'in',v:JSON.parse(s)});}}
 
 if(window.Net){
- Net.on('init',()=>{syncRoster();if(HOST()){if(state==='play'&&floor){Net.send({t:'floorset',d:floorWire()});}}else{state='wait';}});
+ Net.on('init',()=>{syncRoster();if(HOST()){if(state==='play'&&floor){Net.send({t:'floorset',d:floorWire()});}}else{state='wait';Net.send({t:'hello'});}});
  Net.on('join',()=>{if(HOST()){syncRoster();if(floor)Net.send({t:'floorset',d:floorWire()});}});
  Net.on('leave',p=>{INPUT.delete(p.peerId);
   // Ушёл ведущий (вошёл раньше всех) — игра у всех сначала; новый ведущий может начать
@@ -558,6 +560,7 @@ if(window.Net){
  Net.on('msg',(d,from)=>{if(!d||typeof d!=='object')return;
   if(d.t==='in'&&HOST()&&Array.isArray(d.v)){const [mx,my,sx,sy,b]=d.v.map(Number);INPUT.set(from,{mx:clamp(mx||0,-1,1),my:clamp(my||0,-1,1),sx:clamp(sx||0,-1,1),sy:clamp(sy||0,-1,1),b:b|0});}
   else if(d.t==='floorset'&&!HOST()){applyFloor(d.d);}
+  else if(d.t==='hello'&&HOST()){if(floor)Net.send({t:'floorset',d:floorWire()},from);}
   else if(d.t==='snap'&&!HOST())onSnap(d);
   else if(d.t==='start'&&HOST()&&(state==='title'||state==='over'))newGame();});
 }

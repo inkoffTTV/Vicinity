@@ -72,7 +72,10 @@ export function ActivityFrame() {
   useEffect(() => {
     if (!session) return;
     const post = (msg: unknown) => ref.current?.contentWindow?.postMessage(msg, '*');
-    const off = onFrameMessage(post);
+    // Пока игра грузится, её сообщения (состояние ведущего, входы игроков) копятся — иначе пропали бы
+    let ready = false;
+    const queue: unknown[] = [];
+    const off = onFrameMessage((msg) => (ready ? post(msg) : queue.push(msg)));
     const onMsg = (e: MessageEvent) => {
       if (!ref.current || e.source !== ref.current.contentWindow) return;
       const m = e.data as { type?: string; data?: unknown; to?: number } | null;
@@ -80,8 +83,10 @@ export function ActivityFrame() {
       if (m.type === 'send') sendFromFrame(m.data, typeof m.to === 'number' ? m.to : undefined);
       else if (m.type === 'exit') useActivity.getState().leave();
       else if (m.type === 'ready') {
+        ready = true;
         const s = useActivity.getState().session;
         if (s?.peerId) post({ type: 'init', self: peerInfo(s.peerId, useStore.getState().me?.user_id ?? 0), peers: s.peers });
+        for (const q of queue.splice(0)) post(q);
       }
     };
     window.addEventListener('message', onMsg);

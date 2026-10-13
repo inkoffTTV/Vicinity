@@ -1294,7 +1294,8 @@ button.side-head:hover {
   --gap-bottom: max(16px, env(safe-area-inset-bottom));
   position: fixed;
   inset: 0;
-  z-index: 100;
+  /* выше окна звонка (.call-window, 120): настройки звука из звонка открываются поверх него */
+  z-index: 130;
   background: rgba(0, 0, 0, 0.7);
   display: grid;
   place-items: center;

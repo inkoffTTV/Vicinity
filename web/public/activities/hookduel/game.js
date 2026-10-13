@@ -530,6 +530,7 @@
   Net.on('init', () => {
     assignRoles();
     sendScore();
+    if (role !== 'left') Net.send({ t: 'hello' });
   });
   Net.on('join', () => {
     assignRoles();
@@ -582,6 +583,9 @@
           score.right = d.r;
           over = d.o === 'left' || d.o === 'right' ? { winner: d.o } : null;
         }
+        break;
+      case 'hello':
+        sendScore();
         break;
       case 'again':
         if (over) {
