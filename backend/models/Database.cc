@@ -295,6 +295,31 @@ void initialize() {
          "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
          "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
 
+    // Игры «Активностей»: рекорды, открытые награды и надетое (controllers/PlayController.cc)
+    exec("CREATE TABLE IF NOT EXISTS game_stats ("
+         "user_id INTEGER NOT NULL,"
+         "game TEXT NOT NULL,"
+         "best_floor INTEGER DEFAULT 0,"
+         "runs INTEGER DEFAULT 0,"
+         "wins INTEGER DEFAULT 0,"
+         "kills INTEGER DEFAULT 0,"
+         "unlocks TEXT DEFAULT '[]',"
+         "cosmetic TEXT DEFAULT '{}',"
+         "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "PRIMARY KEY(user_id, game),"
+         "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
+    // Ежедневный забег: лучший результат игрока за день (UTC)
+    exec("CREATE TABLE IF NOT EXISTS daily_runs ("
+         "day TEXT NOT NULL,"
+         "game TEXT NOT NULL,"
+         "user_id INTEGER NOT NULL,"
+         "floor INTEGER DEFAULT 0,"
+         "kills INTEGER DEFAULT 0,"
+         "time_ms INTEGER DEFAULT 0,"
+         "won INTEGER DEFAULT 0,"
+         "PRIMARY KEY(day, game, user_id),"
+         "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
+
     // Адреса, с которых регистрация запрещена (админ-панель: «заблокировать IP»)
     exec("CREATE TABLE IF NOT EXISTS blocked_ips ("
          "ip TEXT PRIMARY KEY,"

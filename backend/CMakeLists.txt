@@ -16,6 +16,7 @@ add_executable(VicinityServer
     controllers/ChatController.cc
     controllers/FriendsController.cc
     controllers/GamesController.cc
+    controllers/PlayController.cc
     controllers/ProfileController.cc
     controllers/ReadController.cc
     controllers/RoleController.cc

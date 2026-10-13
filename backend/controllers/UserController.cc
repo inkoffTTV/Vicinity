@@ -230,6 +230,19 @@ void UserController::profile(const HttpRequestPtr& req,
         } catch (...) {}
     }
 
+    // Рекорды в играх «Активностей» (только сыгранные)
+    try {
+        auto r = app().getDbClient()->execSqlSync(
+            "SELECT game, best_floor, runs, wins FROM game_stats WHERE user_id = ? AND runs > 0", id);
+        for (const auto& row : r) {
+            Json::Value g;
+            g["best_floor"] = row["best_floor"].as<int>();
+            g["runs"]       = row["runs"].as<int>();
+            g["wins"]       = row["wins"].as<int>();
+            resp["games"][row["game"].as<std::string>()] = g;
+        }
+    } catch (...) {}
+
     cb(jsonResp(resp));
 }
 
