@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import {
+  applyCodecOrder,
   cameraConstraints,
+  cameraTarget,
   canShareScreen,
+  chooseVideoCodecs,
   HTTPS_REQUIRED,
   mediaAvailable,
   mediaError,
@@ -14,6 +17,7 @@ import {
   tuneCameraSender,
   tuneScreenSender,
   useMediaPrefs,
+  withStartBitrate,
 } from './media';
 import { pttHeld, usePtt } from './ptt';
 import { startTone } from './ringtone';
@@ -31,6 +35,8 @@ export type CallPhase = 'idle' | 'incoming' | 'outgoing' | 'connecting' | 'activ
 type Role = 'audio' | 'video' | 'screen';
 
 const RING_TIMEOUT = 45_000;
+// Стартовая оценка канала между браузерами, кбит/с: камера и экран сразу чёткие, дальше подстроится
+const BROWSER_START_KBPS = 2500;
 const CONNECT_TIMEOUT = 30_000;
 // «disconnected» часто проходит само (смена сети) — ждём, прежде чем завершать
 const DISCONNECT_GRACE = 5_000;
@@ -281,23 +287,6 @@ function tuneOffer(sdp: string): string {
   );
 }
 
-// H264 (packetization-mode=1, 42e01f первым) — единственный видеокодек десктопа; остальные кодеки
-// остаются запасными для звонков между браузерами
-function preferH264(t: RTCRtpTransceiver) {
-  if (typeof t.setCodecPreferences !== 'function' || typeof RTCRtpReceiver.getCapabilities !== 'function') return;
-  const codecs = RTCRtpReceiver.getCapabilities('video')?.codecs ?? [];
-  const rank = (c: RTCRtpCodec) => {
-    const fmtp = c.sdpFmtpLine ?? '';
-    if (c.mimeType.toLowerCase() !== 'video/h264' || !/packetization-mode=1/.test(fmtp)) return 3;
-    return /profile-level-id=42e01f/i.test(fmtp) ? 0 : /profile-level-id=42/i.test(fmtp) ? 1 : 2;
-  };
-  try {
-    t.setCodecPreferences([...codecs].sort((a, b) => rank(a) - rank(b)));
-  } catch {
-    /* браузер оставит свой порядок */
-  }
-}
-
 function sendCtrl(s: Session) {
   if (s.ctrl?.readyState !== 'open') return;
   const { camera, screen } = useCall.getState();
@@ -524,8 +513,15 @@ export const useCall = create<CallState>((set, get) => ({
       const audio = pc.addTransceiver(s.mic!.getAudioTracks()[0], { direction: 'sendrecv' });
       const video = pc.addTransceiver('video', { direction: 'sendrecv' });
       const screen = pc.addTransceiver('video', { direction: 'sendrecv' });
-      preferH264(video);
-      preferH264(screen);
+      // Кодеки: что кодирует видеокарта — первым (десктоп всё равно найдёт в списке свой H264)
+      const mode = useMediaPrefs.getState().screenMode;
+      const [camCodecs, screenCodecs] = await Promise.all([
+        chooseVideoCodecs(cameraTarget(), false),
+        chooseVideoCodecs(screenQuality(store.me?.subscription_tier ?? 0, mode), mode === 'detail'),
+      ]);
+      if (sess !== s) return;
+      applyCodecOrder(video, camCodecs.order);
+      applyCodecOrder(screen, screenCodecs.order);
       s.transceivers = { audio, video, screen };
       // Канал ctrl — до createOffer, чтобы попасть в предложение (пересогласования не будет)
       setupCtrl(s, pc.createDataChannel('ctrl'));
@@ -580,7 +576,9 @@ export const useCall = create<CallState>((set, get) => ({
       const pc = createPc(s, ice);
       s.mids = sdpMids(s.offer);
       set({ desktopPeer: isDesktopSdp(s.offer) });
-      await pc.setRemoteDescription({ type: 'offer', sdp: tuneOffer(s.offer) });
+      // Десктопу — его стартовый битрейт H264; браузеру — стартовая скорость видео сразу около рабочей
+      const desktop = isDesktopSdp(s.offer);
+      await pc.setRemoteDescription({ type: 'offer', sdp: desktop ? tuneOffer(s.offer) : withStartBitrate(s.offer, BROWSER_START_KBPS) });
       if (sess !== s) return;
       await addRemoteIce(s);
       // Все три линии — sendrecv: отправлять видео позже можно будет только через replaceTrack
@@ -708,7 +706,7 @@ async function onAccept(ev: WsEvent) {
     endWith('call_end');
   };
   try {
-    await s.pc.setRemoteDescription({ type: 'answer', sdp: ev.sdp });
+    await s.pc.setRemoteDescription({ type: 'answer', sdp: isDesktopSdp(ev.sdp) ? ev.sdp : withStartBitrate(ev.sdp, BROWSER_START_KBPS) });
   } catch {
     if (sess === s) incompatible();
     return;

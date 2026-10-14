@@ -292,16 +292,124 @@ export async function openScreen(q: ScreenQuality): Promise<MediaStream> {
   return stream;
 }
 
+// ── Видеокодек ──
+// Браузер по умолчанию кодирует VP8 (или H264, если так попросили ради десктопа) программно — на 1440p60
+// это упирается в процессор: кадры теряются, картинка мылится. Поэтому первым ставим кодек, который
+// у этого компьютера кодирует видеокарта (Media Capabilities: powerEfficient), а без неё — VP8 для
+// плавности или VP9 для чёткого текста. Остальные кодеки остаются в списке: собеседник выберет из них то,
+// что умеет сам (десктоп ищет H264 по всему списку, порядок ему не важен).
+
+type Target = { width: number; height: number; fps: number; maxBitrate: number };
+
+const hwCache = new Map<string, Promise<boolean>>();
+
+/** Кодирует ли видеокарта этот кодек в таком размере и частоте */
+function hardwareEncodes(mime: string, t: Target): Promise<boolean> {
+  const mc = navigator.mediaCapabilities;
+  if (!mc?.encodingInfo) return Promise.resolve(false);
+  const key = `${mime} ${t.width}x${t.height}@${t.fps}`;
+  let r = hwCache.get(key);
+  if (!r) {
+    r = mc
+      .encodingInfo({
+        type: 'webrtc',
+        video: { contentType: mime, width: t.width, height: t.height, bitrate: t.maxBitrate, framerate: t.fps },
+      } as MediaEncodingConfiguration)
+      .then((info) => info.supported && info.powerEfficient)
+      .catch(() => false);
+    hwCache.set(key, r);
+  }
+  return r;
+}
+
+export interface CodecChoice {
+  /** Порядок MIME-типов: первый — желаемый */
+  order: string[];
+  /** Первый кодек кодирует видеокарта — несколько копий потока процессору не страшны */
+  hardware: boolean;
+}
+
+/** Порядок кодеков для отправки видео такого размера; detail — чёткость важнее плавности */
+export async function chooseVideoCodecs(t: Target, detail: boolean): Promise<CodecChoice> {
+  // Аппаратные — по качеству на бит: VP9 и AV1 заметно лучше H264 на тексте и интерфейсах
+  const candidates = ['video/VP9', 'video/AV1', 'video/H264'];
+  const hw = await Promise.all(candidates.map((m) => hardwareEncodes(m, t)));
+  const fast = candidates.filter((_, i) => hw[i]);
+  const soft = detail ? ['video/VP9', 'video/VP8', 'video/H264'] : ['video/VP8', 'video/VP9', 'video/H264'];
+  return { order: [...fast, ...soft.filter((m) => !fast.includes(m))], hardware: fast.length > 0 };
+}
+
+/** Применить порядок кодеков к линии; H264 внутри — packetization-mode=1 и Baseline первыми (как у десктопа) */
+export function applyCodecOrder(t: RTCRtpTransceiver, order: string[]) {
+  if (typeof t.setCodecPreferences !== 'function' || typeof RTCRtpReceiver.getCapabilities !== 'function') return;
+  const codecs = RTCRtpReceiver.getCapabilities('video')?.codecs ?? [];
+  const rank = (c: RTCRtpCodec) => {
+    const i = order.findIndex((m) => m.toLowerCase() === c.mimeType.toLowerCase());
+    // rtx, red, ulpfec и прочие служебные — после видеокодеков, но остаются в списке
+    const base = (i === -1 ? order.length : i) * 10;
+    if (c.mimeType.toLowerCase() !== 'video/h264') return base;
+    const fmtp = c.sdpFmtpLine ?? '';
+    if (!/packetization-mode=1/.test(fmtp)) return base + 3;
+    return base + (/profile-level-id=42e01f/i.test(fmtp) ? 0 : /profile-level-id=42/i.test(fmtp) ? 1 : 2);
+  };
+  try {
+    t.setCodecPreferences([...codecs].sort((a, b) => rank(a) - rank(b)));
+  } catch {
+    /* браузер оставит свой порядок */
+  }
+}
+
+/**
+ * Стартовый битрейт видео в удалённом описании (x-google-start-bitrate, только Chromium; остальные
+ * браузеры параметр игнорируют). Без него оценка канала начинается с ~300 кбит/с, и первые секунды
+ * трансляция выглядит мылом, пока скорость не разгонится.
+ */
+export function withStartBitrate(sdp: string, kbps: number): string {
+  const nl = sdp.includes('\r\n') ? '\r\n' : '\n';
+  const lines = sdp.split(/\r?\n/);
+  // PT видеокодеков (без rtx, red, ulpfec) и у каких из них уже есть строка fmtp
+  const videoPts = new Set<string>();
+  const withFmtp = new Set<string>();
+  let inVideo = false;
+  for (const l of lines) {
+    if (l.startsWith('m=')) inVideo = l.startsWith('m=video');
+    const rtp = inVideo ? /^a=rtpmap:(\d+) (VP8|VP9|AV1|H264)\//i.exec(l) : null;
+    if (rtp) videoPts.add(rtp[1]);
+    const fmtp = /^a=fmtp:(\d+) /.exec(l);
+    if (fmtp) withFmtp.add(fmtp[1]);
+  }
+  const param = `x-google-start-bitrate=${Math.round(kbps)}`;
+  const out: string[] = [];
+  for (const l of lines) {
+    const fmtp = /^a=fmtp:(\d+) /.exec(l);
+    if (fmtp && videoPts.has(fmtp[1]) && !l.includes('x-google-start-bitrate')) {
+      out.push(`${l};${param}`);
+      continue;
+    }
+    out.push(l);
+    const rtp = /^a=rtpmap:(\d+) /.exec(l);
+    if (rtp && videoPts.has(rtp[1]) && !withFmtp.has(rtp[1])) out.push(`a=fmtp:${rtp[1]} ${param}`);
+  }
+  return out.join(nl);
+}
+
+// Для e2e: выбор кодеков проверяется на настоящих SDP браузера
+(window as unknown as { __vicinityCodecs: unknown }).__vicinityCodecs = {
+  chooseVideoCodecs: (t: Target, detail: boolean) => chooseVideoCodecs(t, detail),
+  applyCodecOrder: (t: RTCRtpTransceiver, order: string[]) => applyCodecOrder(t, order),
+  withStartBitrate: (sdp: string, kbps: number) => withStartBitrate(sdp, kbps),
+};
+
 /** Отправитель экрана: битрейт, частота, что жертвовать при нехватке канала; кадр больше лимита — уменьшить */
-export async function tuneScreenSender(sender: RTCRtpSender, q: ScreenQuality) {
+export async function tuneScreenSender(sender: RTCRtpSender, q: ScreenQuality, share: { bitrate?: number; scale?: number } = {}) {
   try {
     const p = sender.getParameters() as RTCRtpSendParameters & { degradationPreference?: string };
     if (!p.encodings?.length) return;
     const enc = p.encodings[0];
-    enc.maxBitrate = q.maxBitrate;
+    enc.maxBitrate = share.bitrate ?? q.maxBitrate;
     enc.maxFramerate = q.fps;
     const s = sender.track?.getSettings();
-    const scale = Math.max(1, (s?.width ?? 0) / q.width, (s?.height ?? 0) / q.height);
+    const scale = Math.max(1, (s?.width ?? 0) / q.width, (s?.height ?? 0) / q.height) * (share.scale ?? 1);
     if (scale > 1) enc.scaleResolutionDownBy = scale;
     p.degradationPreference = q.contentHint === 'motion' ? 'maintain-framerate' : 'maintain-resolution';
     await sender.setParameters(p);
@@ -311,12 +419,18 @@ export async function tuneScreenSender(sender: RTCRtpSender, q: ScreenQuality) {
   }
 }
 
+/** Камера как цель кодирования (для выбора кодека): размер по подписке, 30 к/с */
+export function cameraTarget() {
+  const height = usePlan.getState().current.camera_height;
+  return { width: Math.round((height * 16) / 9), height, fps: 30, maxBitrate: height >= 1080 ? 3_000_000 : 1_500_000 };
+}
+
 /** Отправитель камеры: 30 к/с, до 1.5 Мбит/с (1080p у Ultra — до 3 Мбит/с) */
 export async function tuneCameraSender(sender: RTCRtpSender) {
   try {
     const p = sender.getParameters();
     if (!p.encodings?.length) return;
-    p.encodings[0].maxBitrate = usePlan.getState().current.camera_height >= 1080 ? 3_000_000 : 1_500_000;
+    p.encodings[0].maxBitrate = cameraTarget().maxBitrate;
     p.encodings[0].maxFramerate = 30;
     await sender.setParameters(p);
   } catch {

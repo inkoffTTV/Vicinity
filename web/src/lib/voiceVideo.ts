@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import {
+  applyCodecOrder,
   cameraConstraints,
+  cameraTarget,
   canShareScreen,
+  chooseVideoCodecs,
   mediaError,
   openScreen,
   rtcIceServers,
@@ -10,6 +13,7 @@ import {
   tuneCameraSender,
   tuneScreenSender,
   useMediaPrefs,
+  withStartBitrate,
 } from './media';
 import { playSound } from './sounds';
 import { useStore, VoiceUser } from './store';
@@ -33,6 +37,11 @@ const WATCH_TIMEOUT = 15_000;
 // Кандидаты ICE собираем в SDP (одно сообщение вместо десятка): ждём конца сбора, но не дольше этого.
 // Сигналинг делит лимит частоты со звонками — у транслирующего на 8 зрителей это важно.
 const GATHER_WAIT = 1_500;
+// Каждому зрителю экрана — своя копия потока (mesh): делим на них исходящий канал, чтобы не забить его
+// целиком (тогда страдают все, включая голос), и, если кодирует процессор, уменьшаем кадр — иначе
+// N копий 1440p60 упираются в процессор и проседают по частоте кадров.
+const UPLOAD_BUDGET = 24_000_000;
+const MIN_VIEWER_BITRATE = 2_500_000;
 
 export interface Watch {
   userId: number;
@@ -72,6 +81,8 @@ interface Peer {
   pendingIce: RTCIceCandidateInit[];
   closed: boolean;
   timer: number;
+  /** Своя трансляция экрана: отправитель и кодирует ли его видеокарта */
+  screen?: { sender: RTCRtpSender; hardware: boolean };
 }
 
 /** Свои трансляции: ключ `${зритель}:${kind}` */
@@ -99,6 +110,21 @@ function countViewers() {
   const viewers: Record<StreamKind, number> = { screen: 0, camera: 0 };
   for (const k of outgoing.keys()) viewers[k.endsWith(':screen') ? 'screen' : 'camera']++;
   useVoiceVideo.setState({ viewers });
+  retuneScreens();
+}
+
+/** Битрейт (и при программном кодировании — размер кадра) каждой копии экрана по числу зрителей */
+function screenShare(n: number, hardware: boolean, q: { maxBitrate: number; height: number }) {
+  const bitrate = Math.min(q.maxBitrate, Math.max(MIN_VIEWER_BITRATE, Math.round(UPLOAD_BUDGET / Math.max(1, n))));
+  const scale = hardware || n <= 1 ? 1 : Math.max(1, Math.min(Math.sqrt(n), q.height / 720));
+  return { bitrate, scale };
+}
+
+function retuneScreens() {
+  const peers = [...outgoing.entries()].filter(([k, p]) => k.endsWith(':screen') && p.screen && p.described && !p.closed);
+  if (!peers.length) return;
+  const quality = screenQuality(useStore.getState().me?.subscription_tier ?? 0, useMediaPrefs.getState().screenMode);
+  for (const [, p] of peers) void tuneScreenSender(p.screen!.sender, quality, screenShare(peers.length, p.screen!.hardware, quality));
 }
 
 function sendMedia() {
@@ -173,15 +199,24 @@ async function onWatch(viewer: number, kind: StreamKind) {
   if (peer.closed) return;
   const pc = new RTCPeerConnection({ iceServers: ice, bundlePolicy: 'max-bundle' });
   peer.pc = pc;
-  const quality = screenQuality(useStore.getState().me?.subscription_tier ?? 0, useMediaPrefs.getState().screenMode);
-  const sender = pc.addTransceiver(track, {
+  const mode = useMediaPrefs.getState().screenMode;
+  const quality = screenQuality(useStore.getState().me?.subscription_tier ?? 0, mode);
+  const codecs = await chooseVideoCodecs(kind === 'screen' ? quality : cameraTarget(), kind === 'screen' && mode === 'detail');
+  if (peer.closed) {
+    pc.close();
+    return;
+  }
+  const transceiver = pc.addTransceiver(track, {
     direction: 'sendonly',
     streams: [stream],
     sendEncodings:
       kind === 'screen'
         ? [{ maxBitrate: quality.maxBitrate, maxFramerate: quality.fps }]
         : [{ maxBitrate: 1_500_000, maxFramerate: 30 }],
-  }).sender;
+  });
+  applyCodecOrder(transceiver, codecs.order);
+  const sender = transceiver.sender;
+  if (kind === 'screen') peer.screen = { sender, hardware: codecs.hardware };
   pc.onicecandidate = (e) => {
     if (peer.described && e.candidate?.candidate)
       rtc(viewer, kind, 'ice', { candidate: e.candidate.candidate, mid: e.candidate.sdpMid ?? '', sdpType: 'offer' });
@@ -195,7 +230,7 @@ async function onWatch(viewer: number, kind: StreamKind) {
     if (peer.closed) return;
     rtc(viewer, kind, 'offer', { sdp: pc.localDescription!.sdp, sdpType: 'offer' });
     peer.described = true;
-    if (kind === 'screen') void tuneScreenSender(sender, quality);
+    if (kind === 'screen') retuneScreens();
     else void tuneCameraSender(sender);
   } catch {
     dropOutgoing(key, true);
@@ -206,7 +241,13 @@ async function onAnswer(viewer: number, kind: StreamKind, ev: WsEvent) {
   const p = outgoing.get(keyOf(viewer, kind));
   if (!p?.pc || typeof ev.sdp !== 'string' || p.pc.signalingState !== 'have-local-offer') return;
   try {
-    await p.pc.setRemoteDescription({ type: 'answer', sdp: ev.sdp });
+    // Стартовая скорость — сразу около целевой: первые секунды трансляции без мыла
+    const viewers = [...outgoing.keys()].filter((k) => k.endsWith(`:${kind}`)).length;
+    const target =
+      kind === 'screen'
+        ? screenShare(viewers, p.screen?.hardware ?? false, screenQuality(useStore.getState().me?.subscription_tier ?? 0, useMediaPrefs.getState().screenMode)).bitrate
+        : 1_500_000;
+    await p.pc.setRemoteDescription({ type: 'answer', sdp: withStartBitrate(ev.sdp, Math.min(target * 0.6, 6_000_000) / 1000) });
     await flushIce(p);
   } catch {
     dropOutgoing(keyOf(viewer, kind), true);

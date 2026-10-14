@@ -65,12 +65,13 @@ export function pageErrors(page: Page): string[] {
   return (page as any).__errors ?? [];
 }
 
-/** a → заявка в друзья → b принимает. */
+/** a → заявка в друзья (по полному нику — поиска по части ника больше нет) → b принимает. */
 export async function makeFriends(a: User, b: User) {
   await a.page.locator('.rail-item.home').click();
   await a.page.locator('.tabs button', { hasText: 'Добавить в друзья' }).click();
   await a.page.locator('.add-friend input').fill(b.username);
-  await a.page.locator(`.user-row:has-text("@${b.username}")`).getByRole('button', { name: 'В друзья' }).click();
+  await a.page.locator('.add-friend').getByRole('button', { name: 'Отправить заявку' }).click();
+  await expect(a.page.locator('.add-friend-result')).toContainText('Заявка отправлена');
   await b.page.locator('.rail-item.home').click();
   await b.page.locator('.tabs button', { hasText: 'Заявки' }).click();
   await b.page.locator(`.friend-row:has-text("${a.displayName}")`).getByRole('button', { name: 'Принять' }).click();
@@ -78,12 +79,17 @@ export async function makeFriends(a: User, b: User) {
   await expect(b.page.locator(`.friend-row:has-text("${a.displayName}")`)).toBeVisible();
 }
 
-/** Открыть личку из профиля через поиск. */
+/** Открыть личку: незнакомым писать нельзя — сначала в друзья (если ещё нет), затем «Написать». */
 export async function openDm(from: User, to: User) {
   await from.page.locator('.rail-item.home').click();
-  await from.page.locator('.tabs button', { hasText: 'Добавить в друзья' }).click();
-  await from.page.locator('.add-friend input').fill(to.username);
-  await from.page.locator(`.user-row:has-text("@${to.username}")`).getByRole('button', { name: 'Написать' }).click();
+  await from.page.locator('.tabs button', { hasText: 'Все' }).click();
+  const row = from.page.locator('.friend-row', { hasText: `@${to.username}` });
+  if (!(await row.count())) {
+    await makeFriends(from, to);
+    await from.page.locator('.rail-item.home').click();
+    await from.page.locator('.tabs button', { hasText: 'Все' }).click();
+  }
+  await row.getByRole('button', { name: 'Написать' }).click();
   await expect(from.page.locator('.composer textarea')).toBeVisible();
 }
 
