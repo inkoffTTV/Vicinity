@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { canShareScreen } from '../lib/media';
 import { useStore } from '../lib/store';
 import { useVoice } from '../lib/voice';
 import { useVoiceVideo } from '../lib/voiceVideo';
@@ -117,16 +118,18 @@ export function VoiceBar() {
         >
           <Icon key={String(camera)} icon={camera ? Video : VideoOff} anim="pop" size={18} />
         </button>
-        <button
-          className={`voice-toggle${screen ? ' on' : ''}`}
-          aria-pressed={screen}
-          disabled={!live}
-          title={screen ? 'Остановить показ экрана' : 'Показать экран'}
-          aria-label={screen ? 'Остановить показ экрана' : 'Показать экран'}
-          onClick={() => void vv.toggleScreen()}
-        >
-          <Icon key={String(screen)} icon={screen ? ScreenShareOff : ScreenShare} anim="pop" size={18} />
-        </button>
+        {canShareScreen() && (
+          <button
+            className={`voice-toggle${screen ? ' on' : ''}`}
+            aria-pressed={screen}
+            disabled={!live}
+            title={screen ? 'Остановить показ экрана' : 'Показать экран'}
+            aria-label={screen ? 'Остановить показ экрана' : 'Показать экран'}
+            onClick={() => void vv.toggleScreen()}
+          >
+            <Icon key={String(screen)} icon={screen ? ScreenShareOff : ScreenShare} anim="pop" size={18} />
+          </button>
+        )}
         <button
           className={`voice-toggle${stageOpen ? ' on' : ''}`}
           aria-pressed={stageOpen}

@@ -1,0 +1,80 @@
+name: Android APK
+
+# Собирает приложение для Android (android/) и выкладывает Vicinity.apk в релиз «android-latest».
+# Сервер забирает его оттуда при обновлении (deploy/update.sh) — ссылка «Скачать для Android».
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Постоянный ключ подписи — секреты ANDROID_KEYSTORE_BASE64 и ANDROID_KEYSTORE_PASSWORD
+      # (android/README.md). Без них APK подписывается отладочным ключом.
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/vicinity.jks"
+            echo "VICINITY_KEYSTORE=$RUNNER_TEMP/vicinity.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Нет секрета ANDROID_KEYSTORE_BASE64 — APK подписан отладочным ключом (android/README.md)"
+          fi
+
+      - name: Build
+        env:
+          VICINITY_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VICINITY_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          VICINITY_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VICINITY_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/Vicinity.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Vicinity-apk
+          path: ${{ runner.temp }}/Vicinity.apk
+
+      # Релиз обновляется только сборкой из main и рабочей ветки — у него постоянная ссылка на файл
+      - name: Publish release android-latest
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/zen-feynman-rcs2s3'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Приложение Vicinity для Android. Сборка ${{ github.run_number }} из ${GITHUB_SHA::7}. Установка: скачать Vicinity.apk на телефон и открыть."
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release upload android-latest "$RUNNER_TEMP/Vicinity.apk" --clobber
+            gh release edit android-latest --notes "$notes"
+          else
+            gh release create android-latest "$RUNNER_TEMP/Vicinity.apk" --title "Vicinity для Android" --notes "$notes" --target "$GITHUB_SHA" --latest=false
+          fi

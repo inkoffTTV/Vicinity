@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { registerServiceWorker } from './lib/pwa';
+// Приложение для Android: уведомления и звонок в свёрнутом виде через мост WebView
+import './lib/android';
 // Автостатус «Не активен» при простое
 import './lib/idle';
 // Оформление (тема, акцент, шрифт) — до первой отрисовки, без вспышки другой темы

@@ -1,0 +1,53 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Адрес сайта, который открывает приложение. Сборка под другой сервер: -PappUrl=https://…
+def appUrl = (findProperty('appUrl') ?: 'https://chat.13-143-162-211.sslip.io').toString().replaceAll('/+$', '')
+
+// Постоянный ключ подписи — из переменных окружения (в CI — секреты репозитория, см. android/README.md).
+// Без него APK подписывается отладочным ключом: ставится, но обновить такую сборку поверх можно только
+// сборкой с тем же ключом.
+def keystorePath = System.getenv('VICINITY_KEYSTORE')
+def hasReleaseKey = keystorePath && file(keystorePath).exists()
+
+android {
+    namespace 'app.vicinity.android'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.vicinity.android'
+        minSdk 26
+        targetSdk 35
+        versionCode((System.getenv('VICINITY_VERSION_CODE') ?: '1') as int)
+        versionName '1.0.0'
+        buildConfigField 'String', 'APP_URL', "\"${appUrl}\""
+    }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv('VICINITY_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('VICINITY_KEY_ALIAS') ?: 'vicinity'
+                keyPassword System.getenv('VICINITY_KEY_PASSWORD') ?: System.getenv('VICINITY_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

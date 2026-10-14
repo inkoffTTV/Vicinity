@@ -81,7 +81,22 @@ if [ "$(docker inspect -f '{{.State.Running}}' vicinity-coturn 2>/dev/null)" != 
     echo "coturn не запущен — звонки через NAT работать не будут: docker compose logs coturn" >&2
 fi
 
-# 6. Прежние образы сервера и веба больше не нужны (занятые и чужие образы не трогаются)
+# 6. Приложение для Android: свежий APK из GitHub Releases (собирает .github/workflows/android.yml)
+#    кладём в deploy/downloads → ссылка «Скачать для Android» (/download/Vicinity.apk).
+#    ANDROID_APK_URL — другой адрес; ANDROID_APK=0 — не скачивать. Ошибка сети обновление не прерывает.
+if [ "${ANDROID_APK:-1}" != 0 ]; then
+    apk_url=${ANDROID_APK_URL:-https://github.com/inkoffTTV/Vicinity/releases/download/android-latest/Vicinity.apk}
+    mkdir -p "$here/downloads"
+    if curl -fsSL --max-time 300 -o "$here/downloads/Vicinity.apk.part" "$apk_url"; then
+        mv "$here/downloads/Vicinity.apk.part" "$here/downloads/Vicinity.apk"
+        echo "APK для Android обновлён: deploy/downloads/Vicinity.apk"
+    else
+        rm -f "$here/downloads/Vicinity.apk.part"
+        echo "APK для Android не скачался ($apk_url) — ссылка отдаст прежний файл, если он есть" >&2
+    fi
+fi
+
+# 7. Прежние образы сервера и веба больше не нужны (занятые и чужие образы не трогаются)
 for image in $old_images; do
     docker image rm "$image" >/dev/null 2>&1 || true
 done

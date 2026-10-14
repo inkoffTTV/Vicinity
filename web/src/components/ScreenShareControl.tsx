@@ -1,6 +1,6 @@
 import { ChevronUp, ScreenShare, ScreenShareOff, Sparkles } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { screenQuality, TIER_NAMES, useMediaPrefs } from '../lib/media';
+import { canShareScreen, screenQuality, TIER_NAMES, useMediaPrefs } from '../lib/media';
 import { useStore } from '../lib/store';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
@@ -26,6 +26,8 @@ export function ScreenShareControl({ active, activeLabel, onToggle, desktopPeer,
   const [menu, setMenu] = useState(false);
   const more = useRef<HTMLButtonElement>(null);
   const title = active ? 'Остановить показ экрана' : 'Показать экран';
+  // Телефоны (и приложение для Android) не умеют показывать экран — кнопки нет
+  if (!canShareScreen()) return null;
   return (
     <span className="screen-ctl">
       <button

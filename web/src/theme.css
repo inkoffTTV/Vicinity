@@ -1001,3 +1001,33 @@ select {
   font-size: 14px;
   animation: vc-pop 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
+/* Приложения для телефонов: кнопка-ссылка выглядит как ссылки на скачивание */
+button.auth-download {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.settings-download {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.auth-hero .auth-download + .auth-download {
+  margin-top: -8px;
+}
+/* Установка на iPhone */
+.ios-steps {
+  margin: 0 0 14px;
+  padding-left: 22px;
+  display: grid;
+  gap: 10px;
+  line-height: 1.5;
+}
+.ios-step-icon {
+  vertical-align: -3px;
+  color: var(--accent);
+}

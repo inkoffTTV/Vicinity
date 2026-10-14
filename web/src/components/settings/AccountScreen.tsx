@@ -692,9 +692,10 @@ function TwoFactorOffDialog({ onClose, onDone }: { onClose: () => void; onDone: 
 
 // ── Активные сеансы ──
 
-/** Устройство по User-Agent: «Chrome · Windows», «Приложение для ПК», «Safari · iPhone» */
+/** Устройство по User-Agent: «Chrome · Windows», «Приложение для ПК», «Приложение для Android», «Safari · iPhone» */
 export function deviceOf(ua: string | undefined): { name: string; kind: 'pc' | 'phone' | 'app' | 'unknown' } {
   if (!ua) return { name: 'Неизвестное устройство', kind: 'unknown' };
+  if (/VicinityAndroid/.test(ua)) return { name: 'Приложение для Android', kind: 'app' };
   if (/Vicinity|\bQt\//i.test(ua)) return { name: 'Приложение для ПК', kind: 'app' };
   const browser = /YaBrowser/.test(ua) ? 'Яндекс Браузер' : /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Браузер';
   const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '';

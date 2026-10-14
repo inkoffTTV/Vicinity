@@ -1,0 +1,65 @@
+# Vicinity для Android
+
+Приложение — окно WebView с веб-клиентом с сервера (`appUrl` в `app/build.gradle`), как и
+[приложение для Windows](../desktop/README.md): дизайн и функции обновляются вместе с сайтом, APK
+переустанавливать не нужно. Само приложение даёт то, чего нет у сайта в браузере телефона:
+
+- системные уведомления о сообщениях (нажатие открывает нужный чат);
+- звонок и голосовой канал в свёрнутом виде — уведомление «Идёт звонок» не даёт Android
+  выключить микрофон;
+- камера и микрофон по системному запросу, выбор файлов и фото для отправки;
+- скачивание вложений в «Загрузки»;
+- полноэкранная демонстрация, кнопка «Назад», экран «Нет связи» с автоповтором.
+
+Мост для веб-клиента — `window.VicinityAndroid` (`web/src/lib/android.ts`). Показ своего экрана
+с телефона Android-WebView не поддерживает — эту кнопку сайт в приложении не показывает.
+
+## Где взять APK
+
+Собирает GitHub Actions (`.github/workflows/android.yml`) при каждом изменении `android/`:
+файл `Vicinity.apk` лежит в релизе
+[android-latest](https://github.com/inkoffTTV/Vicinity/releases/tag/android-latest).
+`deploy/update.sh` на сервере забирает его в `deploy/downloads/` — на сайте в браузере Android
+появляется кнопка «Скачать для Android» (`/download/Vicinity.apk`).
+
+Установка: открыть скачанный файл → разрешить установку из этого источника → «Установить».
+
+## Постоянный ключ подписи
+
+Android ставит обновление поверх, только если APK подписан тем же ключом. Без ключа сборка
+подписывается отладочным, который у каждой сборки GitHub свой, — новую версию тогда придётся ставить
+после удаления старой (вход в аккаунт нужно будет повторить). Приложение почти не меняется (всё
+новое приходит с сайтом), но лучше завести ключ один раз — на своём компьютере или VPS:
+
+```sh
+keytool -genkeypair -v -keystore vicinity.jks -alias vicinity -keyalg RSA -keysize 4096 -validity 36500
+base64 -w0 vicinity.jks > vicinity.jks.b64
+```
+
+В репозитории на GitHub: Settings → Secrets and variables → Actions → New repository secret:
+
+| Секрет | Значение |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | содержимое `vicinity.jks.b64` |
+| `ANDROID_KEYSTORE_PASSWORD` | пароль, введённый в keytool |
+
+Файл `vicinity.jks` и пароль сохраните в надёжном месте и никому не пересылайте — потерянный ключ не
+восстановить. Затем Actions → «Android APK» → Run workflow.
+
+## Сборка вручную
+
+Нужны JDK 17+ и Android SDK (платформа 35). Из папки `android/`:
+
+```sh
+./gradlew assembleRelease                               # → app/build/outputs/apk/release/app-release.apk
+./gradlew assembleRelease -PappUrl=https://мой.сервер    # другой сервер
+```
+
+С ключом: `VICINITY_KEYSTORE=/путь/vicinity.jks VICINITY_KEYSTORE_PASSWORD=… ./gradlew assembleRelease`.
+
+## iPhone и iPad
+
+Установочного файла для iOS нет: Apple разрешает ставить приложения только из App Store
+(аккаунт разработчика $99 в год и сборка на Mac). Vicinity на iPhone ставится как веб-приложение:
+Safari → «Поделиться» → «На экран „Домой“». Сайт показывает эту инструкцию кнопкой
+«Установить на iPhone» на экране входа и в настройках.

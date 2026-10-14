@@ -1,10 +1,10 @@
 import { AlertCircle, Check } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { offerDesktopApp, WINDOWS_INSTALLER } from '../lib/desktop';
 import { ApiError, RegistrationInfo, api } from '../lib/api';
 import { solveAltcha } from '../lib/altcha';
 import { useInvite } from '../lib/router';
 import { useStore } from '../lib/store';
+import { AuthAppLinks } from './AppDownloads';
 import { Icon } from './Icon';
 
 type Mode = 'login' | 'register' | 'verify' | 'twofa';
@@ -412,17 +412,7 @@ function AuthHero() {
           </li>
         ))}
       </ul>
-      {offerDesktopApp && (
-        <a className="auth-download" href={WINDOWS_INSTALLER} download>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14" />
-          </svg>
-          <span>
-            <strong>Скачать для Windows</strong>
-            <span>Приложение с уведомлениями и показом экрана</span>
-          </span>
-        </a>
-      )}
+      <AuthAppLinks />
     </section>
   );
 }

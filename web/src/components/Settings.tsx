@@ -1,5 +1,4 @@
-import { ChevronLeft, Download, LogOut, Search, X } from 'lucide-react';
-import { offerDesktopApp, WINDOWS_INSTALLER } from '../lib/desktop';
+import { ChevronLeft, LogOut, Search, X } from 'lucide-react';
 import { FormEvent, useCallback, useState } from 'react';
 import { api, ApiError, Presence } from '../lib/api';
 import { NOTIFY_LEVELS, serverLevel, useNotifySettings } from '../lib/notify';
@@ -7,6 +6,7 @@ import { DEFAULT_ACCENT } from '../lib/prefs';
 import { usePlan } from '../lib/plan';
 import { useStore } from '../lib/store';
 import { AdminPanel } from './AdminPanel';
+import { SettingsAppLinks } from './AppDownloads';
 import { VoiceScreen } from './settings/VoiceScreen';
 import { AppIconScreen } from './settings/AppIconScreen';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
@@ -110,12 +110,7 @@ export function Settings() {
             {visible.length === 0 && <span className="muted small settings-nothing">Ничего не нашлось</span>}
           </div>
           <div className="settings-nav-foot">
-            {offerDesktopApp && (
-              <a className="settings-download" href={WINDOWS_INSTALLER} download>
-                <Icon icon={Download} size={16} />
-                Приложение для Windows
-              </a>
-            )}
+            <SettingsAppLinks />
             <button type="button" className="settings-logout" onClick={() => void logout()}>
               <Icon icon={LogOut} size={16} />
               Выйти
