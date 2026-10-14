@@ -105,7 +105,8 @@ jobs:
         run: |
           sed -e 's/^PUBLIC_IP=$/PUBLIC_IP=203.0.113.10/' -e 's/^VICINITY_TURN_SECRET=$/VICINITY_TURN_SECRET=ci-secret/' \
             -e 's/^WEB_BIND=.*/WEB_BIND=127.0.0.1/' -e 's/^WEB_PORT=.*/WEB_PORT=8081/' \
-            -e 's/^BACKEND_BIND=.*/BACKEND_BIND=127.0.0.1/' env.example > .env
+            -e 's/^BACKEND_BIND=.*/BACKEND_BIND=127.0.0.1/' \
+            -e 's/^VICINITY_REGISTRATION=$/VICINITY_REGISTRATION=open/' env.example > .env
           docker compose up -d --no-build --wait --wait-timeout 180 vicinity web
 
       - name: Smoke test
