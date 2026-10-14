@@ -130,7 +130,11 @@ test('members: search, kick and ban with confirmation, bans list and unban, leav
   await rows.first().getByRole('button', { name: 'Исключить' }).click();
   await confirmDialog(a, 'Исключить');
   await expect(c.page.locator('.rail-item[title="Клуб"]')).toHaveCount(0);
+  // Вера узнаёт о кике по WS раньше, чем у Алисы закроется подтверждение (ждёт ответа REST).
+  // Esc закрывает только верхнее окно — без ожидания на медленном CI он закрыл бы подтверждение
+  await expect(a.page.locator('.modal-backdrop')).toHaveCount(1);
   await a.page.keyboard.press('Escape');
+  await expect(a.page.locator('.modal-backdrop')).toHaveCount(0);
 
   // Участник покидает сервер сам — владелец видит это сразу
   await expect(a.page.locator('.members .member', { hasText: 'Боб' })).toBeVisible();
