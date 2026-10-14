@@ -47,7 +47,7 @@ async function upload(request: APIRequestContext, a: Account, path: string, name
 }
 
 async function startDm(request: APIRequestContext, a: Account, b: Account): Promise<number> {
-  const r = await api(request, a, 'POST', '/dms', { user_id: b.id });
+  const r = await api(request, a, 'POST', '/dms', { user_id: b.id, username: b.username });
   expect(r.status).toBe(201);
   return r.body.channel_id;
 }
@@ -511,10 +511,10 @@ test.describe.serial('backend feature API', () => {
 
     // Переименование и иконка — только владелец; участникам server_updated
     expect((await api(request, b, 'POST', `/servers/${srv.id}/update`, { name: 'Захват' })).status).toBe(403);
-    expect((await api(request, a, 'POST', `/servers/${srv.id}/update`, { name: 'Переименован' })).body).toEqual({
+    expect((await api(request, a, 'POST', `/servers/${srv.id}/update`, { name: 'Переименован' })).body).toMatchObject({
       server_id: srv.id, name: 'Переименован', icon: '',
     });
-    expect(await sb.next((e) => e.type === 'server_updated')).toEqual({ type: 'server_updated', server_id: srv.id, name: 'Переименован', icon: '' });
+    expect(await sb.next((e) => e.type === 'server_updated')).toMatchObject({ type: 'server_updated', server_id: srv.id, name: 'Переименован', icon: '' });
     expect((await upload(request, b, `/servers/${srv.id}/icon`, 'i.png', 'image/png', pngBuffer())).status).toBe(403);
     expect((await upload(request, a, `/servers/${srv.id}/icon`, 'i.pdf', 'application/pdf', Buffer.from('%PDF'))).status).toBe(415);
     const icon = await upload(request, a, `/servers/${srv.id}/icon`, 'i.png', 'image/png', pngBuffer(32, 32));

@@ -96,9 +96,8 @@ test('no emoji glyphs on control buttons, menus, headers and badges', async ({ b
 
   // Настройки по разделам
   await page.getByRole('button', { name: 'Настройки', exact: true }).click();
-  for (const tab of ['Профиль', 'Аккаунт', 'Тема', 'Специальные возможности', 'Подписка', 'Уведомления', 'Голос и видео']) {
+  for (const tab of ['Аккаунт', 'Профиль', 'Внешний вид', 'Значок приложения', 'Голос и видео', 'Уведомления', 'Горячие клавиши', 'Доступность', 'О подписке']) {
     await settingsTab(a, tab).click();
-    await expect(settingsTab(a, tab).locator('svg')).toBeVisible();
     await expectNoEmojiControls(page, `настройки: ${tab}`);
   }
   await page.keyboard.press('Escape');

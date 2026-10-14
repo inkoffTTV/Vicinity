@@ -91,7 +91,9 @@ test('call: accept, both connected with audio, camera and screen reach the other
   await b.page.locator('.rail-item.home').click();
   await b.page.locator('.tabs button', { hasText: 'Все' }).click();
   await b.page.locator('.friend-row', { hasText: 'Алиса' }).locator('.friend-main').click();
-  await b.page.locator('.profile-view').getByRole('button', { name: 'Позвонить' }).click();
+  // «Позвонить» — в меню «Ещё» карточки профиля
+  await b.page.locator('.profile-view').getByRole('button', { name: 'Ещё' }).click();
+  await b.page.getByRole('menuitem', { name: 'Позвонить' }).click();
   await expect(b.page.locator('.profile-view')).toHaveCount(0);
   await expect(banner(a)).toContainText('Боб');
   await banner(a).getByRole('button', { name: 'Принять' }).click();

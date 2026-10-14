@@ -34,6 +34,8 @@ async function addToGroup(owner: User, who: User) {
 test('reconnect catch-up: messages, groups and friend requests missed while offline show up', async ({ browser }) => {
   const a = await registerUser(browser, 'Алиса');
   const b = await registerUser(browser, 'Боб');
+  // Заявку в друзья пришлёт новый человек: с Бобом Алиса уже дружит (личка — только с друзьями)
+  const c = await registerUser(browser, 'Вера');
   await openDmBothSides(a, b);
   const sock = await controlSocket(a);
   await expect(a.page.locator('.chat-title', { hasText: 'Боб' })).toBeVisible();
@@ -43,11 +45,11 @@ test('reconnect catch-up: messages, groups and friend requests missed while offl
   await send(b, 'пока тебя не было');
   await createGroup(b, 'Сбор');
   await addToGroup(b, a);
-  await b.page.locator('.rail-item.home').click();
-  await b.page.locator('.tabs button', { hasText: 'Добавить в друзья' }).click();
-  await b.page.locator('.add-friend input').fill(a.username);
-  await b.page.locator(`.user-row:has-text("@${a.username}")`).getByRole('button', { name: 'В друзья' }).click();
-  await expect(b.page.locator('.toast', { hasText: 'Заявка отправлена' })).toBeVisible();
+  await c.page.locator('.rail-item.home').click();
+  await c.page.locator('.tabs button', { hasText: 'Добавить в друзья' }).click();
+  await c.page.locator('.add-friend input').fill(a.username);
+  await c.page.locator('.add-friend').getByRole('button', { name: 'Отправить заявку' }).click();
+  await expect(c.page.locator('.add-friend-result')).toContainText('Заявка отправлена');
   await expect(msgText(a, 'пока тебя не было')).toHaveCount(0);
 
   // Обрыв → переподключение → догоняем пропущенное

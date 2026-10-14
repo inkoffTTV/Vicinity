@@ -29,10 +29,10 @@ async function expectOnScreen(page: Page, el: Locator, what: string) {
 }
 
 /** Прокрутить раздел до конца и убедиться, что последний элемент управления виден и нажимается */
-async function checkPanel(page: Page, panel: Locator, what: string) {
+async function checkPanel(page: Page, panel: Locator, what: string, frame = '.modal.settings-modal') {
   await expect(panel).toBeVisible();
   // Окно целиком на экране, страница вбок не прокручивается
-  await expectOnScreen(page, page.locator('.modal.settings-modal'), `${what}: окно`);
+  await expectOnScreen(page, page.locator(frame), `${what}: окно`);
   expect(await page.evaluate(() => document.documentElement.scrollWidth), `${what}: ширина страницы`).toBeLessThanOrEqual(PHONE.width);
 
   const scrolled = await panel.evaluate((el) => {
@@ -59,40 +59,41 @@ async function checkPanel(page: Page, panel: Locator, what: string) {
   }
 }
 
-test('settings on a 360×640 phone: full-screen sheet, every tab scrolls to its last control', async ({ browser }) => {
+test('settings on a 360×640 phone: list of sections, each opens full-screen and scrolls to its last control', async ({ browser }) => {
   const u = await registerUser(browser, 'Мобила', { viewport: PHONE });
   const page = u.page;
+  const frame = '.modal.bare';
 
   await openNav(page);
   await page.getByRole('button', { name: 'Настройки', exact: true }).click();
-  const modal = page.locator('.modal.settings-modal');
-  await expect(modal).toBeVisible();
-  // Шапка с кнопкой «Закрыть» на экране
-  await expectOnScreen(page, modal.locator('.modal-head').getByRole('button', { name: 'Закрыть' }), 'закрыть');
+  const nav = page.locator('.settings-nav');
+  await expect(nav).toBeVisible();
+  await expectOnScreen(page, nav.getByRole('button', { name: 'Закрыть настройки' }), 'закрыть');
 
-  // Профиль: «Сохранить» видна сразу, без прокрутки (прилипает к низу)
-  await settingsTab(u, 'Профиль').click();
-  await expectOnScreen(page, modal.getByRole('button', { name: 'Сохранить' }), 'сохранить профиль');
-  await modal.getByRole('button', { name: 'Сохранить' }).click({ trial: true });
-
-  for (const tab of ['Профиль', 'Аккаунт', 'Тема', 'Специальные возможности', 'Подписка', 'Уведомления', 'Голос и видео']) {
-    // Вкладка видна и нажимается, даже если строка разделов прокручена
+  const sections = ['Аккаунт', 'Профиль', 'Внешний вид', 'Значок приложения', 'Голос и видео', 'Уведомления', 'Горячие клавиши', 'Доступность', 'О подписке'];
+  for (const tab of sections) {
+    // Пункт меню виден и нажимается, даже если список прокручен
     await settingsTab(u, tab).scrollIntoViewIfNeeded();
+    await expectOnScreen(page, settingsTab(u, tab), `пункт ${tab}`);
     await settingsTab(u, tab).click();
-    await expect(settingsTab(u, tab)).toHaveAttribute('aria-selected', 'true');
-    await expectOnScreen(page, settingsTab(u, tab), `вкладка ${tab}`);
-    await checkPanel(page, page.locator('#settings-panel'), `настройки: ${tab}`);
+    await expect(settingsTab(u, tab)).toHaveAttribute('aria-current', 'page');
+    // Раздел — на весь экран, с кнопкой «К разделам»
+    const back = page.locator('.settings-main').getByRole('button', { name: 'К разделам' });
+    await expectOnScreen(page, back, `${tab}: назад`);
+    await checkPanel(page, page.locator('.settings-main-body'), `настройки: ${tab}`, frame);
+    await back.click();
+    await expect(nav).toBeVisible();
   }
 
-  // Самая длинная форма — смена пароля: последний её элемент доступен и с открытой «клавиатурой»
+  // Самая длинная форма — аккаунт: последний элемент доступен и с открытой «клавиатурой»
   // (видимая область ниже — окно сжимается вместе с ней)
   await settingsTab(u, 'Аккаунт').click();
   await page.setViewportSize({ width: 360, height: 360 });
-  await checkPanel(page, page.locator('#settings-panel'), 'аккаунт при открытой клавиатуре');
+  await checkPanel(page, page.locator('.settings-main-body'), 'аккаунт при открытой клавиатуре', frame);
   await page.setViewportSize(PHONE);
 
-  await modal.getByRole('button', { name: 'Закрыть' }).click();
-  await expect(modal).toHaveCount(0);
+  await page.locator('.settings-main').getByRole('button', { name: 'Закрыть настройки' }).click();
+  await expect(page.locator(frame)).toHaveCount(0);
   expect(pageErrors(page)).toEqual([]);
   await u.context.close();
 });

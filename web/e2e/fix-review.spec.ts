@@ -34,7 +34,7 @@ async function api(request: APIRequestContext, token: string, method: 'GET' | 'P
 }
 
 async function makeFriends(request: APIRequestContext, a: Account, b: Account) {
-  expect((await api(request, a.token, 'POST', '/friends/request', { user_id: b.id })).status).toBe(201);
+  expect((await api(request, a.token, 'POST', '/friends/request', { user_id: b.id, username: b.username })).status).toBe(201);
   expect((await api(request, b.token, 'POST', '/friends/respond', { user_id: a.id, accept: true })).status).toBe(200);
 }
 
@@ -385,7 +385,7 @@ test.describe('исправления по ревью', () => {
   test('файлы: attachment только для картинок (старые десктопы), имя файла при скачивании', async ({ request }) => {
     const a = await register(request, 'Отправитель');
     const b = await register(request, 'Адресат');
-    const dm = (await api(request, a.token, 'POST', '/dms', { user_id: b.id })).body.channel_id as number;
+    const dm = (await api(request, a.token, 'POST', '/dms', { user_id: b.id, username: b.username })).body.channel_id as number;
     const name = "Смета 100% (финал) Q'3 #2.txt";
     const up = await request.post(`${API}/channels/${dm}/attachments`, {
       headers: { Authorization: `Bearer ${a.token}` },

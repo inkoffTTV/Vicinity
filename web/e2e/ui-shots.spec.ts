@@ -50,7 +50,7 @@ for (const [name, viewport, colorScheme] of [
     await shot('settings-profile');
     await settingsTab(a, 'Аккаунт').click();
     await shot('settings-account');
-    await page.locator('#settings-panel').evaluate((el) => (el.scrollTop = el.scrollHeight));
+    await page.locator('.settings-main-body').evaluate((el) => (el.scrollTop = el.scrollHeight));
     await shot('settings-account-bottom');
     await settingsTab(a, 'Тема').click();
     await shot('settings-appearance');

@@ -32,13 +32,13 @@ async function api(request: APIRequestContext, a: Account, method: 'GET' | 'POST
 }
 
 async function startDm(request: APIRequestContext, a: Account, b: Account): Promise<number> {
-  const r = await api(request, a, 'POST', '/dms', { user_id: b.id });
+  const r = await api(request, a, 'POST', '/dms', { user_id: b.id, username: b.username });
   expect(r.status).toBe(201);
   return r.body.channel_id;
 }
 
 async function makeFriends(request: APIRequestContext, a: Account, b: Account) {
-  expect((await api(request, a, 'POST', '/friends/request', { user_id: b.id })).status).toBe(201);
+  expect((await api(request, a, 'POST', '/friends/request', { user_id: b.id, username: b.username })).status).toBe(201);
   expect((await api(request, b, 'POST', '/friends/respond', { user_id: a.id, accept: true })).status).toBe(200);
 }
 

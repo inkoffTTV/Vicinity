@@ -171,7 +171,7 @@ test('desktop peer: screen share is capped at 1080p30 even on Ultra', async ({ b
     data: { username: uniqueName('desk'), password: 'password123', display_name: 'Десктоп' },
   });
   const desk = await reg.json();
-  await request.post(`${API}/dms`, { headers: { Authorization: `Bearer ${desk.token}` }, data: { user_id: me.user_id } });
+  await request.post(`${API}/dms`, { headers: { Authorization: `Bearer ${desk.token}` }, data: { user_id: me.user_id, username: a.username } });
   const d = await RawWs.open(desk.token);
   d.send({ type: 'call_invite', to: me.user_id, sdp: DESKTOP_OFFER, sdpType: 'offer', name: 'Десктоп' });
   await banner(a).getByRole('button', { name: 'Принять' }).click();

@@ -166,7 +166,7 @@ test('desktop calls the browser: answer shape, ICE order, hang-up from the deskt
   const a = await registerUser(browser, 'Алиса');
   const alice = await browserAccount(request, a);
   const desk = await registerDesktop(request, 'Десктоп');
-  expect((await post(request, desk, '/dms', { user_id: alice.id })).status()).toBe(201);
+  expect((await post(request, desk, '/dms', { user_id: alice.id, username: a.username })).status()).toBe(201);
   const d = await Desktop.open(desk);
 
   d.send({ type: 'call_invite', to: alice.id, sdp: DESKTOP_OFFER, sdpType: 'offer', name: 'Десктоп' });
@@ -231,7 +231,7 @@ test('browser calls the desktop: offer layout; an old desktop that rejects media
   const a = await registerUser(browser, 'Алиса');
   const alice = await browserAccount(request, a);
   const desk = await registerDesktop(request, 'Десктоп');
-  expect((await post(request, desk, '/dms', { user_id: alice.id })).status()).toBe(201);
+  expect((await post(request, desk, '/dms', { user_id: alice.id, username: a.username })).status()).toBe(201);
   const d = await Desktop.open(desk);
   await a.page.reload();
   await a.page.locator('.side-item', { hasText: 'Десктоп' }).click();

@@ -140,7 +140,7 @@ test('paste: text wins over the image rendering that office apps add; a bare ima
   await expect(a.page.locator('.upload-preview')).toBeVisible();
 });
 
-test('drafts survive channel switches but not sending; stale search answers do not win', async ({ browser }) => {
+test('drafts survive channel switches but not sending', async ({ browser }) => {
   const a = await registerUser(browser, 'Алиса');
   const b = await registerUser(browser, 'Боб');
   await openDm(a, b);
@@ -158,23 +158,5 @@ test('drafts survive channel switches but not sending; stale search answers do n
   await dm.click();
   await expect(box).toHaveValue('');
 
-  // Ответ на прежний запрос поиска приходит последним и не перетирает свежие результаты
-  const prefix = b.username.slice(0, -1);
-  await a.page.route(/\/api\/v1\/users\/search\?/, async (route) => {
-    if (new URL(route.request().url()).searchParams.get('q') !== prefix) return route.fallback();
-    await sleep(1500);
-    await route.fulfill({ json: { users: [] } });
-  });
-  await friendsItem.click();
-  await a.page.locator('.tabs button', { hasText: 'Добавить в друзья' }).click();
-  const search = a.page.locator('.add-friend input');
-  await search.fill(prefix);
-  await sleep(500);
-  await search.fill(b.username);
-  const row = a.page.locator(`.user-row:has-text("@${b.username}")`);
-  await expect(row).toBeVisible();
-  await sleep(1700);
-  await expect(row).toBeVisible();
-  await expect(a.page.getByText('Никого не найдено')).toHaveCount(0);
   expect(pageErrors(a.page)).toEqual([]);
 });

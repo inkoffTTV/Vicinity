@@ -56,6 +56,7 @@ test('the app works under the Content-Security-Policy that nginx sends', async (
   await page.keyboard.press('Escape');
 
   await page.getByTitle('Настройки').click();
+  await page.locator('.settings-groups button', { hasText: /^Профиль$/ }).click();
   await page.locator('.settings-avatar input[type=file]').setInputFiles({ name: 'a.png', mimeType: 'image/png', buffer: pngBuffer(64, 64) });
   await expect(page.locator('.toast', { hasText: 'Аватар обновлён' })).toBeVisible();
   await expect(page.locator('.settings-avatar img')).toHaveAttribute('src', /^\/uploads\//);

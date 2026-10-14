@@ -36,8 +36,8 @@ test('"write to the admin" opens the DM with inkoff; hidden for the admin himsel
   await admin.page.locator('.user-panel-me').click();
   await admin.page.getByRole('button', { name: 'Настройки', exact: true }).click();
   await settingsTab(admin, 'Аккаунт').click();
-  await expect(admin.page.locator('#settings-panel')).toContainText('Смена пароля');
-  await expect(admin.page.locator('#settings-panel').getByRole('button', { name: 'Написать администратору' })).toHaveCount(0);
+  await expect(admin.page.locator('.settings-main-body')).toContainText('Пароль и безопасность');
+  await expect(admin.page.locator('.settings-main-body').getByRole('button', { name: 'Написать администратору' })).toHaveCount(0);
   await admin.page.keyboard.press('Escape');
 
   // Гость: кнопка в боковой панели открывает личку с администратором
@@ -53,7 +53,7 @@ test('"write to the admin" opens the DM with inkoff; hidden for the admin himsel
   await page.locator('.rail-item.home').click();
   await page.getByRole('button', { name: 'Настройки', exact: true }).click();
   await settingsTab(guest, 'Аккаунт').click();
-  await page.locator('#settings-panel').getByRole('button', { name: 'Написать администратору' }).click();
+  await page.locator('.settings-main-body').getByRole('button', { name: 'Написать администратору' }).click();
   await expect(page.locator('.modal.settings-modal')).toHaveCount(0);
   await expect(page).toHaveURL(dmUrl);
 

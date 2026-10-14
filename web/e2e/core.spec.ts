@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { createServer, joinServer, makeFriends, pageErrors, pngBuffer, registerUser } from './helpers';
+import { settingsTab } from './w2-helpers';
 
 test('friends, DMs, reactions, edit, attachments, delete', async ({ browser }) => {
   const a = await registerUser(browser, 'Алиса');
@@ -82,6 +83,7 @@ test('servers: create, join by code, messages, presence, profile, reload, logout
 
   // Настройки: био + аватар
   await b.page.getByTitle('Настройки').click();
+  await settingsTab(b, 'Профиль').click();
   await b.page.locator('label:has-text("О себе") textarea').fill('Тестовое био');
   await b.page.locator('.settings-avatar input[type=file]').setInputFiles({ name: 'a.png', mimeType: 'image/png', buffer: pngBuffer(64, 64) });
   await expect(b.page.locator('.toast', { hasText: 'Аватар обновлён' })).toBeVisible();

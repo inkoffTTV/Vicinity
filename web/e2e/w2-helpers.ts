@@ -10,7 +10,11 @@ export async function openServerSettings(u: User, item: 'Настройки се
   await expect(u.page.locator('.modal.settings-modal')).toBeVisible();
 }
 
-export const settingsTab = (u: User, name: string) => u.page.locator('.settings-tabs').getByRole('tab', { name });
+/** Раздел настроек: вкладка у настроек сервера, пункт меню слева — у настроек пользователя */
+export const settingsTab = (u: User, name: string) =>
+  u.page
+    .locator('.settings-tabs [role=tab], .settings-groups button')
+    .filter({ hasText: new RegExp(`^\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`) });
 
 /** Подтвердить действие в окне подтверждения (верхнее окно), при необходимости введя текст */
 export async function confirmDialog(u: User, action: string, typed?: string) {

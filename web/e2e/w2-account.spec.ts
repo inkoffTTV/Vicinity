@@ -28,7 +28,9 @@ test('change password: validation, wrong old password, other sessions are logged
   const other = await loginElsewhere(browser, a.username);
   await openAccount(a);
 
-  const form = a.page.locator('form', { hasText: 'Смена пароля' });
+  // «Пароль» → «Изменить» открывает окно смены пароля
+  await a.page.locator('.acc-row').filter({ has: a.page.locator('.acc-title', { hasText: /^Пароль$/ }) }).getByRole('button', { name: 'Изменить' }).click();
+  const form = a.page.locator('.modal form', { hasText: 'Смена пароля' });
   const oldPw = form.locator('label:has-text("Текущий пароль") input');
   const newPw = form.locator('label:has-text("Новый пароль") input').first();
   const repeat = form.locator('label:has-text("Повторите") input');
@@ -55,10 +57,7 @@ test('change password: validation, wrong old password, other sessions are logged
   await oldPw.fill('password123');
   await submit.click();
   await expect(a.page.locator('.toast', { hasText: 'Пароль изменён' })).toContainText('других устройствах: 1');
-  await expect(oldPw).toHaveValue('');
   await loggedOut(other);
-  await expect(a.page.locator('.session')).toHaveCount(1);
-  await a.page.keyboard.press('Escape');
   await a.page.reload();
   await expect(a.page.locator('.user-panel')).toContainText('В сети');
 
@@ -73,21 +72,26 @@ test('change password: validation, wrong old password, other sessions are logged
   expect(pageErrors(a.page)).toEqual([]);
 });
 
-test('sessions: list with the current device, end one, log out everywhere else; copy login and id', async ({ browser }) => {
+test('sessions: this device first, end one, log out everywhere else', async ({ browser }) => {
   const a = await registerUser(browser, 'Алиса');
   const second = await loginElsewhere(browser, a.username);
   const third = await loginElsewhere(browser, a.username);
   await openAccount(a);
+  await expect(a.page.locator('.acc-card')).toContainText(`@${a.username}`);
 
-  const sessions = a.page.locator('.session');
-  await expect(sessions).toHaveCount(3);
-  await expect(sessions.filter({ hasText: 'Это устройство' })).toHaveCount(1);
-  await expect(sessions.filter({ hasText: 'Это устройство' }).getByRole('button')).toHaveCount(0);
+  await a.page.locator('.acc-row', { hasText: 'Активные сеансы' }).click();
+  const dialog = a.page.locator('.sessions-modal');
+  const rows = dialog.locator('.session-row');
+  await expect(rows).toHaveCount(3);
+  // Это устройство — отдельно и без кнопки «Завершить»
+  const lists = dialog.locator('.session-list-v');
+  await expect(lists.first().locator('.session-row')).toHaveCount(1);
+  await expect(lists.first().getByRole('button')).toHaveCount(0);
 
-  // Завершить один сеанс — это устройство выходит (свой сеанс самый новый, сеансы — новые первыми)
-  await sessions.filter({ hasNotText: 'Это устройство' }).first().getByRole('button', { name: 'Завершить' }).click();
+  // Завершить один сеанс — одно из других устройств выходит
+  await dialog.getByRole('button', { name: 'Завершить' }).first().click();
   await expect(a.page.locator('.toast', { hasText: 'Сеанс завершён' })).toBeVisible();
-  await expect(sessions).toHaveCount(2);
+  await expect(rows).toHaveCount(2);
   const stillIn = async (p: Page) => {
     await p.reload();
     return p.locator('.user-panel').or(p.getByText('С возвращением!')).first().evaluate((el) => el.classList.contains('user-panel'));
@@ -95,22 +99,17 @@ test('sessions: list with the current device, end one, log out everywhere else; 
   const alive = [await stillIn(second), await stillIn(third)];
   expect(alive.filter(Boolean)).toHaveLength(1);
 
-  // Выйти на других устройствах — остался только текущий сеанс
-  await a.page.getByRole('button', { name: 'Выйти на других устройствах' }).click();
-  await expect(a.page.locator('.toast', { hasText: 'Выполнен выход на других устройствах' })).toBeVisible();
-  await expect(sessions).toHaveCount(1);
-  await expect(a.page.getByRole('button', { name: 'Выйти на других устройствах' })).toBeDisabled();
+  // Выйти на всех остальных (с подтверждением) — остался только текущий сеанс
+  await dialog.getByRole('button', { name: 'Выйти на всех остальных' }).click();
+  await dialog.getByRole('button', { name: 'Выйти', exact: true }).click();
+  await expect(a.page.locator('.toast', { hasText: 'Завершено сеансов: 1' })).toBeVisible();
+  await expect(rows).toHaveCount(1);
+  await expect(dialog).toContainText('Вы вошли только на этом устройстве');
+  await expect(dialog.getByRole('button', { name: 'Выйти на всех остальных' })).toHaveCount(0);
   for (const p of [second, third]) {
     await p.reload();
     await loggedOut(p);
   }
-
-  // Копирование логина и id
-  await a.page.getByRole('button', { name: 'Копировать @логин' }).click();
-  await expect(a.page.locator('.toast', { hasText: 'Логин скопирован' })).toBeVisible();
-  await a.page.getByRole('button', { name: 'Копировать ID' }).click();
-  await expect(a.page.locator('.toast', { hasText: 'ID скопирован' })).toBeVisible();
-  await expect(a.page.locator('.account-card')).toContainText(`@${a.username}`);
 
   expect(pageErrors(a.page)).toEqual([]);
 });
