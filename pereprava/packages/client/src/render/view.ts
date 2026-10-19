@@ -1,6 +1,7 @@
 // Отображение мира по снимкам. Клиент ничего не решает: позиции берёт из двух последних снимков
 // (интерполяция), анимации — из тиков атаки/урона/каста, эффекты — из событий.
 import * as THREE from 'three';
+import { RigInstancer } from './instancer';
 import {
   ABILITIES,
   DT,
@@ -106,12 +107,15 @@ export class GameView {
   private gplane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.3);
   private gp = new THREE.Vector3();
   onFloat?: (x: number, y: number, z: number, text: string, color?: string) => void;
+  /** Крипы и нейтралы рисуются инстансами */
+  private readonly inst: RigInstancer;
 
   constructor(
     readonly kit: SceneKit,
     readonly barsEl: HTMLElement,
     readonly floatsEl: HTMLElement,
   ) {
+    this.inst = new RigInstancer(kit.scene);
     this.marker = new THREE.Mesh(
       new THREE.RingGeometry(0.5, 0.8, 24).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: 0x7dff9a, transparent: true, opacity: 0, depthWrite: false }),
@@ -226,6 +230,7 @@ export class GameView {
     rig.root.position.set(us.x, unitY(us.x, us.z), us.z);
     rig.root.rotation.y = us.r;
     this.scene.add(rig.root);
+    if (us.k === 'creep' || us.k === 'neutral') this.inst.add(rig);
     const bar = document.createElement('div');
     bar.className = `bar ${us.k === 'neutral' ? 'creep' : us.k} ${us.tm === this.myTeam ? 'ally' : 'enemy'}`;
     bar.innerHTML = us.k === 'hero' ? '<i></i><b></b>' : '<i></i>';
@@ -255,20 +260,17 @@ export class GameView {
     const v = this.units.get(id);
     if (!v) return;
     this.scene.remove(v.rig.root);
+    this.inst.remove(v.rig);
     if (v.ring) this.scene.remove(v.ring);
     v.bar.remove();
     this.units.delete(id);
   }
 
   private addProj(ps: ProjSnap): VProj {
-    let mesh: THREE.Mesh;
-    if (ps.k === 'attack') {
-      let m = this.projMats.get(ps.c);
-      if (!m) this.projMats.set(ps.c, (m = new THREE.MeshBasicMaterial({ color: ps.c })));
-      mesh = new THREE.Mesh(G.proj, m);
-    } else {
-      mesh = new THREE.Mesh(G.fire, new THREE.MeshBasicMaterial({ color: ps.c }));
-    }
+    // Материалы снарядов кэшируются по цвету — без новой программы и утечки на каждый выстрел
+    let m = this.projMats.get(ps.c);
+    if (!m) this.projMats.set(ps.c, (m = new THREE.MeshBasicMaterial({ color: ps.c })));
+    const mesh = new THREE.Mesh(ps.k === 'attack' ? G.proj : G.fire, m);
     mesh.scale.setScalar(ps.s);
     const y = groundH(ps.x, ps.z) + ps.y0;
     mesh.position.set(ps.x, y, ps.z);
@@ -387,6 +389,7 @@ export class GameView {
       this.rune.position.y += Math.sin(time * 3) * 0.004;
     }
     this.updatePuffs(dt);
+    this.inst.update();
     this.markerT = Math.max(0, this.markerT - dt);
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = this.markerT * 2;

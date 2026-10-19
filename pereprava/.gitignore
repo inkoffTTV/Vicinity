@@ -4,3 +4,5 @@ test-results/
 playwright-report/
 .env
 *.log
+test-results/
+playwright-report/

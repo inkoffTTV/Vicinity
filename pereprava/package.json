@@ -18,7 +18,9 @@
     "typecheck": "tsc -p packages/shared && tsc -p packages/client && tsc -p packages/server",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "balance": "tsx packages/shared/scripts/balance.ts"
+    "balance": "tsx packages/shared/scripts/balance.ts",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@eslint/js": "9.39.1",

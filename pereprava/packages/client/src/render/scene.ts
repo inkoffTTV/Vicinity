@@ -57,9 +57,14 @@ export function createScene(host: HTMLElement): SceneKit {
 }
 
 /** Качество: плотность пикселей и размер карты теней */
-export function applyQuality(kit: SceneKit, q: Quality, shadows: boolean) {
+/** Разрешение рендера для уровня качества (до динамического понижения) */
+export function basePixelRatio(q: Quality) {
   const dpr = window.devicePixelRatio || 1;
-  kit.renderer.setPixelRatio(q === 'low' ? Math.min(dpr, 0.75) : q === 'mid' ? 1 : Math.min(dpr, 1.75));
+  return q === 'low' ? Math.min(dpr, 0.75) : q === 'mid' ? 1 : Math.min(dpr, 1.75);
+}
+
+export function applyQuality(kit: SceneKit, q: Quality, shadows: boolean, scale = 1) {
+  kit.renderer.setPixelRatio(basePixelRatio(q) * scale);
   const size = q === 'high' ? 2048 : q === 'mid' ? 1024 : 512;
   if (kit.sun.shadow.mapSize.x !== size) {
     kit.sun.shadow.mapSize.set(size, size);

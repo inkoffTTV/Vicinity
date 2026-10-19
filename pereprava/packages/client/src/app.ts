@@ -17,7 +17,8 @@ import { Sound, type Volumes } from './audio/sound';
 import { renderHeroCards, renderPickGrid, scoreTable } from './ui/screens';
 import type { Session } from './game/session';
 import { attachInput } from './game/input';
-import { applyQuality, createScene, type Quality } from './render/scene';
+import { AutoScale } from './render/autoscale';
+import { applyQuality, basePixelRatio, createScene, type Quality } from './render/scene';
 import { buildTerrain } from './render/terrain';
 import { GameView } from './render/view';
 import { fmt, Hud } from './ui/hud';
@@ -86,6 +87,14 @@ export class App {
   private loadT = 0;
   private mmT = 0;
   private last = performance.now();
+  /** #fps: счётчик кадров и вызовов отрисовки для профилирования на телефоне */
+  private fpsEl: HTMLElement | null = null;
+  private fpsAcc = { t: 0, n: 0 };
+  /** Динамическое разрешение в матче */
+  private readonly autoscale = new AutoScale((k) => {
+    // setPixelRatio сам пересчитывает размер буфера
+    this.kit.renderer.setPixelRatio(basePixelRatio(this.settings.quality) * k);
+  });
 
   constructor() {
     this.kit.scene.add(buildTerrain(this.kit.night).group);
@@ -158,6 +167,11 @@ export class App {
     this.resize();
     this.setState('menu');
     if (/debug/.test(location.hash)) this.exposeDebug();
+    if (/fps/.test(location.hash)) {
+      this.fpsEl = document.createElement('div');
+      this.fpsEl.id = 'fps';
+      this.app.appendChild(this.fpsEl);
+    }
     requestAnimationFrame((t) => this.frame(t));
   }
 
@@ -695,6 +709,8 @@ export class App {
       if (v) v.rig.root.rotation.y = face;
     }
     this.kit.renderer.render(this.kit.scene, this.kit.camera);
+    if (this.state === 'play') this.autoscale.tick(dt);
+    if (this.fpsEl) this.fpsTick(dt);
     this.view.updateBars();
     if (this.state === 'play' || this.state === 'over') this.hud.update(dt);
     if (!$('board').hidden) this.showBoard(true);
@@ -705,6 +721,16 @@ export class App {
       this.hud.drawMinimap();
     }
     requestAnimationFrame((t) => this.frame(t));
+  }
+
+  private fpsTick(dt: number) {
+    const a = this.fpsAcc;
+    a.t += dt;
+    a.n++;
+    if (a.t < 0.5) return;
+    const info = this.kit.renderer.info.render;
+    this.fpsEl!.textContent = `${Math.round(a.n / a.t)} к/с · ${info.calls} вызовов · ${Math.round(info.triangles / 1000)}k треуг. · ×${this.kit.renderer.getPixelRatio().toFixed(2)}`;
+    a.t = a.n = 0;
   }
 
   resize() {

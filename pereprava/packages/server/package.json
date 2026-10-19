@@ -9,7 +9,7 @@
     "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/server.js --external:ws"
   },
   "dependencies": {
-    "@pereprava/shared": "0.4.0",
+    "@pereprava/shared": "*",
     "ws": "8.18.3"
   },
   "devDependencies": {
