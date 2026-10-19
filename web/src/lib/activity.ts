@@ -56,10 +56,29 @@ interface Invite {
   name: string;
 }
 
+/** Как показано окно игры: в окне поверх приложения или на весь экран (запоминается на устройстве) */
+export type ActivityView = 'window' | 'full';
+const VIEW_KEY = 'vicinity.activity.view';
+const isPhone = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches;
+function loadView(): ActivityView {
+  if (isPhone()) return 'full';
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'full' ? 'full' : 'window';
+  } catch {
+    return 'window';
+  }
+}
+
 interface ActivityState {
   /** Открытая игра; peerId — мой номер в ней (0 — ещё подключаемся) */
   session: { channelId: number; game: string; peerId: number; peers: ActivityPeer[] } | null;
   invites: Invite[];
+  /** В окне / на весь экран; на телефоне всегда на весь экран */
+  view: ActivityView;
+  /** Свёрнуто: окно спрятано, игра работает (фрейм не перезагружается) */
+  minimized: boolean;
+  setView: (v: ActivityView) => void;
+  setMinimized: (m: boolean) => void;
   start: (channelId: number, game: string) => void;
   leave: () => void;
   dismissInvite: (channelId: number) => void;
@@ -82,17 +101,29 @@ export function peerInfo(peerId: number, userId: number): ActivityPeer {
 export const useActivity = create<ActivityState>((set, get) => ({
   session: null,
   invites: [],
+  view: loadView(),
+  minimized: false,
+  setView: (v) => {
+    set({ view: v });
+    if (isPhone()) return;
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* хранилище недоступно — просто не запоминаем */
+    }
+  },
+  setMinimized: (m) => set({ minimized: m }),
   start: (channelId, game) => {
     const cur = get().session;
     if (cur) socket.send({ type: 'activity_leave', channel_id: cur.channelId, game: cur.game });
-    set({ session: { channelId, game, peerId: 0, peers: [] }, invites: get().invites.filter((i) => i.channelId !== channelId) });
+    set({ session: { channelId, game, peerId: 0, peers: [] }, minimized: false, view: loadView(), invites: get().invites.filter((i) => i.channelId !== channelId) });
     socket.send({ type: 'activity_join', channel_id: channelId, game });
   },
   leave: () => {
     const cur = get().session;
     if (!cur) return;
     socket.send({ type: 'activity_leave', channel_id: cur.channelId, game: cur.game });
-    set({ session: null });
+    set({ session: null, minimized: false });
   },
   dismissInvite: (channelId) => set({ invites: get().invites.filter((i) => i.channelId !== channelId) }),
 }));

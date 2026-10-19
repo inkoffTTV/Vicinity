@@ -4835,10 +4835,54 @@ a:focus-visible > .ico {
 .act-layer.full .act-head {
   padding: 6px 10px;
 }
+/* Свёрнутая игра: окно спрятано, но iframe живёт — не display:none и не visibility:hidden
+   (браузер притормозил бы скрытый фрейм: игра против бота встала бы, WebGL уснул). Слой прозрачный
+   и не ловит нажатия, фокус в него не попадает (inert). */
+.act-layer.min {
+  opacity: 0;
+  pointer-events: none;
+  animation: none;
+}
+.act-layer.min * {
+  pointer-events: none;
+}
+.act-head .btn:focus-visible,
+.act-mini:focus-visible {
+  outline: 2px solid var(--accent, #7c5cff);
+  outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .act-head .act-btn-label {
+    display: none;
+  }
+}
+/* Плашка свёрнутой игры — в одной колонке с приглашениями, поэтому они не накладываются */
+.act-mini {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(320px, calc(100vw - 36px));
+  margin-left: auto;
+  padding: 8px 12px 8px 8px;
+  border-radius: 14px;
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  animation: vc-pop 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.act-mini:hover {
+  background: var(--bg-hover, var(--bg-modal));
+}
 .act-invites {
   position: fixed;
   right: 18px;
-  bottom: 18px;
+  /* Выше поля ввода и панели звонка: кнопки микрофона и сброса не перекрываются */
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   z-index: 160;
   display: flex;
   flex-direction: column;

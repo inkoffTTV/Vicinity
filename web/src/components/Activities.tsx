@@ -1,4 +1,4 @@
-import { Gamepad2, LogOut, Maximize2, Minimize2, Play, Rocket, Users, X } from 'lucide-react';
+import { Gamepad2, LogOut, Maximize2, Minimize2, Minus, Play, Rocket, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ACTIVITY_GAMES, ActivityGame, gameById, onFrameMessage, peerInfo, sendFromFrame, useActivity } from '../lib/activity';
 import { api, ApiError } from '../lib/api';
@@ -104,32 +104,60 @@ export function ActivityFrame() {
   const me = useStore((s) => s.me);
   const ref = useRef<HTMLIFrameElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
+  const restoreRef = useRef<() => void>(() => undefined);
   const game = session ? gameById(session.game) : undefined;
-  // На весь экран: настоящий полноэкранный режим, а где браузер его не даёт (iPhone, встроенный WebView) —
-  // окно игры растягивается на всё окно приложения. На телефоне игра сразу открывается развёрнутой.
-  const phone = () => window.matchMedia('(max-width: 700px)').matches;
+  // Три состояния окна игры (5б/фаза 0):
+  //  «в окне» — по центру поверх приложения;
+  //  «на весь экран» — requestFullscreen, а где браузер не даёт (iPhone, WebView, Electron без поддержки) —
+  //    окно растягивается на всё окно приложения с учётом safe-area; на телефоне игра сразу так;
+  //  «свёрнуто» — слой прозрачный и не ловит нажатия, iframe живёт (не размонтируется и не перезагружается).
+  const view = useActivity((s) => s.view);
+  const setView = useActivity((s) => s.setView);
+  const minimized = useActivity((s) => s.minimized);
+  const setMinimized = useActivity((s) => s.setMinimized);
   const canFs = typeof document.documentElement.requestFullscreen === 'function';
-  const [fs, setFs] = useState(false);
-  const [max, setMax] = useState(phone);
+  const focusGame = () => setTimeout(() => ref.current?.focus(), 60);
   useEffect(() => {
     const onChange = () => {
-      setFs(!!document.fullscreenElement);
-      if (!document.fullscreenElement) setMax(phone());
+      // Esc вышел из полноэкранного режима (это делает браузер) — остаёмся в окне
+      if (!document.fullscreenElement && !window.matchMedia('(max-width: 700px)').matches && !useActivity.getState().minimized)
+        useActivity.getState().setView('window');
     };
     document.addEventListener('fullscreenchange', onChange);
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
-  const toggleFull = () => {
-    if (fs) document.exitFullscreen().catch(() => undefined);
-    else if (canFs) {
-      setMax(true);
-      layerRef.current?.requestFullscreen().catch(() => undefined);
-    } else setMax((m) => !m);
-    // Клавиши снова в игру
-    setTimeout(() => ref.current?.focus(), 60);
+  const enterFull = () => {
+    setView('full');
+    if (canFs && layerRef.current && !document.fullscreenElement) layerRef.current.requestFullscreen().catch(() => undefined);
   };
-  const isFull = fs || max;
-  const shrink = fs || (!canFs && max);
+  const toWindow = () => {
+    setView('window');
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
+  };
+  const toggleFull = () => {
+    if (view === 'full') toWindow();
+    else enterFull();
+    focusGame();
+  };
+  const minimize = () => {
+    // Полноэкранный режим скрытым быть не может — выходим из него, но «весь экран» помним для разворачивания
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
+    setMinimized(true);
+  };
+  // Развернуть (нажатие на плашку — жест пользователя, поэтому полноэкранный режим можно включить снова)
+  useEffect(() => {
+    restoreRef.current = () => {
+      setMinimized(false);
+      if (useActivity.getState().view === 'full') enterFull();
+      focusGame();
+    };
+  });
+  const isFull = view === 'full';
+  // Свёрнутая игра не забирает фокус и нажатия — звонок и чат работают как обычно
+  // (inert ставим вручную: в типах React 18 этого атрибута нет)
+  useEffect(() => {
+    layerRef.current?.toggleAttribute('inert', minimized);
+  }, [minimized, session?.game]);
 
   useEffect(() => {
     if (!session) return;
@@ -177,9 +205,17 @@ export function ActivityFrame() {
 
   if (!session || !game) return null;
   return (
-    <div ref={layerRef} className={`act-layer${isFull ? ' full' : ''}`} role="dialog" aria-label={`Игра «${game.name}»`}>
+    <div
+      ref={layerRef}
+      className={`act-layer${isFull ? ' full' : ''}${minimized ? ' min' : ''}`}
+      role="dialog"
+      aria-label={`Игра «${game.name}»`}
+      aria-hidden={minimized || undefined}
+      data-view={minimized ? 'min' : view}
+    >
+      <RestoreBridge restore={() => restoreRef.current()} />
       <div className="act-window">
-        <header className="act-head" onDoubleClick={toggleFull}>
+        <header className="act-head" onDoubleClick={toggleFull} title="Двойной клик — весь экран / в окно">
           <Cover game={game} size="sm" />
           <strong>{game.name}</strong>
           <span className="act-peers">
@@ -192,18 +228,24 @@ export function ActivityFrame() {
           </span>
           <span className="muted small">{session.peerId ? `Игроков: ${session.peers.length + 1}` : 'Подключение…'}</span>
           <span className="grow" />
+          <button type="button" className="btn small" onClick={minimize} title="Свернуть — игра продолжится" aria-label="Свернуть игру">
+            <Icon icon={Minus} size={14} />
+            <span className="act-btn-label">Свернуть</span>
+          </button>
           <button
             type="button"
             className="btn small"
             onClick={toggleFull}
-            aria-pressed={shrink}
-            title={shrink ? 'Свернуть в окно' : 'На весь экран'}
-            aria-label={shrink ? 'Свернуть в окно' : 'На весь экран'}
+            aria-pressed={isFull}
+            title={isFull ? 'В окно' : 'На весь экран'}
+            aria-label={isFull ? 'В окно' : 'На весь экран'}
           >
-            <Icon icon={shrink ? Minimize2 : Maximize2} size={14} />
+            <Icon icon={isFull ? Minimize2 : Maximize2} size={14} />
+            <span className="act-btn-label">{isFull ? 'В окно' : 'На весь экран'}</span>
           </button>
-          <button type="button" className="btn small" onClick={leave}>
-            <Icon icon={LogOut} size={14} /> Выйти из игры
+          <button type="button" className="btn small" onClick={leave} aria-label="Выйти из игры">
+            <Icon icon={LogOut} size={14} />
+            <span className="act-btn-label">Выйти из игры</span>
           </button>
         </header>
         <iframe
@@ -221,7 +263,40 @@ export function ActivityFrame() {
   );
 }
 
-/** Приглашения в игру от тех, с кем вы сейчас в голосовом канале или звонке */
+let restoreGame: () => void = () => useActivity.getState().setMinimized(false);
+/** Окно игры отдаёт плашке свою функцию «развернуть» (с полноэкранным режимом и фокусом в игру) */
+function RestoreBridge({ restore }: { restore: () => void }) {
+  useEffect(() => {
+    restoreGame = restore;
+    return () => {
+      restoreGame = () => useActivity.getState().setMinimized(false);
+    };
+  });
+  return null;
+}
+
+/** Плашка свёрнутой игры: «Переправа · идёт игра», значок, число игроков; нажатие — развернуть */
+function MinimizedGame() {
+  const session = useActivity((s) => s.session);
+  const minimized = useActivity((s) => s.minimized);
+  const game = session ? gameById(session.game) : undefined;
+  if (!session || !game || !minimized) return null;
+  const players = session.peerId ? session.peers.length + 1 : 1;
+  return (
+    <button type="button" className="act-mini" onClick={() => restoreGame()} aria-label={`${game.name}: идёт игра, игроков ${players}. Развернуть`}>
+      <Cover game={game} size="sm" />
+      <span className="grow">
+        <strong>{game.name}</strong> · идёт игра
+      </span>
+      <span className="act-players muted small">
+        <Icon icon={Users} size={12} /> {players}
+      </span>
+      <Icon icon={Maximize2} size={14} />
+    </button>
+  );
+}
+
+/** Приглашения в игру от тех, с кем вы сейчас в голосовом канале или звонке, и плашка свёрнутой игры */
 export function ActivityInvites() {
   const invites = useActivity((s) => s.invites);
   const start = useActivity((s) => s.start);
@@ -230,9 +305,11 @@ export function ActivityInvites() {
   const callPeer = useCall((s) => (s.phase === 'idle' ? 0 : s.peerId));
   const dmCh = useStore((s) => (callPeer ? s.dms.find((d) => d.user_id === callPeer)?.channel_id ?? 0 : 0));
   const visible = invites.filter((i) => i.channelId === voiceCh || i.channelId === dmCh);
-  if (!visible.length) return null;
+  const mini = useActivity((s) => !!s.session && s.minimized);
+  if (!visible.length && !mini) return null;
   return (
     <div className="act-invites" aria-live="polite">
+      <MinimizedGame />
       {visible.map((i) => {
         const g = gameById(i.game)!;
         return (
