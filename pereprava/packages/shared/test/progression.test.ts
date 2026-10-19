@@ -153,3 +153,29 @@ describe('разворот', () => {
     expect(u.z).toBeLessThan(-0.5);
   });
 });
+
+describe('«Хаос» и фразы', () => {
+  it('«Хаос» 3 на 3 на одной линии доигрывается быстро', () => {
+    const ids = ['mage', 'brute', 'ranger', 'keeper', 'shade', 'frost'];
+    const w = createWorld({
+      seed: 21,
+      jungle: true,
+      mode: '1v1',
+      chaos: true,
+      players: ids.map((hero, i) => ({ name: 'Б' + i, team: (i < 3 ? 0 : 1) as 0 | 1, hero, bot: 'normal' })),
+    });
+    while (w.winner === -1 && w.tick < 25 * 60 * TICK_RATE) step(w);
+    expect(w.winner).not.toBe(-1);
+    expect(w.time / 60).toBeLessThan(16);
+  });
+
+  it('фраза уходит союзникам, но не чаще раза в 2 с', () => {
+    const w = duel();
+    queueCommand(w, 0, { c: 'say', id: 1 });
+    step(w);
+    expect(w.events).toContainEqual({ e: 'say', player: 0, team: 0, id: 1 });
+    queueCommand(w, 0, { c: 'say', id: 2 });
+    step(w);
+    expect(w.events.some((e) => e.e === 'say')).toBe(false);
+  });
+});

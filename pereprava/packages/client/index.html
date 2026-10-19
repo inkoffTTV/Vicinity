@@ -12,6 +12,9 @@
   <div id="floats"></div>
   <div id="hud">
   <canvas id="minimap" aria-label="Мини-карта: нажмите, чтобы отправить героя"></canvas>
+  <button id="sayBtn" class="panel" type="button" title="Фразы союзникам (Y)" aria-label="Фразы союзникам, клавиша Y">Фразы</button>
+  <div id="sayWheel" class="panel" hidden role="menu" aria-label="Фразы союзникам"></div>
+  <div id="feed" aria-live="polite"></div>
   <div id="top">
     <div id="score" class="panel num" role="button" tabindex="0" aria-label="Счёт матча, подробнее — Tab"><span class="a" id="kA">0</span><span id="clock">0:00</span><span class="e" id="kE">0</span></div>
     <div id="hoverPlate" class="panel" hidden aria-hidden="true"><b></b><div class="hpb"><i></i></div><span class="num"></span></div>
@@ -140,7 +143,7 @@
       <p class="lbl">Сложность бота</p>
       <div class="seg" role="radiogroup" aria-label="Сложность бота" id="diffSeg"><button data-v="easy">Лёгкий</button><button data-v="normal">Обычный</button><button data-v="hard">Сложный</button></div>
       <p class="lbl">Карта</p>
-      <div class="seg" role="radiogroup" aria-label="Карта: сколько линий и героев в команде" id="mapSeg"><button data-v="1v1">1 на 1</button><button data-v="2v2">2 на 2</button><button data-v="3v3">3 на 3</button></div>
+      <div class="seg" role="radiogroup" aria-label="Карта: сколько линий и героев в команде" id="mapSeg" style="--n:4"><button data-v="1v1">1 на 1</button><button data-v="2v2">2 на 2</button><button data-v="3v3">3 на 3</button><button data-v="chaos" title="3 на 3 на одной линии, случайные герои, вдвое быстрее золото и опыт — около 10 минут">Хаос</button></div>
       <p id="playMsg"></p>
       <button class="go" id="findBtn">Играть</button>
       <div id="search" hidden><span>Поиск игры</span><b id="searchT">0:00</b><button class="ghost" id="cancelSearch">Отмена</button></div>

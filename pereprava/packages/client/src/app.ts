@@ -7,6 +7,7 @@ import {
   getMap,
   HERO,
   HEROES,
+  mapOfMode,
   MODE_SIZE,
   type Command,
   type GameMode,
@@ -142,6 +143,9 @@ export class App {
     if (this.hud) this.hud.setMap(m);
   }
 
+  /** Герой, выпавший в «Хаосе» (для сообщения в начале матча) */
+  private chaosHero = '';
+
   /** Карта одиночной игры из настроек */
   private localMode(): GameMode {
     const m = this.settings.mode;
@@ -149,7 +153,7 @@ export class App {
   }
 
   constructor() {
-    this.applyMap(this.localMode());
+    this.applyMap(mapOfMode(this.localMode()));
     this.hud = new Hud(this.view, {
       send: (c) => this.send(c),
       cast: (slot) => this.cast(slot, null),
@@ -176,6 +180,7 @@ export class App {
       learn: (slot) => this.send({ c: 'learn', slot }),
       tpAim: () => this.tpAim(),
       courier: () => this.send({ c: 'courier' }),
+      sayWheel: () => this.hud.toggleSay(),
       armAttackMove: () => this.armAttackMove(),
       cancelAim: () => this.cancelAim(),
       useItem: (slot, aim) => this.useItem(slot, aim),
@@ -261,7 +266,15 @@ export class App {
   // ── Сессии ──
 
   private makeLocal(seed = 20261019): LocalSession {
-    const hero = HERO[this.settings.hero] ? this.settings.hero : 'mage';
+    const mode0 = this.localMode();
+    // «Хаос»: в настоящем матче герой выпадает случайно (в меню — выбранный)
+    const rnd = (k: number) => HEROES[Math.floor((((seed * 9301 + k * 49297) % 233280) / 233280) * HEROES.length)].id;
+    let hero = HERO[this.settings.hero] ? this.settings.hero : 'mage';
+    if (mode0 === 'chaos' && seed !== 20261019) {
+      hero = rnd(1);
+      this.enemyHero = rnd(2);
+    }
+    this.chaosHero = mode0 === 'chaos' && seed !== 20261019 ? hero : '';
     if (this.enemyHero === hero) this.enemyHero = hero === 'brute' ? 'mage' : 'brute';
     const mode = this.localMode();
     const n = MODE_SIZE[mode];
@@ -284,7 +297,7 @@ export class App {
       const h = nextHero();
       players.push({ name: HERO[h].name, team: 1, hero: h, bot: this.settings.diff });
     }
-    return new LocalSession({ seed, jungle: true, mode, players });
+    return new LocalSession({ seed, jungle: true, mode: mapOfMode(mode), chaos: mode === 'chaos', players });
   }
 
   /** Случайный противник для одиночной игры — не тот же герой */
@@ -655,7 +668,7 @@ export class App {
   private startNet(slot: number, team: Team, mode: GameMode) {
     if (this.session instanceof NetSession && this.session.slot === slot && this.state === 'play') return;
     this.session?.dispose();
-    this.applyMap(mode);
+    this.applyMap(mapOfMode(mode));
     const net = new NetSession(this.conn, slot, team);
     this.session = net;
     this.view.clear();
@@ -698,9 +711,11 @@ export class App {
     this.setState('play');
     const n = MODE_SIZE[this.localMode()];
     this.hud.toast(
-      n > 1
-        ? `${n} на ${n}: ваша команда — вы и боты, против — ${n} бота (${difficulty(this.settings.diff).name}). Крипы выходят на линии`
-        : `Против вас ${HERO[this.enemyHero].name}, бот ${difficulty(this.settings.diff).name}. Крипы выходят на линию`,
+      this.chaosHero
+        ? `Хаос: вам выпал ${HERO[this.chaosHero].name}. Золото и опыт вдвое быстрее — матч минут на десять`
+        : n > 1
+          ? `${n} на ${n}: ваша команда — вы и боты, против — ${n} бота (${difficulty(this.settings.diff).name}). Крипы выходят на линии`
+          : `Против вас ${HERO[this.enemyHero].name}, бот ${difficulty(this.settings.diff).name}. Крипы выходят на линию`,
     );
   }
 

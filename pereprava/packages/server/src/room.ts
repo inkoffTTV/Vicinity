@@ -7,6 +7,8 @@ import {
   HEROES,
   HERO,
   makeSnapshot,
+  isGameMode,
+  mapOfMode,
   MODE_SIZE,
   queueCommand,
   RECONNECT_GRACE_S,
@@ -235,7 +237,8 @@ export class Room {
         bot: s.client ? null : this.difficulty,
       })),
       jungle: true,
-      mode: this.mode,
+      mode: mapOfMode(this.mode),
+      chaos: this.mode === 'chaos',
     });
     this.state = 'game';
     this.pending = this.slots.map(() => []);
@@ -370,4 +373,4 @@ export class Room {
   }
 }
 
-export const isMode = (m: unknown): m is GameMode => m === '1v1' || m === '2v2';
+export const isMode = (m: unknown): m is GameMode => isGameMode(m);

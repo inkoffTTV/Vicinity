@@ -20,6 +20,8 @@ export interface InputActions {
   tpAim(): void;
   /** C: отправить курьера */
   courier(): void;
+  /** Y: колесо фраз */
+  sayWheel(): void;
   useItem(slot: number, aim: { x: number; z: number } | null): void;
   /** A: следующий клик — атака с передвижением */
   armAttackMove(): void;
@@ -138,6 +140,7 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
     } else if (e.code in SKILL) act.skillKey(SKILL[e.code]);
     else if (e.code === 'KeyT') act.tpAim();
     else if (e.code === 'KeyC') act.courier();
+    else if (e.code === 'KeyY') act.sayWheel();
     else if (/^Digit[1-6]$/.test(e.code)) act.useItem(+e.code.slice(5) - 1, mouseAim());
     else if (e.code === 'KeyA') act.armAttackMove();
     else if (e.code === 'KeyB') act.toggleShop();

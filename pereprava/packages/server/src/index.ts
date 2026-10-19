@@ -64,6 +64,8 @@ function cleanCommand(c: unknown): Command | null {
       return num(o.x) && num(o.z) ? { c: 'tp', x: o.x, z: o.z } : null;
     case 'courier':
       return { c: 'courier' };
+    case 'say':
+      return int(o.id) && o.id >= 0 && o.id < 16 ? { c: 'say', id: o.id } : null;
     case 'swap':
       return int(o.a) && int(o.b) && o.a >= 0 && o.b >= 0 && o.a < 9 && o.b < 9 ? { c: 'swap', a: o.a, b: o.b } : null;
     case 'use':

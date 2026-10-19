@@ -610,3 +610,13 @@ button.go{width:100%;padding:var(--s3) var(--s4);min-height:44px;border:0;border
   #dock #shopBtn,#dock #courierBtn{background:var(--panel);min-height:38px;padding:0 var(--s2)}
   #dock #quickBuy{position:absolute;right:0;top:44px}
 }
+
+/* Колесо фраз и лента сообщений союзников */
+#sayBtn{position:absolute;left:var(--s3);top:calc(var(--s3) + clamp(96px,min(26vw,30vh),150px) + 6px);min-height:34px;padding:0 var(--s3);cursor:pointer;font-size:var(--fs-s);color:var(--ink)}
+#sayWheel{position:absolute;left:var(--s3);top:calc(var(--s3) + clamp(96px,min(26vw,30vh),150px) + 46px);display:grid;grid-template-columns:repeat(2,minmax(120px,1fr));gap:4px;padding:6px;z-index:20}
+#sayWheel[hidden]{display:none}
+#sayWheel button{min-height:40px;padding:0 var(--s2);border-radius:var(--r2);border:1px solid var(--panel-line);background:var(--surface);color:var(--ink);font-size:var(--fs-s);text-align:left;cursor:pointer}
+#sayWheel button:hover,#sayWheel button:focus-visible{border-color:var(--gold);outline:none}
+#feed{position:absolute;left:var(--s3);top:calc(var(--s3) + clamp(96px,min(26vw,30vh),150px) + 46px);display:flex;flex-direction:column;gap:3px;pointer-events:none!important;max-width:min(60vw,360px)}
+#feed p{margin:0;padding:3px var(--s2);border-radius:var(--r1);background:rgba(10,14,20,.6);font-size:var(--fs-s);transition:opacity .8s}
+#feed p.out{opacity:0}

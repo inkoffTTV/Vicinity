@@ -8,6 +8,7 @@ import {
   ITEM,
   mapTrees,
   MAX_LEVEL,
+  PHRASES,
   RUNE_NAMES,
   type Command,
   type MapDef,
@@ -41,6 +42,9 @@ export interface HudActions {
   centerCamera(): void;
 }
 
+/** Цвета союзных игроков в ленте фраз */
+const FEED_COLORS = ['#7dd3fc', '#86efac', '#fcd34d', '#f9a8d4', '#c4b5fd', '#fdba74'];
+
 export interface HoverInfo {
   name: string;
   hp: number;
@@ -70,6 +74,18 @@ export class Hud {
   ) {
     $('shopBtn').addEventListener('click', () => this.toggleShop());
     $('courierBtn').addEventListener('click', () => this.act.send({ c: 'courier' }));
+    // Колесо фраз
+    const wheel = $('sayWheel');
+    wheel.innerHTML = PHRASES.map((p, i) => `<button type="button" role="menuitem" data-say="${i}">${p}</button>`).join(
+      '',
+    );
+    wheel.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-say]');
+      if (!b) return;
+      this.act.send({ c: 'say', id: +b.dataset.say! });
+      this.toggleSay(false);
+    });
+    $('sayBtn').addEventListener('click', () => this.toggleSay());
     $('tpSlot').addEventListener('click', () => this.act.tpAim());
     $('portrait').addEventListener('dblclick', () => this.act.centerCamera());
     // На телефоне двойное касание
@@ -112,6 +128,26 @@ export class Hud {
     el.querySelector('b')!.textContent = info.name;
     (el.querySelector('i') as HTMLElement).style.width = `${Math.max(0, Math.min(1, info.hp / info.mhp)) * 100}%`;
     el.querySelector('span')!.textContent = `${Math.ceil(info.hp)} / ${Math.round(info.mhp)}`;
+  }
+
+  /** Колесо фраз: открыть или закрыть */
+  toggleSay(open?: boolean) {
+    const w = $('sayWheel');
+    w.hidden = open === undefined ? !w.hidden : !open;
+    if (!w.hidden) w.querySelector<HTMLElement>('button')?.focus();
+  }
+
+  /** Строка в ленте фраз: исчезает через 6 с */
+  private feed(who: string, color: string, text: string) {
+    const el = document.createElement('p');
+    el.innerHTML = `<b style="color:${color}"></b> <span></span>`;
+    el.querySelector('b')!.textContent = who + ':';
+    el.querySelector('span')!.textContent = text;
+    const f = $('feed');
+    f.appendChild(el);
+    while (f.children.length > 5) f.firstElementChild!.remove();
+    setTimeout(() => el.classList.add('out'), 5200);
+    setTimeout(() => el.remove(), 6000);
   }
 
   toast(text: string) {
@@ -427,7 +463,14 @@ export class Hud {
         const h = HERO[me.hero];
         this.toast(`${h.name} ${h.fem ? 'вернулась' : 'вернулся'} в бой`);
       } else if (e.e === 'buy' && e.player === me.slot && e.item) this.toast('Куплено: ' + ITEM[e.item].name);
-      else if (e.e === 'neutral' && e.player === me.slot)
+      else if (e.e === 'say' && e.team === myTeam) {
+        const p = s.players[e.player];
+        this.feed(
+          `${p?.name ?? 'Игрок'} (${HERO[p?.hero ?? '']?.name ?? ''})`,
+          FEED_COLORS[e.player % FEED_COLORS.length],
+          PHRASES[e.id] ?? '',
+        );
+      } else if (e.e === 'neutral' && e.player === me.slot)
         this.toast('Найден нейтральный предмет: ' + ITEM[e.item].name);
       else if (e.e === 'courier' && e.player === me.slot)
         this.toast(

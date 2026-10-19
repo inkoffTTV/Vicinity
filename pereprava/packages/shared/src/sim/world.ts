@@ -89,6 +89,9 @@ export const MODE_PACE: Record<
   '3v3': { fortifyUntil: 9 * 60, decayFrom: 17, decayPerMin: 0.12, bld: 1.6 },
 };
 
+/** Темп «Хаоса» */
+export const CHAOS_PACE = { fortifyUntil: 2 * 60, decayFrom: 6, decayPerMin: 0.2, bld: 2.2 };
+
 export interface PlayerSetup {
   name: string;
   team: Team;
@@ -102,6 +105,8 @@ export interface MatchSetup {
   players: PlayerSetup[];
   /** Карта: по умолчанию — по числу игроков в команде (1v1 / 2v2 / 3v3) */
   mode?: MapId;
+  /** «Хаос»: вдвое быстрее золото и опыт, здания слабее — матч на 8–10 минут */
+  chaos?: boolean;
   /** Лесные лагеря и руна (фаза 3); прототип — без них */
   jungle?: boolean;
 }
@@ -109,6 +114,7 @@ export interface MatchSetup {
 export interface World {
   /** Карта матча (MapDef — getMap(w.mapId)) */
   mapId: MapId;
+  chaos?: boolean;
   tick: number;
   time: number;
   nextWave: number;
@@ -287,6 +293,7 @@ export function createWorld(setup: MatchSetup): World {
   const map = getMap(mapId);
   const w: World = {
     mapId,
+    chaos: setup.chaos || undefined,
     tick: 0,
     time: 0,
     nextWave: 1,
@@ -530,6 +537,12 @@ function applyCommand(w: World, slot: number, cmd: Command) {
       return;
     case 'courier':
       sendCourier(w, u);
+      return;
+    case 'say':
+      // Не чаще раза в 2 с — чтобы колесо фраз не превращалось в спам
+      if (!Number.isInteger(cmd.id) || cmd.id < 0 || cmd.id > 15 || w.time - (p.sayAt ?? -9) < 2) return;
+      p.sayAt = w.time;
+      emit(w, { e: 'say', player: slot, team: p.team, id: cmd.id });
       return;
     case 'swap': {
       const { a, b } = cmd;
@@ -842,7 +855,7 @@ export function damage(w: World, t: Unit, amt: number, src: Unit | null, type: D
   amt *= 1 + modValue(t, 'vuln');
   amt *= 1 - Math.min(0.8, modValue(t, 'resist'));
   if (t.kind === 'tower' || t.kind === 'ancient') {
-    const pace = MODE_PACE[w.mapId];
+    const pace = w.chaos ? CHAOS_PACE : MODE_PACE[w.mapId];
     amt *= pace.bld;
     if (w.time < pace.fortifyUntil) amt *= 1 - BALANCE.fortify;
     const late = w.time / 60 - pace.decayFrom;
@@ -901,6 +914,7 @@ export function damage(w: World, t: Unit, amt: number, src: Unit | null, type: D
 
 export function addGold(w: World, u: Unit, n: number, at?: P2) {
   const h = u.hero!;
+  if (w.chaos) n *= 2;
   h.gold += n;
   w.players[h.player].stats.gold += n;
   if (at) emit(w, { e: 'gold', player: h.player, amt: n, x: at.x, z: at.z });
@@ -908,6 +922,7 @@ export function addGold(w: World, u: Unit, n: number, at?: P2) {
 
 export function addXp(w: World, u: Unit, n: number) {
   const h = u.hero!;
+  if (w.chaos) n *= 2;
   if (h.level >= MAX_LEVEL) return;
   h.xp += n;
   while (h.level < MAX_LEVEL && h.xp >= xpNeed(h.level)) {
@@ -1277,7 +1292,7 @@ function heroTick(w: World, u: Unit): boolean {
     }
     recalc(u);
   }
-  h.gold += 1.5 * DT;
+  h.gold += (w.chaos ? 3 : 1.5) * DT;
   if (Math.hypot(u.x - ef.x, u.z - ef.z) < 9) damage(w, u, 170 * DT, null, 'pure');
   return u.alive;
 }

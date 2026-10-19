@@ -128,6 +128,7 @@ export class Lobby {
           <button class="go" data-act="create" data-mode="1v1">Создать 1 на 1</button>
           <button class="go alt" data-act="create" data-mode="2v2">Создать 2 на 2</button>
           <button class="go alt" data-act="create" data-mode="3v3">Создать 3 на 3</button>
+          <button class="go alt" data-act="create" data-mode="chaos">Создать «Хаос» 3 на 3</button>
         </div>
         <form class="lb-join" data-act="join">
           <label class="field">Код комнаты<input name="code" maxlength="5" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCDE"></label>
@@ -181,6 +182,7 @@ export class Lobby {
           ['1v1', '1 на 1'],
           ['2v2', '2 на 2'],
           ['3v3', '3 на 3'],
+          ['chaos', 'Хаос'],
         ])}</div>
         <div><p class="lbl">Боты</p>${seg(
           'diff',

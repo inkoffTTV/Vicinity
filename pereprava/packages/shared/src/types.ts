@@ -224,6 +224,8 @@ export type Command =
   | { c: 'tp'; x: number; z: number }
   /** Курьер: отвезти тайник герою */
   | { c: 'courier' }
+  /** Фраза из колеса (номер в PHRASES) — союзникам */
+  | { c: 'say'; id: number }
   /** Поменять местами два слота (в том числе с рюкзаком) */
   | { c: 'swap'; a: number; b: number }
   | { c: 'use'; slot: number; x?: number; z?: number }
@@ -238,6 +240,7 @@ export type SimEvent =
   /** Умение не сработало — игроку объясняем почему */
   | { e: 'castFail'; player: number; slot: number; reason: 'target' | 'cd' | 'stun' | 'silence' | 'level' | 'mana' }
   | { e: 'neutral'; player: number; item: string }
+  | { e: 'say'; player: number; team: Team; id: number }
   | { e: 'courier'; player: number; state: 'go' | 'back' | 'done' | 'dead' }
   | { e: 'death'; id: number; kind: UnitKind; team: Side; killer: number; x: number; z: number }
   | { e: 'heroKill'; victim: number; killer: number; victimTeam: Team }
@@ -276,6 +279,8 @@ export interface Player {
   hurtBy: Record<number, number>;
   /** Время последнего пинга (антиспам) */
   pingAt?: number;
+  /** Когда последний раз писал фразу (не чаще раза в 2 с) */
+  sayAt?: number;
 }
 
 export interface Rune {
