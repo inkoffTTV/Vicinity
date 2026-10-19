@@ -212,3 +212,45 @@ button.go:focus-visible{outline:3px solid #fff;outline-offset:2px}
 .slot .icd{position:absolute;inset:0;background:rgba(10,14,20,.6);opacity:var(--cd,0);pointer-events:none}
 .item small.parts{color:var(--gold);opacity:.85}
 .bar.me{outline-color:var(--gold)}
+
+/* ── 0.4: лобби сетевой игры ── */
+#lobby{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(94vw,560px);max-height:calc(100% - 24px);overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px;z-index:5}
+#lobby[hidden]{display:none}
+.lb-head{display:flex;align-items:center;gap:10px}
+.lb-head h2{font:400 22px "Russo One",sans-serif;margin:0;flex:1}
+.lb-head .code{color:var(--gold);letter-spacing:.08em}
+.icon-x{width:34px;height:34px;border-radius:8px;border:1px solid var(--panel-line);background:rgba(255,255,255,.06);cursor:pointer;font-size:20px;line-height:1}
+.lb-note{margin:0;color:var(--ink-dim);font-size:14px;line-height:1.45}
+.lb-create{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.lb-create .go{font-size:16px;padding:12px}
+.go.alt{background:rgba(255,255,255,.12);color:var(--ink)}
+.lb-join{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
+.lb-join .go{font-size:16px;padding:10px 18px;width:auto}
+.lb-join input{text-transform:uppercase;letter-spacing:.1em}
+.lb-msg{margin:0;min-height:1.2em;font-size:13px;color:var(--gold)}
+.lb-share{display:grid;grid-template-columns:1fr auto;gap:8px}
+.lb-share input{font:inherit;font-size:13px;color:var(--ink);background:rgba(0,0,0,.35);border:1px solid var(--panel-line);border-radius:7px;padding:8px 10px;min-width:0}
+.lb-opts{display:grid;grid-template-columns:1fr 1.4fr;gap:10px}
+.lb-opts .lbl{margin:0 0 4px}
+.lb-teams{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.lb-team{background:rgba(255,255,255,.04);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.lb-team h3{margin:0;font:400 15px "Russo One",sans-serif}
+.lb-team.a h3{color:var(--ally)} .lb-team.e h3{color:var(--enemy)}
+.lb-team ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
+.lb-team li{display:grid;grid-template-columns:1fr auto;gap:2px 8px;font-size:13px;padding:6px 8px;border-radius:6px;background:rgba(0,0,0,.25)}
+.lb-team li.me{outline:1px solid var(--gold)}
+.lb-team li span{color:var(--ink-dim);grid-column:1}
+.lb-team li .tag{grid-column:2;grid-row:1/3;align-self:center}
+.tag{font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,.08);color:var(--ink-dim)}
+.tag.ok{background:rgba(79,209,122,.18);color:var(--ally)} .tag.off{color:#ff9a8f} .tag.bot{color:var(--gold)}
+.lb-heroes{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.hpick{text-align:left;padding:10px;border-radius:8px;border:1px solid var(--panel-line);background:rgba(255,255,255,.04);cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.hpick b{font:400 17px "Russo One",sans-serif;color:var(--hc)}
+.hpick small{font-size:11px;color:var(--gold)} .hpick span{font-size:12px;color:var(--ink-dim)}
+.hpick.on{border-color:var(--gold);background:rgba(241,196,83,.12)}
+.hpick:disabled{opacity:.6;cursor:default}
+.lb-actions{display:grid;grid-template-columns:1fr 1.6fr;gap:8px}
+.lb-actions .go{font-size:16px;padding:12px}
+#netBanner{position:absolute;left:50%;top:84px;transform:translateX(-50%);padding:8px 14px;font-size:14px;color:#ff9a8f;z-index:4}
+#netBanner[hidden]{display:none}
+@media (max-width:520px){.lb-opts,.lb-teams{grid-template-columns:1fr}}

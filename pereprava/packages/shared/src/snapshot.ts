@@ -202,8 +202,16 @@ function eventVisible(w: World, e: SimEvent, team: Team | -1, slot: number, vis:
   }
 }
 
+/** События текущего тика, которые положено знать игроку slot (сервер копит их между снимками) */
+export function eventsFor(w: World, slot: number, all = false): SimEvent[] {
+  const p = w.players[slot];
+  const team: Team | -1 = all || !p ? -1 : p.team;
+  const vis = visibleIds(w, team);
+  return w.events.filter((e) => eventVisible(w, e, team, slot, vis));
+}
+
 /** Снимок для игрока slot (team -1 — всё видно: наблюдатель, отладка) */
-export function makeSnapshot(w: World, slot: number, opts: { all?: boolean } = {}): Snapshot {
+export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; events?: SimEvent[] } = {}): Snapshot {
   const p = w.players[slot];
   const team: Team | -1 = opts.all || !p ? -1 : p.team;
   const vis = visibleIds(w, team);
@@ -265,7 +273,7 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean } = {
     units,
     projs,
     players,
-    events: w.events.filter((e) => eventVisible(w, e, team, slot, vis)),
+    events: opts.events ?? w.events.filter((e) => eventVisible(w, e, team, slot, vis)),
     me,
     rune,
   };

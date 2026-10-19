@@ -97,7 +97,7 @@
       </section>
     </main>
     <div id="playBox" class="panel">
-      <div class="modes"><button class="mode on" aria-pressed="true">Против бота</button><button class="mode" disabled>С другом<small>скоро</small></button></div>
+      <div class="modes"><button class="mode on" id="modeBot" aria-pressed="true">Против бота</button><button class="mode" id="modeFriend" aria-pressed="false">С другом<small>по коду или ссылке</small></button></div>
       <p class="lbl">Сложность бота</p>
       <div class="seg" role="radiogroup" aria-label="Сложность бота" id="diffSeg"><button data-v="easy">Лёгкий</button><button data-v="normal">Обычный</button><button data-v="hard">Сложный</button></div>
       <p id="playMsg"></p>
@@ -120,6 +120,7 @@
       <p class="tip" id="ldTip"></p>
     </div>
   </div>
+  <div id="netBanner" class="panel" role="status" hidden>Связь потеряна — переподключаемся…</div>
   <div id="screen" hidden>
     <div class="card panel" id="card"></div>
   </div>

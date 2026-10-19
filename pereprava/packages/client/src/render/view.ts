@@ -68,6 +68,8 @@ export class GameView {
   vh = 1;
   zoom = 1;
   readonly camT = new THREE.Vector3(-40, 0.5, 40);
+  /** Предсказанная позиция своего героя (сетевая игра) */
+  ownPos: { x: number; z: number } | null = null;
   /** Меню: на кого смотрит камера */
   menuFocus: { x: number; z: number; far: boolean } | null = null;
   private pv = new THREE.Vector3();
@@ -252,6 +254,10 @@ export class GameView {
       const jump = Math.hypot(s.x - p.x, s.z - p.z) > 6;
       v.x = jump ? s.x : lerp(p.x, s.x, a);
       v.z = jump ? s.z : lerp(p.z, s.z, a);
+      if (id === this.myUnit && this.ownPos) {
+        v.x = this.ownPos.x;
+        v.z = this.ownPos.z;
+      }
       v.y = mobile ? unitY(v.x, v.z) : groundH(v.x, v.z);
       root.position.set(v.x, v.y, v.z);
       if (mobile) root.rotation.y = angLerp(root.rotation.y, s.r, Math.min(1, dt * 14));

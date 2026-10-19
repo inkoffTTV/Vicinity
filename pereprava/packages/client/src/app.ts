@@ -1,7 +1,10 @@
 // Клиент целиком: меню → поиск → «Игра найдена» → загрузка → матч → итоги. Логика меню повторяет
 // прототип 0.3; матч идёт через Session (одиночный — LocalSession на общей симуляции).
-import { difficulty, DIFFICULTIES, HERO, type Command, type Snapshot } from '@pereprava/shared';
+import { difficulty, DIFFICULTIES, HERO, type Command, type ServerMsg, type Snapshot, type Team } from '@pereprava/shared';
 import { LocalSession } from './game/local';
+import { NetSession } from './game/net';
+import { Connection } from './net/connection';
+import { Lobby } from './ui/lobby';
 import type { Session } from './game/session';
 import { attachInput } from './game/input';
 import { applyQuality, createScene, type Quality } from './render/scene';
@@ -52,7 +55,10 @@ export class App {
     ...store.get<Partial<Settings>>('settings', {}),
   };
   speed = /x4/.test(location.hash) ? 4 : 1;
+  readonly conn = new Connection(() => this.playerName());
+  readonly lobby: Lobby;
   private menuFocusBot = false;
+  private pendingJoin = '';
   private searchT = 0;
   private foundAt = 3;
   private acceptT = 0;
@@ -88,6 +94,27 @@ export class App {
       this.view.showMarker(p.x, p.z, false);
     });
     this.initMenu();
+    this.lobby = new Lobby(this.conn, $('game'), (room) => {
+      // Матч кончился, а мы ещё на экране итогов — остаёмся; комнаты нет — в меню
+      if (!room && this.session instanceof NetSession) this.backToMenu('Вы вышли из комнаты');
+      if (room && room.state === 'lobby' && this.state === 'over' && this.session instanceof NetSession) {
+        this.backToMenu('');
+        this.lobby.open();
+      }
+    });
+    this.conn.on((m) => this.onServer(m));
+    this.conn.onStatus = (st) => {
+      $('netBanner').hidden = !(this.session instanceof NetSession && st !== 'online');
+      this.lobby.render();
+    };
+    $('modeFriend').addEventListener('click', () => this.lobby.open());
+    $('modeBot').addEventListener('click', () => this.lobby.close());
+    // Ссылка-приглашение ?room=КОД или сохранённый токен (вернуться в идущий матч после перезагрузки)
+    const code = new URLSearchParams(location.search).get('room') ?? (/room=([A-Za-z0-9]+)/.exec(location.hash)?.[1] ?? '');
+    if (code) {
+      this.pendingJoin = code.toUpperCase();
+      this.lobby.open();
+    } else if (store.get<string | undefined>('token', undefined)) this.conn.connect();
     new ResizeObserver(() => this.resize()).observe(this.app);
     applyQuality(this.kit, this.settings.quality, this.settings.shadows);
     this.resize();
@@ -148,6 +175,34 @@ export class App {
     }
   }
 
+  // ── Сеть ──
+
+  private onServer(m: ServerMsg) {
+    if (m.t === 'room') {
+      if (this.pendingJoin && !m.room) {
+        this.conn.send({ t: 'join', code: this.pendingJoin });
+        this.pendingJoin = '';
+      } else if (m.room && (m.room.state === 'lobby' || m.room.state === 'over') && !this.lobby.visible && this.state === 'menu')
+        this.lobby.open();
+    } else if (m.t === 'start') this.startNet(m.slot, m.players[m.slot]?.team ?? 0);
+  }
+
+  private startNet(slot: number, team: Team) {
+    if (this.session instanceof NetSession && this.session.slot === slot && this.state === 'play') return;
+    this.session?.dispose();
+    const net = new NetSession(this.conn, slot, team);
+    this.session = net;
+    this.view.clear();
+    this.view.myTeam = team;
+    this.view.myUnit = 0;
+    this.view.menuFocus = null;
+    this.snap = null;
+    this.lobby.close();
+    for (const id of ['menu', 'loading', 'accept', 'screen']) $(id).hidden = true;
+    this.setState('play');
+    this.hud.toast('Матч начался. Крипы выходят на линию');
+  }
+
   // ── Матч ──
 
   startGame() {
@@ -183,16 +238,20 @@ export class App {
     const p = this.profile;
     p.matches++;
     if (win) p.wins++;
-    p.history.unshift({ w: win, t: Math.round(s.time), k: s.kills[this.view.myTeam], d: s.kills[1 - this.view.myTeam], diff: this.settings.diff, lh: mine.lastHits, hero: me.hero });
+    const online = this.session instanceof NetSession;
+    p.history.unshift({ w: win, t: Math.round(s.time), k: s.kills[this.view.myTeam], d: s.kills[1 - this.view.myTeam], diff: online ? 'net' : this.settings.diff, lh: mine.lastHits, hero: me.hero });
     p.history = p.history.slice(0, 8);
     store.set('profile', p);
     $('card').innerHTML = `<h1>${win ? 'Победа' : 'Поражение'}</h1>
-      <p>${win ? 'Кристалл врага разрушен.' : 'Наш кристалл пал.'} Бот: ${difficulty(this.settings.diff).name}.</p>
+      <p>${win ? 'Кристалл врага разрушен.' : 'Наш кристалл пал.'} ${online ? 'Сетевой матч.' : 'Бот: ' + difficulty(this.settings.diff).name + '.'}</p>
       <dl class="keys"><dt>${fmt(s.time)}</dt><dd>длительность матча</dd><dt>${s.kills[this.view.myTeam]} : ${s.kills[1 - this.view.myTeam]}</dt><dd>убийства героев</dd><dt>${mine.lastHits}</dt><dd>добито крипов</dd><dt>${mine.gold}</dt><dd>заработано золота</dd><dt>${me.level}</dt><dd>уровень героя</dd></dl>
-      <div class="actions"><button class="go alt" id="toMenu">В меню</button><button class="go" id="again">Реванш</button></div>`;
+      <div class="actions"><button class="go alt" id="toMenu">В меню</button><button class="go" id="again">${online ? 'В лобби' : 'Реванш'}</button></div>`;
     $('screen').hidden = false;
-    $('again').addEventListener('click', () => this.startGame());
-    $('toMenu').addEventListener('click', () => this.backToMenu(''));
+    $('again').addEventListener('click', () => (online ? this.conn.send({ t: 'start' }) : this.startGame()));
+    $('toMenu').addEventListener('click', () => {
+      if (online) this.conn.send({ t: 'leave' });
+      this.backToMenu('');
+    });
     $('again').focus();
   }
 
@@ -331,11 +390,13 @@ export class App {
       return;
     }
     h.innerHTML = history
-      .map((r) => `<div><b class="${r.w ? 'w' : 'l'}">${r.w ? 'Победа' : 'Поражение'}</b><span>бот ${DIFFICULTIES[r.diff]?.name ?? ''}, ${r.k}:${r.d}, ${r.lh} крипов</span><span>${fmt(r.t)}</span></div>`)
+      .map((r) => `<div><b class="${r.w ? 'w' : 'l'}">${r.w ? 'Победа' : 'Поражение'}</b><span>${r.diff === 'net' ? 'по сети' : 'бот ' + (DIFFICULTIES[r.diff]?.name ?? '')}, ${r.k}:${r.d}, ${r.lh} крипов</span><span>${fmt(r.t)}</span></div>`)
       .join('');
   }
 
   backToMenu(msg: string) {
+    $('netBanner').hidden = true;
+    this.view.ownPos = null;
     this.session?.dispose();
     this.session = null;
     this.snap = null;
@@ -393,15 +454,26 @@ export class App {
     this.last = now;
     const time = now / 1000;
     if ((this.state === 'play' || this.state === 'over') && this.session) {
-      if (this.state === 'play')
+      const net = this.session instanceof NetSession ? this.session : null;
+      if (this.state === 'play' || net)
         for (const s of this.session.update(dt)) {
+          if (!this.view.myUnit && s.me) {
+            this.view.myUnit = s.me.unit;
+            const u = s.units.find((x) => x.id === s.me!.unit);
+            if (u) this.view.camT.set(u.x, 0.5, u.z);
+          }
           this.view.applySnapshot(s);
           this.view.handleEvents(s.events, this.session.slot);
           this.snap = s;
-          this.hud.snap = s;
           this.hud.events(s.events);
           if (s.winner !== -1) this.endGame(s);
         }
+      // Интерфейс в сети — по самому свежему снимку (золото, перезарядки без задержки интерполяции)
+      this.hud.snap = net?.latest ?? this.snap;
+      if (net) {
+        const mine = this.view.units.get(this.view.myUnit);
+        this.view.ownPos = net.predictOwn(dt, mine ? { x: mine.x, z: mine.z } : null);
+      } else this.view.ownPos = null;
       this.view.renderTick = this.session.renderTick;
       this.view.frame(dt, time, this.session.alpha);
     } else {
