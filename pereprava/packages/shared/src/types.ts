@@ -110,6 +110,11 @@ export interface Unit {
   camp?: number;
   homeX?: number;
   homeZ?: number;
+  /** Ближник: номер места вокруг цели (slotT — чья это цель); -1 — мест нет, ждёт */
+  slot?: number;
+  slotT?: number;
+  /** Стоит и бьёт: почти не толкается и не дёргается (см. sim/engage.ts) */
+  planted?: boolean;
 }
 
 export interface Projectile {

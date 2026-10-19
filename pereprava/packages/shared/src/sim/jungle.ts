@@ -3,8 +3,9 @@
 // потом возвращаются и восстанавливают здоровье. Пустой лагерь появляется снова в начале минуты,
 // если рядом нет героев. Руна появляется каждые 90 с в одной из двух точек реки.
 import type { Unit } from '../types';
+import { disengage, engage } from './engage';
 import { addMod, hasFlag } from './modifiers';
-import { addUnit, DT, dist, emit, fx, mapOf, moveToward, rand, reach, tryAttack, unitById, type World } from './world';
+import { addUnit, DT, emit, fx, mapOf, moveToward, rand, unitById, type World } from './world';
 
 const LEASH = 10;
 
@@ -73,10 +74,10 @@ export function updateNeutral(w: World, u: Unit) {
     t = undefined;
   }
   if (t) {
-    if (dist(u, t) > reach(u, t)) moveToward(u, t.x, t.z);
-    else tryAttack(w, u, t);
+    engage(w, u, t);
     return;
   }
+  disengage(u);
   if (Math.hypot(u.x - hx, u.z - hz) > 0.3) {
     moveToward(u, hx, hz);
     // Возвращаясь, быстро восстанавливается

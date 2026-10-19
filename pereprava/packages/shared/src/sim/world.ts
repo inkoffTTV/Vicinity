@@ -19,6 +19,7 @@ import {
   type Tree,
 } from '../map';
 import { findPath } from '../nav';
+import { disengage, engage, freeSlot } from './engage';
 import { RNG_MOD, rngNext } from '../rng';
 import type {
   Camp,
@@ -715,6 +716,7 @@ export function moveToward(u: Unit, tx: number, tz: number, stop = 0): boolean {
   u.z += (dz / d) * s;
   u.rot = Math.atan2(dx, dz);
   u.moving = true;
+  u.planted = false;
   return false;
 }
 
@@ -942,14 +944,21 @@ function heroUpdate(w: World, u: Unit) {
 
 // ── Крипы и вышки ──
 
+/** Насколько цель хороша для крипа (меньше — лучше): ближе, крипы важнее героев, герои — зданий */
+function creepScore(w: World, u: Unit, v: Unit): number {
+  let s = dist(u, v) - v.radius + (v.kind === 'hero' ? 3 : v.kind === 'creep' ? 0 : 5);
+  // Ближнику некуда встать — цель хуже (если он сам уже не на месте вокруг неё)
+  if (!u.ranged && !(u.slotT === v.id && (u.slot ?? -1) >= 0) && freeSlot(w, u, v) < 0) s += 4;
+  return s;
+}
+
 function pickCreepTarget(w: World, u: Unit, r: number): Unit | null {
   let best: Unit | null = null;
   let bs = 1e9;
   for (const v of w.units) {
     if (!v.alive || v.team === u.team || v.team === 2 || v.invuln || hasFlag(v, 'invisible')) continue;
-    const d = dist(u, v) - v.radius;
-    if (d > r) continue;
-    const s = d + (v.kind === 'hero' ? 3 : v.kind === 'creep' ? 0 : 5);
+    if (dist(u, v) - v.radius > r) continue;
+    const s = creepScore(w, u, v);
     if (s < bs) {
       bs = s;
       best = v;
@@ -961,23 +970,24 @@ function pickCreepTarget(w: World, u: Unit, r: number): Unit | null {
 function updateCreep(w: World, u: Unit) {
   if (hasFlag(u, 'stun')) return;
   let t = unitById(w, u.target);
-  if (t && (!t.alive || t.invuln || dist(u, t) > 11)) {
+  if (t && (!t.alive || t.invuln || hasFlag(t, 'invisible') || dist(u, t) > 11)) {
     u.target = 0;
     t = undefined;
+    disengage(u);
   }
   u.retarget -= DT;
   if (!t || u.retarget <= 0) {
     u.retarget = 0.5;
     const n = pickCreepTarget(w, u, 8);
-    if (n) {
+    // Цель не меняется каждый тик: новая — только если заметно лучше нынешней
+    if (n && (!t || (n !== t && creepScore(w, u, n) < creepScore(w, u, t) - 1.5))) {
       u.target = n.id;
       t = n;
+      disengage(u);
     }
   }
-  if (t) {
-    if (dist(u, t) > reach(u, t)) moveToward(u, t.x, t.z);
-    else tryAttack(w, u, t);
-  } else {
+  if (t) engage(w, u, t);
+  else {
     const g = ancientOf(w, 1 - (u.team as Team));
     const m = mapOf(w);
     const lane = m.lanes[u.lane ?? 0];
@@ -1092,22 +1102,28 @@ function pushStatic(u: Unit, x: number, z: number, r: number) {
 const treeBuf: Tree[] = [];
 export function resolveCollisions(w: World) {
   const mob = w.units.filter((u) => u.alive && u.speed > 0);
-  for (let i = 0; i < mob.length; i++)
-    for (let j = i + 1; j < mob.length; j++) {
-      const a = mob[i];
-      const b = mob[j];
-      const dx = a.x - b.x;
-      const dz = a.z - b.z;
-      const d = Math.hypot(dx, dz);
-      const r = (a.radius + b.radius) * 0.8;
-      if (d < r && d > 1e-4) {
-        const k = ((r - d) / d) * 0.5;
-        a.x += dx * k;
-        a.z += dz * k;
-        b.x -= dx * k;
-        b.z -= dz * k;
+  // Два прохода: в толпе разведение одной пары сдвигает соседей — второй проход добирает
+  for (let pass = 0; pass < 2; pass++)
+    for (let i = 0; i < mob.length; i++)
+      for (let j = i + 1; j < mob.length; j++) {
+        const a = mob[i];
+        const b = mob[j];
+        const dx = a.x - b.x;
+        const dz = a.z - b.z;
+        const d = Math.hypot(dx, dz);
+        const r = (a.radius + b.radius) * 0.8;
+        if (d < r && d > 1e-4) {
+          const k = (r - d) / d;
+          const wa = a.planted ? 0.15 : 1;
+          const wb = b.planted ? 0.15 : 1;
+          const ka = (k * wa) / (wa + wb);
+          const kb = (k * wb) / (wa + wb);
+          a.x += dx * ka;
+          a.z += dz * ka;
+          b.x -= dx * kb;
+          b.z -= dz * kb;
+        }
       }
-    }
   const m = mapOf(w);
   const grid = treeGrid(m);
   for (const u of mob) {

@@ -6,6 +6,7 @@ export * from './data/heroes';
 export * from './data/items';
 export * from './data/difficulty';
 export * from './sim/world';
+export * from './sim/engage';
 export * from './sim/abilities';
 export * from './sim/modifiers';
 export * from './sim/items';
