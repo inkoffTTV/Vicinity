@@ -3,11 +3,11 @@
 // Способности бот применяет по подсказкам ai из описания способности — так ИИ один на всех героев.
 import { difficulty } from '../data/difficulty';
 import { HERO } from '../data/heroes';
-import { CAMPS, FOUNTAINS, laneDir, SPAWNS, type P2 } from '../map';
+import { laneAhead, laneProgress, lanePoints, type P2 } from '../map';
 import type { Player, Team, Unit } from '../types';
 import { abilityAt, castAbility, canCast } from './abilities';
 import { hasFlag } from './modifiers';
-import { ancientOf, buyItem, dist, towerOf, unitById, type World } from './world';
+import { ancientOf, buyItem, dist, mapOf, towerOf, unitById, type World } from './world';
 
 /** Вражеская вышка рядом с точкой */
 function towerThreat(w: World, x: number, z: number, team: Team): boolean {
@@ -23,30 +23,38 @@ function safeFor(w: World, b: Unit, x: number, z: number): boolean {
     if (tw.kind === 'tower' && tw.alive && tw.team !== team && Math.hypot(x - tw.x, z - tw.z) < tw.range + 2)
       if (!w.units.some((v) => v.alive && v.kind === 'creep' && v.team === team && dist(v, tw) < tw.range))
         return false;
-  const ef = FOUNTAINS[1 - team];
+  const ef = mapOf(w).fountains[1 - team];
   return Math.hypot(x - ef.x, z - ef.z) >= 13;
 }
 
 /** Точка за своей передней волной (или у своей вышки) */
-function frontPos(w: World, b: Unit): P2 {
+function frontPos(w: World, b: Unit, lane: number): P2 {
   const team = b.team as Team;
-  const d = laneDir(team);
+  const m = mapOf(w);
+  const pts = lanePoints(m, lane, team);
+  const along = (x: number, z: number, ahead: number) => laneAhead(m, lane, team, x, z, ahead);
   let best: Unit | null = null;
   let bs = -1e9;
   for (const v of w.units)
-    if (v.alive && v.kind === 'creep' && v.team === team) {
-      const s = v.x * d.x + v.z * d.z;
+    if (v.alive && v.kind === 'creep' && v.team === team && (v.lane ?? 0) === lane) {
+      const s = laneProgress(m, lane, team, v.x, v.z);
       if (s > bs) {
         bs = s;
         best = v;
       }
     }
   const home = (): P2 => {
-    const tw = towerOf(w, team);
-    const an = ancientOf(w, team)!;
-    return tw?.alive ? { x: tw.x + d.x * 3, z: tw.z + d.z * 3 } : { x: an.x + d.x * 8, z: an.z + d.z * 8 };
+    const tw = towerOf(w, team, lane);
+    return tw?.alive ? along(tw.x, tw.z, 3) : along(pts[0].x, pts[0].z, 8);
   };
-  let p = best ? { x: best.x - d.x * 3.5, z: best.z - d.z * 3.5 } : home();
+  // За передним крипом — с его боковым смещением, а не строго на оси линии (там своя вышка)
+  let p: P2;
+  if (best) {
+    const a = along(best.x, best.z, 0);
+    const c = along(best.x, best.z, 1);
+    const l = Math.hypot(c.x - a.x, c.z - a.z) || 1;
+    p = { x: best.x - ((c.x - a.x) / l) * 3.5, z: best.z - ((c.z - a.z) / l) * 3.5 };
+  } else p = home();
   if (!safeFor(w, b, p.x, p.z)) p = home();
   return p;
 }
@@ -127,7 +135,7 @@ function useAbilities(w: World, b: Unit, foe: Unit | null, hpP: number, retreati
         break;
       case 'escape':
         if (retreating && foe && df < 9 && hpP < (ai.hp ?? 0.4)) {
-          const sp = SPAWNS[b.team as Team];
+          const sp = mapOf(w).spawns[b.team as Team];
           return castAbility(w, b, slot, { x: sp.x, z: sp.z, id: 0 });
         }
         break;
@@ -142,7 +150,11 @@ export function botThink(w: World, b: Unit, p: Player) {
   const D = difficulty(p.bot);
   const team = b.team as Team;
   const hpP = b.hp / b.maxHp;
-  const sp = SPAWNS[team];
+  // Куда отступать: к фонтану, но со стороны базы — там лечит и там лавка
+  const fo = mapOf(w).fountains[team];
+  const an0 = ancientOf(w, team);
+  const fl = an0 ? Math.hypot(an0.x - fo.x, an0.z - fo.z) || 1 : 1;
+  const sp = an0 ? { x: fo.x + ((an0.x - fo.x) / fl) * 4, z: fo.z + ((an0.z - fo.z) / fl) * 4 } : fo;
   // Ближайший живой вражеский герой
   let foe: Unit | null = null;
   for (const v of w.units)
@@ -156,7 +168,7 @@ export function botThink(w: World, b: Unit, p: Player) {
       foe = v;
 
   if (p.ai.mode === 'retreat') {
-    if (Math.hypot(b.x - sp.x, b.z - sp.z) < 4) {
+    if (Math.hypot(b.x - fo.x, b.z - fo.z) < 7.5) {
       botShop(w, b, p);
       if (hpP > 0.92) p.ai.mode = 'lane';
       else {
@@ -221,7 +233,13 @@ export function botThink(w: World, b: Unit, p: Player) {
     }
   }
   if (!tgt) {
-    const tw = towerOf(w, 1 - team);
+    // Вражеская вышка на своей линии; если там уже пусто — ближайшая живая
+    let tw = towerOf(w, 1 - team, p.ai.lane);
+    if (!tw?.alive) {
+      const alive = w.units.filter((u) => u.kind === 'tower' && u.team !== team && u.alive && !u.invuln);
+      alive.sort((a, c) => dist(b, a) - dist(b, c));
+      tw = alive[0] ?? tw;
+    }
     const an = ancientOf(w, 1 - team);
     const twT = tw && unitById(w, tw.target);
     const creepsAtTower =
@@ -256,7 +274,13 @@ export function botThink(w: World, b: Unit, p: Player) {
   if (!tgt && hpP > 0.6 && h.level >= 3 && laneSafe) {
     let bd = 26;
     for (const v of w.units)
-      if (v.alive && v.kind === 'neutral' && v.camp !== undefined && CAMPS[v.camp].side === team && dist(b, v) < bd) {
+      if (
+        v.alive &&
+        v.kind === 'neutral' &&
+        v.camp !== undefined &&
+        mapOf(w).camps[v.camp].side === team &&
+        dist(b, v) < bd
+      ) {
         bd = dist(b, v);
         tgt = v;
       }
@@ -266,7 +290,7 @@ export function botThink(w: World, b: Unit, p: Player) {
     if (!(o?.type === 'attack' && o.id === tgt.id)) h.order = { type: 'attack', id: tgt.id, auto: false };
     return;
   }
-  const fp = frontPos(w, b);
+  const fp = frontPos(w, b, p.ai.lane);
   if (Math.hypot(fp.x - b.x, fp.z - b.z) > 1.5) h.order = { type: 'move', x: fp.x, z: fp.z, st: 0, best: Infinity };
   else h.order = null;
 }

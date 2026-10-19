@@ -3,8 +3,9 @@
 import type { Snapshot } from './snapshot';
 import type { Command, Team } from './types';
 
-export type GameMode = '1v1' | '2v2';
-export const MODE_SIZE: Record<GameMode, number> = { '1v1': 1, '2v2': 2 };
+/** Режим = карта: 1v1 — одна линия, 2v2 — две, 3v3 — три (MapDef в map.ts) */
+export type GameMode = '1v1' | '2v2' | '3v3';
+export const MODE_SIZE: Record<GameMode, number> = { '1v1': 1, '2v2': 2, '3v3': 3 };
 /** Сколько ждём вернувшегося игрока, прежде чем отдать его героя боту */
 export const RECONNECT_GRACE_S = 60;
 /** Частота снимков, Гц (тик симуляции — 30) */
@@ -49,6 +50,13 @@ export type ServerMsg =
   | { t: 'welcome'; id: number; token: string; name: string }
   | { t: 'room'; room: RoomInfo | null }
   | { t: 'error'; text: string }
-  | { t: 'start'; slot: number; tick: number; players: { name: string; team: Team; hero: string; bot: boolean }[] }
+  | {
+      t: 'start';
+      slot: number;
+      tick: number;
+      /** Карта матча */
+      mode: GameMode;
+      players: { name: string; team: Team; hero: string; bot: boolean }[];
+    }
   | { t: 'snap'; s: Snapshot; ack: number }
   | { t: 'pong'; ts: number };

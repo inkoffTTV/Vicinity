@@ -6,7 +6,7 @@ import {
   buyItem,
   createWorld,
   damage,
-  FOUNTAINS,
+  getMap,
   heroOf,
   ITEM,
   itemCostFor,
@@ -19,6 +19,8 @@ import {
   type Unit,
   type World,
 } from '../src/index';
+
+const FOUNTAIN0 = getMap('1v1').fountains[0];
 
 /** Два человека без ботов — никто не вмешивается в проверку */
 function world(setup: Partial<MatchSetup> = {}): World {
@@ -144,7 +146,7 @@ describe('лавка', () => {
     h.hero!.gold = 500;
     put(h, 0, 0);
     expect(buyItem(w, h, 'boots')).toBe(false);
-    put(h, FOUNTAINS[0].x + 2, FOUNTAINS[0].z);
+    put(h, FOUNTAIN0.x + 2, FOUNTAIN0.z);
     expect(buyItem(w, h, 'boots')).toBe(true);
     expect(h.hero!.gold).toBe(500 - ITEM.boots.price);
     expect(h.hero!.items).toContain('boots');
@@ -156,7 +158,7 @@ describe('лавка', () => {
   it('составной предмет забирает части и стоит их разницу', () => {
     const w = world();
     const h = hero(w, 0);
-    put(h, FOUNTAINS[0].x, FOUNTAINS[0].z);
+    put(h, FOUNTAIN0.x, FOUNTAIN0.z);
     h.hero!.items = ['staff', null, 'gloves', null, null, null];
     const { cost, consume } = itemCostFor(h.hero!.items, 'warblade');
     expect(cost).toBe(ITEM.warblade.price - ITEM.staff.price - ITEM.gloves.price);
@@ -170,7 +172,7 @@ describe('лавка', () => {
   it('предмет меняет параметры героя', () => {
     const w = world();
     const h = hero(w, 0);
-    put(h, FOUNTAINS[0].x, FOUNTAINS[0].z);
+    put(h, FOUNTAIN0.x, FOUNTAIN0.z);
     const hp = h.maxHp;
     h.hero!.gold = 1000;
     buyItem(w, h, 'cloak');
@@ -180,7 +182,7 @@ describe('лавка', () => {
   it('продажа через команду возвращает половину цены', () => {
     const w = world();
     const h = hero(w, 0);
-    put(h, FOUNTAINS[0].x, FOUNTAINS[0].z);
+    put(h, FOUNTAIN0.x, FOUNTAIN0.z);
     h.hero!.gold = 400;
     queueCommand(w, 0, { c: 'buy', item: 'boots' });
     step(w);

@@ -265,7 +265,7 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; even
       cd: h.cd.map(r2),
       cdMax: HERO[h.def].abilities.map((_, i) => abilityAt(mu, i)?.cd ?? 1),
       respawn: r2(h.respawn),
-      nearShop: nearShop(mu),
+      nearShop: nearShop(w, mu),
       spellAmp: h.spellAmp,
       dmg: Math.round(mu.dmg),
       speed: r2(mu.speed * (1 - modValue(mu, 'slow'))),

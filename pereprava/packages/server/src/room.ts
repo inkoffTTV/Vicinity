@@ -235,6 +235,7 @@ export class Room {
         bot: s.client ? null : this.difficulty,
       })),
       jungle: true,
+      mode: this.mode,
     });
     this.state = 'game';
     this.pending = this.slots.map(() => []);
@@ -242,7 +243,7 @@ export class Room {
     const players = this.slots.map((s) => ({ name: s.name, team: s.team, hero: s.hero, bot: !s.client }));
     this.slots.forEach((s, slot) => {
       const c = s.client ? this.clients.get(s.client) : undefined;
-      c?.send({ t: 'start', slot, tick: 0, players });
+      c?.send({ t: 'start', slot, tick: 0, mode: this.mode, players });
     });
     this.sync();
     this.lastT = performance.now();
@@ -291,7 +292,7 @@ export class Room {
     const slot = this.slotOf(c);
     if (slot < 0 || !this.world) return;
     const players = this.slots.map((s) => ({ name: s.name, team: s.team, hero: s.hero, bot: !s.client }));
-    c.send({ t: 'start', slot, tick: this.world.tick, players });
+    c.send({ t: 'start', slot, tick: this.world.tick, mode: this.mode, players });
     c.send({ t: 'snap', s: makeSnapshot(this.world, slot, { events: [] }), ack: this.acks[slot] });
   }
 

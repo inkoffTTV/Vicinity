@@ -5,8 +5,10 @@ import { RigInstancer } from './instancer';
 import {
   ABILITIES,
   DT,
+  getMap,
   groundH,
   unitY,
+  type MapDef,
   type ProjSnap,
   type SimEvent,
   type Snapshot,
@@ -77,6 +79,8 @@ const G = {
 };
 
 export class GameView {
+  /** Карта, на которой стоят юниты (высота земли, границы) */
+  map: MapDef = getMap('1v1');
   readonly units = new Map<number, VUnit>();
   readonly projs = new Map<number, VProj>();
   private puffs: Puff[] = [];
@@ -181,7 +185,7 @@ export class GameView {
       }
     if (s.rune) {
       this.rune.visible = true;
-      this.rune.position.set(s.rune.x, unitY(s.rune.x, s.rune.z) + 1, s.rune.z);
+      this.rune.position.set(s.rune.x, unitY(this.map, s.rune.x, s.rune.z) + 1, s.rune.z);
       if (this.runeKind !== s.rune.kind) {
         this.runeKind = s.rune.kind;
         const m = this.rune.material as THREE.MeshStandardMaterial;
@@ -218,7 +222,7 @@ export class GameView {
       group.add(dome);
     }
     group.scale.setScalar(z.r);
-    group.position.set(z.x, Math.max(groundH(z.x, z.z), -0.4) + 0.1, z.z);
+    group.position.set(z.x, Math.max(groundH(this.map, z.x, z.z), -0.4) + 0.1, z.z);
     this.scene.add(group);
     const v: VZone = { snap: z, group, disc, edge, dome };
     this.zones.set(z.id, v);
@@ -227,7 +231,7 @@ export class GameView {
 
   private addUnit(us: UnitSnap): VUnit {
     const rig = makeModel(us.m, us.tm);
-    rig.root.position.set(us.x, unitY(us.x, us.z), us.z);
+    rig.root.position.set(us.x, unitY(this.map, us.x, us.z), us.z);
     rig.root.rotation.y = us.r;
     this.scene.add(rig.root);
     if (us.k === 'creep' || us.k === 'neutral') this.inst.add(rig);
@@ -249,7 +253,7 @@ export class GameView {
       dyingMax: 0,
       x: us.x,
       z: us.z,
-      y: unitY(us.x, us.z),
+      y: unitY(this.map, us.x, us.z),
       seen: 0,
     };
     this.units.set(us.id, v);
@@ -272,7 +276,7 @@ export class GameView {
     if (!m) this.projMats.set(ps.c, (m = new THREE.MeshBasicMaterial({ color: ps.c })));
     const mesh = new THREE.Mesh(ps.k === 'attack' ? G.proj : G.fire, m);
     mesh.scale.setScalar(ps.s);
-    const y = groundH(ps.x, ps.z) + ps.y0;
+    const y = groundH(this.map, ps.x, ps.z) + ps.y0;
     mesh.position.set(ps.x, y, ps.z);
     this.scene.add(mesh);
     const p: VProj = { mesh, snap: ps, prev: null, y, trail: 0 };
@@ -283,7 +287,7 @@ export class GameView {
   /** События тика: эффекты, смерти, всплывающие числа */
   handleEvents(events: SimEvent[], mySlot: number) {
     for (const e of events) {
-      if (e.e === 'fx') this.puff(e.x, unitY(e.x, e.z) + e.h, e.z, e.color, e.size, e.life, e.grow);
+      if (e.e === 'fx') this.puff(e.x, unitY(this.map, e.x, e.z) + e.h, e.z, e.color, e.size, e.life, e.grow);
       else if (e.e === 'death') {
         const v = this.units.get(e.id);
         if (!v) continue;
@@ -297,7 +301,7 @@ export class GameView {
         } else if (e.kind === 'ancient') v.dying = v.dyingMax = 1.5;
         else if (e.kind === 'hero') v.dying = v.dyingMax = 1.1;
       } else if (e.e === 'gold' && e.player === mySlot) {
-        this.onFloat?.(e.x, unitY(e.x, e.z) + 2.6, e.z, '+' + e.amt);
+        this.onFloat?.(e.x, unitY(this.map, e.x, e.z) + 2.6, e.z, '+' + e.amt);
       }
     }
   }
@@ -354,7 +358,7 @@ export class GameView {
         v.x = this.ownPos.x;
         v.z = this.ownPos.z;
       }
-      v.y = mobile ? unitY(v.x, v.z) : groundH(v.x, v.z);
+      v.y = mobile ? unitY(this.map, v.x, v.z) : groundH(this.map, v.x, v.z);
       root.position.set(v.x, v.y, v.z);
       if (mobile) root.rotation.y = angLerp(root.rotation.y, s.r, Math.min(1, dt * 14));
       const since = (t: number) => Math.max(0, (this.renderTick - t) * DT);
@@ -428,7 +432,7 @@ export class GameView {
     }
     const color = kind === 'danger' ? 0xff5a4a : kind === 'go' ? 0x7dff9a : 0xf1c453;
     for (const m of p.group.children as THREE.Mesh[]) (m.material as THREE.MeshBasicMaterial).color.setHex(color);
-    p.group.position.set(x, groundH(x, z) + 0.15, z);
+    p.group.position.set(x, groundH(this.map, x, z) + 0.15, z);
     p.group.visible = true;
     p.t = 3;
   }
@@ -449,7 +453,7 @@ export class GameView {
     }
     const k = 1 - c.t / c.T;
     v.ring.visible = true;
-    v.ring.position.set(v.x, unitY(v.x, v.z) + 0.12, v.z);
+    v.ring.position.set(v.x, unitY(this.map, v.x, v.z) + 0.12, v.z);
     v.ring.scale.setScalar(r * (0.2 + 0.8 * k));
     (v.ring.material as THREE.MeshBasicMaterial).opacity = 0.15 + 0.35 * k;
   }
@@ -554,7 +558,7 @@ export class GameView {
   }
 
   showMarker(x: number, z: number, enemy: boolean) {
-    this.marker.position.set(x, unitY(x, z) + 0.1, z);
+    this.marker.position.set(x, unitY(this.map, x, z) + 0.1, z);
     (this.marker.material as THREE.MeshBasicMaterial).color.setHex(enemy ? 0xff5a4a : 0x7dff9a);
     this.markerT = 0.45;
   }
@@ -572,7 +576,7 @@ export class GameView {
       const wide = this.vw > this.vh * 1.15;
       const a = (f.far ? -0.8 : 0.8) + Math.sin((performance.now() / 1000) * 0.15) * 0.4;
       const r = wide ? (f.far ? 13 : 12) : f.far ? 20 : 14;
-      const ty = unitY(f.x, f.z) + 1.7;
+      const ty = unitY(this.map, f.x, f.z) + 1.7;
       const cx = f.x + Math.sin(a) * r;
       const cz = f.z + Math.cos(a) * r;
       camera.position.set(cx, ty + (wide ? 2.8 : 3.6), cz);
@@ -611,7 +615,8 @@ export class GameView {
     this.ndc.set((sx / this.vw) * 2 - 1, -(sy / this.vh) * 2 + 1);
     this.ray.setFromCamera(this.ndc, this.kit.camera);
     if (!this.ray.ray.intersectPlane(this.gplane, this.gp)) return null;
-    return { x: Math.max(-58, Math.min(58, this.gp.x)), z: Math.max(-58, Math.min(58, this.gp.z)) };
+    const L = this.map.limit - 1;
+    return { x: Math.max(-L, Math.min(L, this.gp.x)), z: Math.max(-L, Math.min(L, this.gp.z)) };
   }
 
   /** Враг под пальцем/курсором (радиус попадания зависит от размера цели) */

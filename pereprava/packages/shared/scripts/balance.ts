@@ -1,9 +1,9 @@
 // Баланс: прогоняет матчи бот против бота без графики и печатает длительность и счёт.
-//   npm run balance -- [матчей=6] [режим=1v1|2v2] [сложность=normal] [лес=1]
+//   npm run balance -- [матчей=6] [режим=1v1|2v2|3v3] [сложность=normal] [лес=1]
 import { createWorld, step, HEROES, TICK_RATE, type PlayerSetup, type Team } from '../src/index';
 
 const [n = '6', mode = '1v1', diff = 'normal', jungle = '1'] = process.argv.slice(2);
-const per = mode === '2v2' ? 2 : 1;
+const per = mode === '3v3' ? 3 : mode === '2v2' ? 2 : 1;
 const ids = HEROES.map((h) => h.id);
 const rows: string[] = [];
 let total = 0;

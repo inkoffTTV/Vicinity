@@ -3,8 +3,14 @@
 import {
   difficulty,
   DIFFICULTIES,
+  getMap,
   HERO,
+  HEROES,
+  MODE_SIZE,
   type Command,
+  type GameMode,
+  type MapId,
+  type MatchSetup,
   type ServerMsg,
   type Snapshot,
   type Team,
@@ -20,7 +26,7 @@ import type { Session } from './game/session';
 import { attachInput } from './game/input';
 import { AutoScale } from './render/autoscale';
 import { applyQuality, basePixelRatio, createScene, type Quality } from './render/scene';
-import { buildTerrain } from './render/terrain';
+import { buildTerrain, disposeTerrain, type Terrain } from './render/terrain';
 import { GameView } from './render/view';
 import { fmt, Hud } from './ui/hud';
 import { store } from './ui/store';
@@ -37,6 +43,8 @@ interface Profile {
 }
 interface Settings {
   diff: string;
+  /** Карта одиночной игры: 1 на 1 / 2 на 2 / 3 на 3 */
+  mode?: GameMode;
   quality: Quality;
   shadows: boolean;
   hero: string;
@@ -100,13 +108,36 @@ export class App {
     this.kit.renderer.setPixelRatio(basePixelRatio(this.settings.quality) * k);
   });
 
+  /** Земля текущей карты и её id (меняется, когда матч идёт на другой карте) */
+  private terrain: Terrain | null = null;
+  private mapId: MapId | null = null;
+
+  /** Поставить карту: пересобрать землю, сообщить виду и миникарте */
+  private applyMap(id: MapId) {
+    if (this.mapId === id) return;
+    if (this.terrain) disposeTerrain(this.terrain);
+    const m = getMap(id);
+    this.terrain = buildTerrain(m, this.kit.night);
+    this.kit.scene.add(this.terrain.group);
+    this.mapId = id;
+    this.view.map = m;
+    if (this.hud) this.hud.setMap(m);
+  }
+
+  /** Карта одиночной игры из настроек */
+  private localMode(): GameMode {
+    const m = this.settings.mode;
+    return m && MODE_SIZE[m] ? m : '1v1';
+  }
+
   constructor() {
-    this.kit.scene.add(buildTerrain(this.kit.night).group);
+    this.applyMap(this.localMode());
     this.hud = new Hud(this.view, {
       send: (c) => this.send(c),
       cast: (slot) => this.cast(slot, null),
       useItem: (slot) => this.useItem(slot, null),
     });
+    this.hud.setMap(this.view.map);
     this.view.onFloat = (x, y, z, text, color) => this.floatText(x, y, z, text, color);
     this.preview = this.makeLocal();
     this.showPreview();
@@ -195,14 +226,28 @@ export class App {
   private makeLocal(seed = 20261019): LocalSession {
     const hero = HERO[this.settings.hero] ? this.settings.hero : 'mage';
     if (this.enemyHero === hero) this.enemyHero = hero === 'brute' ? 'mage' : 'brute';
-    return new LocalSession({
-      seed,
-      jungle: true,
-      players: [
-        { name: this.playerName(), team: 0, hero, bot: null },
-        { name: HERO[this.enemyHero].name, team: 1, hero: this.enemyHero, bot: this.settings.diff },
-      ],
-    });
+    const mode = this.localMode();
+    const n = MODE_SIZE[mode];
+    // Остальные герои — по кругу из списка, без повторов, пока героев хватает
+    const used = new Set([hero, this.enemyHero]);
+    const pool = HEROES.map((h) => h.id).filter((id) => !used.has(id));
+    let pi = Math.floor((seed % 997) % Math.max(1, pool.length));
+    const nextHero = () => {
+      if (!pool.length) return HEROES[Math.floor(Math.random() * HEROES.length)].id;
+      const id = pool[pi++ % pool.length];
+      return id;
+    };
+    const players: MatchSetup['players'] = [{ name: this.playerName(), team: 0, hero, bot: null }];
+    for (let i = 1; i < n; i++) {
+      const h = nextHero();
+      players.push({ name: `${HERO[h].name} (союзник)`, team: 0, hero: h, bot: this.settings.diff });
+    }
+    players.push({ name: HERO[this.enemyHero].name, team: 1, hero: this.enemyHero, bot: this.settings.diff });
+    for (let i = 1; i < n; i++) {
+      const h = nextHero();
+      players.push({ name: HERO[h].name, team: 1, hero: h, bot: this.settings.diff });
+    }
+    return new LocalSession({ seed, jungle: true, mode, players });
   }
 
   /** Случайный противник для одиночной игры — не тот же герой */
@@ -212,6 +257,7 @@ export class App {
   }
 
   private showPreview() {
+    this.applyMap(this.preview.world.mapId);
     this.view.clear();
     const s = this.preview.snapshot();
     this.view.myTeam = 0;
@@ -306,7 +352,9 @@ export class App {
     if (!act || !act.self || this.activityCreated || this.pendingJoin || this.lobby.room) return;
     if (this.conn.status !== 'online' || !act.isHost()) return;
     this.activityCreated = true;
-    this.conn.send({ t: 'create', mode: act.count() > 2 ? '2v2' : '1v1' });
+    // До 2 человек — 1 на 1, до 4 — 2 на 2, больше — 3 на 3 (до 6 участников звонка)
+    const n = act.count();
+    this.conn.send({ t: 'create', mode: n > 4 ? '3v3' : n > 2 ? '2v2' : '1v1' });
   }
 
   private onServer(m: ServerMsg) {
@@ -325,12 +373,13 @@ export class App {
         this.state === 'menu'
       )
         this.lobby.open();
-    } else if (m.t === 'start') this.startNet(m.slot, m.players[m.slot]?.team ?? 0);
+    } else if (m.t === 'start') this.startNet(m.slot, m.players[m.slot]?.team ?? 0, m.mode ?? '1v1');
   }
 
-  private startNet(slot: number, team: Team) {
+  private startNet(slot: number, team: Team, mode: GameMode) {
     if (this.session instanceof NetSession && this.session.slot === slot && this.state === 'play') return;
     this.session?.dispose();
+    this.applyMap(mode);
     const net = new NetSession(this.conn, slot, team);
     this.session = net;
     this.view.clear();
@@ -350,6 +399,7 @@ export class App {
 
   startGame() {
     const local = this.makeLocal((Date.now() % 2147483646) + 1);
+    this.applyMap(local.world.mapId);
     this.sound.night = this.kit.night;
     this.sound.startAmbient();
     local.speed = this.speed;
@@ -370,8 +420,11 @@ export class App {
     $('accept').hidden = true;
     $('screen').hidden = true;
     this.setState('play');
+    const n = MODE_SIZE[this.localMode()];
     this.hud.toast(
-      `Против вас ${HERO[this.enemyHero].name}, бот ${difficulty(this.settings.diff).name}. Крипы выходят на линию`,
+      n > 1
+        ? `${n} на ${n}: ваша команда — вы и боты, против — ${n} бота (${difficulty(this.settings.diff).name}). Крипы выходят на линии`
+        : `Против вас ${HERO[this.enemyHero].name}, бот ${difficulty(this.settings.diff).name}. Крипы выходят на линию`,
     );
   }
 
@@ -451,6 +504,14 @@ export class App {
     this.segInit('diffSeg', this.settings.diff, (v) => {
       this.settings.diff = v;
       store.set('settings', this.settings);
+    });
+    this.segInit('mapSeg', this.localMode(), (v) => {
+      this.settings.mode = v as GameMode;
+      store.set('settings', this.settings);
+      if (this.state === 'menu') {
+        this.preview = this.makeLocal();
+        this.showPreview();
+      }
     });
     this.segInit('qSeg', this.settings.quality, (v) => {
       this.settings.quality = v as Quality;
@@ -815,6 +876,9 @@ export class App {
       },
       get snap() {
         return app.snap;
+      },
+      get mapId() {
+        return app.mapId;
       },
       get world() {
         return app.session instanceof LocalSession ? app.session.world : null;

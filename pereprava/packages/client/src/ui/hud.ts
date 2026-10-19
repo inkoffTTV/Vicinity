@@ -2,8 +2,8 @@
 // всплывающие сообщения и миникарта. Всё читается из снимка (me) — интерфейс ничего не решает сам.
 import {
   ABILITIES,
-  ANCIENTS,
   canAfford,
+  getMap,
   HERO,
   ITEM,
   ITEMS,
@@ -11,6 +11,7 @@ import {
   RUNE_NAMES,
   ULT_LEVEL,
   type Command,
+  type MapDef,
   type SimEvent,
   type Snapshot,
 } from '@pereprava/shared';
@@ -27,6 +28,8 @@ export interface HudActions {
 }
 
 export class Hud {
+  /** Карта матча — от неё строится миникарта */
+  map: MapDef = getMap('1v1');
   private last: Record<string, string> = {};
   private toastT = 0;
   private skillBtns: HTMLButtonElement[] = [];
@@ -308,58 +311,77 @@ export class Hud {
     this.view.ping(x, z, kind);
   }
 
+  /** Сменить карту: миникарта перерисовывается */
+  setMap(m: MapDef) {
+    this.map = m;
+    if (this.mmStatic) this.initMinimap();
+  }
+
+  /** Половина стороны миникарты в метрах (на карте прототипа — 64) */
+  private get mmHalf() {
+    return this.map.half + 4;
+  }
+
   initMinimap() {
     const mm = this.mm;
+    const m = this.map;
+    const H = this.mmHalf;
     this.MMS = Math.max(64, Math.round(mm.clientWidth * Math.min(2, window.devicePixelRatio || 1)));
     mm.width = mm.height = this.MMS;
     const st = document.createElement('canvas');
     st.width = st.height = this.MMS;
     const c = st.getContext('2d')!;
-    const k = this.MMS / 128;
-    const X = (v: number) => (v + 64) * k;
+    const k = this.MMS / (H * 2);
+    // Размеры значков — как на миникарте прототипа (128 м), иначе на большой карте всё мелкое
+    const ik = this.MMS / 128;
+    const X = (v: number) => (v + H) * k;
     c.fillStyle = '#4f7a3a';
     c.fillRect(0, 0, this.MMS, this.MMS);
     c.fillStyle = 'rgba(70,72,45,.55)';
     c.beginPath();
-    c.moveTo(X(-64), X(-64));
-    c.lineTo(X(64), X(-64));
-    c.lineTo(X(64), X(64));
+    c.moveTo(X(-H), X(-H));
+    c.lineTo(X(H), X(-H));
+    c.lineTo(X(H), X(H));
     c.fill();
     c.fillStyle = 'rgba(20,48,24,.6)';
-    for (const t of mapTrees()) {
+    for (const t of mapTrees(m)) {
       c.beginPath();
       c.arc(X(t.x), X(t.z), 1.1 * k, 0, 7);
       c.fill();
     }
     c.lineCap = 'round';
+    c.lineJoin = 'round';
     c.strokeStyle = '#3a8fc7';
     c.lineWidth = 6 * k;
     c.beginPath();
-    c.moveTo(X(-64), X(-64));
-    c.lineTo(X(64), X(64));
+    c.moveTo(X(-H), X(-H));
+    c.lineTo(X(H), X(H));
     c.stroke();
     c.strokeStyle = '#c4a46a';
     c.lineWidth = 3.5 * k;
-    c.beginPath();
-    c.moveTo(X(ANCIENTS[0].x), X(ANCIENTS[0].z));
-    c.lineTo(X(ANCIENTS[1].x), X(ANCIENTS[1].z));
-    c.stroke();
+    for (const ln of m.lanes) {
+      c.beginPath();
+      ln.points.forEach((pt, i) => (i ? c.lineTo(X(pt.x), X(pt.z)) : c.moveTo(X(pt.x), X(pt.z))));
+      c.stroke();
+    }
     c.fillStyle = '#b7b29f';
     c.beginPath();
-    c.arc(X(ANCIENTS[0].x), X(ANCIENTS[0].z), 10 * k, 0, 7);
+    c.arc(X(m.ancients[0].x), X(m.ancients[0].z), 10 * k, 0, 7);
     c.fill();
     c.fillStyle = '#6e5a55';
     c.beginPath();
-    c.arc(X(ANCIENTS[1].x), X(ANCIENTS[1].z), 10 * k, 0, 7);
+    c.arc(X(m.ancients[1].x), X(m.ancients[1].z), 10 * k, 0, 7);
     c.fill();
+    void ik;
     this.mmStatic = st;
   }
 
   drawMinimap() {
     if (!this.mmStatic) return;
     const ctx = this.mctx;
+    const H = this.mmHalf;
     const k = this.MMS / 128;
-    const X = (v: number) => (v + 64) * k;
+    const X = (v: number) => (v + H) * (this.MMS / (H * 2));
     ctx.drawImage(this.mmStatic, 0, 0);
     const myTeam = this.view.myTeam;
     for (const v of this.view.units.values()) {
@@ -400,14 +422,17 @@ export class Hud {
     const vw = 34 * this.view.viewK();
     ctx.strokeStyle = 'rgba(255,255,255,.55)';
     ctx.lineWidth = 1 * k;
-    ctx.strokeRect(X(this.view.camT.x) - (vw * k) / 2, X(this.view.camT.z) - vw * k * 0.35, vw * k, vw * k * 0.7);
+    const mk = this.MMS / (H * 2);
+    ctx.strokeRect(X(this.view.camT.x) - (vw * mk) / 2, X(this.view.camT.z) - vw * mk * 0.35, vw * mk, vw * mk * 0.7);
   }
 
   /** Точка на карте по нажатию на миникарту */
   minimapPoint(e: PointerEvent): { x: number; z: number } {
     const r = this.mm.getBoundingClientRect();
-    const x = ((e.clientX - r.left) / r.width) * 128 - 64;
-    const z = ((e.clientY - r.top) / r.height) * 128 - 64;
-    return { x: Math.max(-58, Math.min(58, x)), z: Math.max(-58, Math.min(58, z)) };
+    const H = this.mmHalf;
+    const x = ((e.clientX - r.left) / r.width) * H * 2 - H;
+    const z = ((e.clientY - r.top) / r.height) * H * 2 - H;
+    const L = this.map.limit - 1;
+    return { x: Math.max(-L, Math.min(L, x)), z: Math.max(-L, Math.min(L, z)) };
   }
 }

@@ -2,10 +2,9 @@
 // Нейтралы стоят на месте, пока их не тронут; напавшего преследуют не дальше 10 м от лагеря,
 // потом возвращаются и восстанавливают здоровье. Пустой лагерь появляется снова в начале минуты,
 // если рядом нет героев. Руна появляется каждые 90 с в одной из двух точек реки.
-import { CAMPS, RUNE_SPOTS } from '../map';
 import type { Unit } from '../types';
 import { addMod, hasFlag } from './modifiers';
-import { addUnit, DT, dist, emit, fx, moveToward, rand, reach, tryAttack, unitById, type World } from './world';
+import { addUnit, DT, dist, emit, fx, mapOf, moveToward, rand, reach, tryAttack, unitById, type World } from './world';
 
 const LEASH = 10;
 
@@ -15,7 +14,7 @@ const NEUTRALS = {
 };
 
 function spawnCamp(w: World, i: number) {
-  const c = CAMPS[i];
+  const c = mapOf(w).camps[i];
   const kinds: (keyof typeof NEUTRALS)[] = c.type === 'big' ? ['n_big', 'n_small'] : ['n_small', 'n_small'];
   kinds.forEach((m, k) => {
     const a = (k / kinds.length) * Math.PI * 2 + i;
@@ -37,8 +36,9 @@ function spawnCamp(w: World, i: number) {
 }
 
 export function setupCamps(w: World) {
-  w.camps = CAMPS.map((c, i) => ({ id: i, x: c.x, z: c.z, type: c.type, respawnAt: 0 }));
-  CAMPS.forEach((_, i) => spawnCamp(w, i));
+  const camps = mapOf(w).camps;
+  w.camps = camps.map((c, i) => ({ id: i, x: c.x, z: c.z, type: c.type, respawnAt: 0 }));
+  camps.forEach((_, i) => spawnCamp(w, i));
 }
 
 export function updateCamps(w: World) {
@@ -96,7 +96,8 @@ export function updateRunes(w: World) {
   if (w.time >= w.nextRune) {
     w.nextRune += 90;
     if (!w.rune) {
-      const spot = RUNE_SPOTS[Math.floor(rand(w) * RUNE_SPOTS.length)];
+      const spots = mapOf(w).runeSpots;
+      const spot = spots[Math.floor(rand(w) * spots.length)];
       w.rune = { kind: RUNES[Math.floor(rand(w) * RUNES.length)], x: spot.x, z: spot.z };
       emit(w, { e: 'rune', x: spot.x, z: spot.z, rune: w.rune.kind });
     }

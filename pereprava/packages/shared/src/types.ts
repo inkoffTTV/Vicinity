@@ -20,7 +20,7 @@ export interface Modifier {
 }
 
 export type Order =
-  | { type: 'move'; x: number; z: number; st: number; best: number }
+  | { type: 'move'; x: number; z: number; st: number; best: number; path?: { x: number; z: number }[] }
   | { type: 'attack'; id: number; auto: boolean }
   /** Подойти к цели на дальность умения и применить его */
   | { type: 'cast'; slot: number; id: number };
@@ -104,6 +104,8 @@ export interface Unit {
   hero?: HeroState;
   /** Ярус вышки: 1 — внешняя, 2 — внутренняя */
   tier?: number;
+  /** Линия вышки или крипа (индекс в MapDef.lanes) */
+  lane?: number;
   /** Лесной лагерь, к которому привязан нейтрал */
   camp?: number;
   homeX?: number;
@@ -177,7 +179,7 @@ export type SimEvent =
   | { e: 'gold'; player: number; amt: number; x: number; z: number }
   | { e: 'level'; id: number; player: number; level: number }
   | { e: 'respawn'; id: number; player: number }
-  | { e: 'tower'; team: Team; tier: number }
+  | { e: 'tower'; team: Team; tier: number; lane: number }
   | { e: 'buy'; player: number; item: string }
   | { e: 'rune'; x: number; z: number; rune: string; taker?: number }
   | { e: 'ping'; player: number; team: Team; x: number; z: number; kind: string }
@@ -203,7 +205,7 @@ export interface Player {
   /** null — человек; иначе сложность бота */
   bot: string | null;
   /** Мысль бота: режим, таймер раздумий, индекс закупки */
-  ai: { mode: 'lane' | 'retreat' | 'jungle'; think: number; buyIdx: number };
+  ai: { mode: 'lane' | 'retreat' | 'jungle'; think: number; buyIdx: number; lane: number };
   stats: PlayerStats;
   /** Последний урон по этому герою от вражеских героев: player slot → тик (для помощи в убийстве) */
   hurtBy: Record<number, number>;

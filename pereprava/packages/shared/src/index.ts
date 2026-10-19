@@ -1,5 +1,6 @@
 export * from './rng';
 export * from './map';
+export * from './nav';
 export * from './types';
 export * from './data/heroes';
 export * from './data/items';
