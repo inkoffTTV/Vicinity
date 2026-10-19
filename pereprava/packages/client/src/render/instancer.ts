@@ -18,9 +18,10 @@ export class RigInstancer {
 
   add(r: Rig) {
     const parts: THREE.Mesh[] = [];
-    r.body.traverse((o) => {
+    // Все меши модели (ноги висят на корне, а не на корпусе), кроме пузыря щита
+    r.root.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (!m.isMesh) return;
+      if (!m.isMesh || m === r.shield) return;
       m.visible = false;
       parts.push(m);
     });

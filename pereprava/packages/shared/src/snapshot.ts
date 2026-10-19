@@ -49,6 +49,8 @@ export interface ProjSnap {
   tid: number;
   c: number;
   s: number;
+  /** Модель того, кто выпустил (клиент выбирает вид снаряда: стрела, сгусток, болт) */
+  sm?: string;
 }
 
 export interface ZoneSnap {
@@ -246,6 +248,7 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; even
         tid: pr.target,
         c: pr.color,
         s: pr.size,
+        sm: unitById(w, pr.src)?.model,
       });
   const zones: ZoneSnap[] = [];
   for (const z of w.zones)

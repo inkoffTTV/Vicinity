@@ -19,6 +19,7 @@ import { makeModel, setGhost, type Rig } from './models';
 import type { SceneKit } from './scene';
 import { pickByRay, type PickCand, type Ray3 } from '../game/pick';
 import { animateRig } from './anim';
+import { attackFx, FxPool, PROJ_FX, projMesh, spins, type ProjFx } from './fx';
 
 interface VUnit {
   id: number;
@@ -58,35 +59,21 @@ interface VProj {
   prev: ProjSnap | null;
   y: number;
   trail: number;
-}
-
-interface Puff {
-  mesh: THREE.Mesh;
-  mat: THREE.MeshBasicMaterial;
-  life: number;
-  max: number;
-  size: number;
-  grow: number;
+  fx: ProjFx;
 }
 
 const hitY = (k: string) => (k === 'creep' || k === 'neutral' ? 0.8 : k === 'hero' ? 1.4 : 4);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const angLerp = (a: number, b: number, t: number) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t;
 
-const G = {
-  proj: new THREE.IcosahedronGeometry(0.22, 0),
-  fire: new THREE.IcosahedronGeometry(0.55, 0),
-  puff: new THREE.IcosahedronGeometry(1, 0),
-};
-
 export class GameView {
   /** Карта, на которой стоят юниты (высота земли, границы) */
   map: MapDef = getMap('1v1');
   readonly units = new Map<number, VUnit>();
   readonly projs = new Map<number, VProj>();
-  private puffs: Puff[] = [];
-  private freePuffs: Puff[] = [];
-  private projMats = new Map<number, THREE.MeshBasicMaterial>();
+  /** Облачка и вспышки — инстансами: один вызов отрисовки на пул */
+  private readonly puffs: FxPool;
+  private readonly rings: FxPool;
   private marker: THREE.Mesh;
   /** Юнит под курсором (0 — никого) и цвет его кольца */
   hoverId = 0;
@@ -131,6 +118,8 @@ export class GameView {
     readonly floatsEl: HTMLElement,
   ) {
     this.inst = new RigInstancer(kit.scene);
+    this.puffs = new FxPool(kit.scene, new THREE.IcosahedronGeometry(1, 0), 320);
+    this.rings = new FxPool(kit.scene, new THREE.RingGeometry(0.8, 1, 24).rotateX(-Math.PI / 2), 48, true);
     this.marker = new THREE.Mesh(
       new THREE.RingGeometry(0.5, 0.8, 24).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({ color: 0x7dff9a, transparent: true, opacity: 0, depthWrite: false }),
@@ -197,6 +186,7 @@ export class GameView {
     }
     for (const [id, p] of this.projs)
       if (!seenP.has(id)) {
+        this.projHit(p);
         this.scene.remove(p.mesh);
         this.projs.delete(id);
       }
@@ -299,24 +289,51 @@ export class GameView {
   }
 
   private addProj(ps: ProjSnap): VProj {
-    // Материалы снарядов кэшируются по цвету — без новой программы и утечки на каждый выстрел
-    let m = this.projMats.get(ps.c);
-    if (!m) this.projMats.set(ps.c, (m = new THREE.MeshBasicMaterial({ color: ps.c })));
-    const mesh = new THREE.Mesh(ps.k === 'attack' ? G.proj : G.fire, m);
-    mesh.scale.setScalar(ps.s);
+    // Вид снаряда: у умения — свой (PROJ_FX), у атаки — по модели стрелявшего (стрела, сгусток, болт)
+    const fx: ProjFx =
+      PROJ_FX[ps.k] ??
+      (ps.k === 'attack' ? attackFx(ps.sm, ps.c) : { shape: 'orb', color: ps.c, trail: ps.c, hit: ps.c, hitSize: 1 });
+    const mesh = projMesh(fx, ps.s);
     const y = groundH(this.map, ps.x, ps.z) + ps.y0;
     mesh.position.set(ps.x, y, ps.z);
     this.scene.add(mesh);
-    const p: VProj = { mesh, snap: ps, prev: null, y, trail: 0 };
+    const p: VProj = { mesh, snap: ps, prev: null, y, trail: 0, fx };
     this.projs.set(ps.id, p);
     return p;
+  }
+
+  /** Снаряд долетел (пропал из снимка) — вспышка попадания */
+  private projHit(p: VProj) {
+    const { x, y, z } = p.mesh.position;
+    const f = p.fx;
+    this.puffs.spawn(x, y, z, f.hit, 0.3 * f.hitSize, 0.28, 2.4);
+    this.puffs.spawn(x, y, z, 0xffffff, 0.14 * f.hitSize, 0.16, 2.5, 0.8);
+    if (f.hitSize >= 1) this.rings.spawn(x, unitY(this.map, x, z) + 0.12, z, f.hit, 0.5 * f.hitSize, 0.35, 2.6);
   }
 
   /** События тика: эффекты, смерти, всплывающие числа */
   handleEvents(events: SimEvent[], mySlot: number) {
     for (const e of events) {
       if (e.e === 'fx') this.puff(e.x, unitY(this.map, e.x, e.z) + e.h, e.z, e.color, e.size, e.life, e.grow);
-      else if (e.e === 'death') {
+      else if (e.e === 'cast') {
+        // Применение умения: кольцо цвета умения под героем и искры вверх
+        const a = ABILITIES[e.ability];
+        const v = this.units.get(e.id);
+        if (a && v) {
+          const c = parseInt(a.colors[1].slice(1), 16);
+          this.rings.spawn(v.x, v.y + 0.12, v.z, c, 0.7, 0.45, 2.2);
+          for (let i = 0; i < 4; i++)
+            this.puffs.spawn(
+              v.x + Math.sin(i * 1.6) * 0.5,
+              v.y + 1 + i * 0.35,
+              v.z + Math.cos(i * 1.6) * 0.5,
+              c,
+              0.16,
+              0.4,
+              0.6,
+            );
+        }
+      } else if (e.e === 'death') {
         const v = this.units.get(e.id);
         if (!v) continue;
         v.snap = { ...v.snap, dead: 1 };
@@ -420,7 +437,8 @@ export class GameView {
       this.rune.rotation.y += dt * 2;
       this.rune.position.y += Math.sin(time * 3) * 0.004;
     }
-    this.updatePuffs(dt);
+    this.puffs.update(dt);
+    this.rings.update(dt);
     this.inst.update();
     this.updateAimFx();
     this.markerT = Math.max(0, this.markerT - dt);
@@ -522,6 +540,8 @@ export class GameView {
     const q = p.prev ?? s;
     const x = lerp(q.x, s.x, a);
     const z = lerp(q.z, s.z, a);
+    const ox = p.mesh.position.x;
+    const oz = p.mesh.position.z;
     if (s.k === 'attack') {
       const t = this.units.get(s.tid);
       if (t) {
@@ -531,18 +551,28 @@ export class GameView {
         if (prevRemain > 0.01) p.y = ty + (p.y - ty) * Math.min(1, remain / prevRemain);
       }
       p.mesh.position.set(x, p.y, z);
+      if (Math.hypot(x - ox, z - oz) > 1e-3) p.mesh.rotation.y = Math.atan2(x - ox, z - oz);
+      if (p.fx.trail) {
+        p.trail -= dt;
+        if (p.trail <= 0) {
+          p.trail = 0.05;
+          this.puffs.spawn(x, p.y, z, p.fx.trail, 0.16 * Math.max(0.6, s.s), 0.22, 0.8, 0.7);
+        }
+      }
     } else {
       if (s.tid) {
         const t = this.units.get(s.tid);
         if (t) p.y += (t.y + hitY(t.snap.k) - p.y) * Math.min(1, dt * 6);
       }
       p.mesh.position.set(x, p.y, z);
-      p.mesh.rotation.x += dt * 8;
-      p.mesh.rotation.y += dt * 6;
+      if (spins(p.fx.shape)) {
+        p.mesh.rotation.x += dt * 8;
+        p.mesh.rotation.y += dt * 6;
+      } else if (Math.hypot(x - ox, z - oz) > 1e-3) p.mesh.rotation.y = Math.atan2(x - ox, z - oz);
       p.trail -= dt;
-      if (p.trail <= 0) {
+      if (p.trail <= 0 && p.fx.trail) {
         p.trail = 0.035;
-        this.puff(x, p.y, z, s.k === 'fireball' ? 0xff7a1f : s.c, 0.35 * Math.max(0.6, s.s), 0.35, 1.2);
+        this.puff(x, p.y, z, p.fx.trail, 0.35 * Math.max(0.6, s.s), 0.35, 1.2);
       }
     }
   }
@@ -550,40 +580,7 @@ export class GameView {
   // ── Эффекты ──
 
   puff(x: number, y: number, z: number, color: number, size: number, life: number, grow = 1.6) {
-    let f = this.freePuffs.pop();
-    if (!f) {
-      const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false });
-      f = { mesh: new THREE.Mesh(G.puff, mat), mat, life: 0, max: 0, size: 0, grow: 0 };
-    }
-    // Пул ограничен: на слабом телефоне сотни облачков не нужны
-    if (this.puffs.length > 140) {
-      this.freePuffs.push(f);
-      return;
-    }
-    f.mat.color.setHex(color);
-    f.mat.opacity = 0.9;
-    f.mesh.position.set(x, y, z);
-    f.mesh.scale.setScalar(size);
-    f.life = f.max = life;
-    f.size = size;
-    f.grow = grow;
-    this.scene.add(f.mesh);
-    this.puffs.push(f);
-  }
-
-  private updatePuffs(dt: number) {
-    for (let i = this.puffs.length - 1; i >= 0; i--) {
-      const f = this.puffs[i];
-      f.life -= dt;
-      const k = 1 - f.life / f.max;
-      f.mesh.scale.setScalar(f.size * (1 + k * f.grow));
-      f.mat.opacity = 0.9 * (1 - k);
-      if (f.life <= 0) {
-        this.scene.remove(f.mesh);
-        this.puffs.splice(i, 1);
-        this.freePuffs.push(f);
-      }
-    }
+    this.puffs.spawn(x, y, z, color, size, life, grow);
   }
 
   showMarker(x: number, z: number, enemy: boolean) {
@@ -766,8 +763,7 @@ export class GameView {
     }
     for (const p of this.projs.values()) this.scene.remove(p.mesh);
     this.projs.clear();
-    for (const f of this.puffs) this.scene.remove(f.mesh);
-    this.freePuffs.push(...this.puffs);
-    this.puffs = [];
+    this.puffs.clear();
+    this.rings.clear();
   }
 }
