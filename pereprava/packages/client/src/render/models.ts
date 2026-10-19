@@ -2,7 +2,7 @@
 // волк — зверь на четырёх лапах, вышки и кристаллы — здания (всё строит humanoid.ts).
 // У каждой модели есть «скелет» для процедурной анимации (anim.ts).
 import * as THREE from 'three';
-import { buildAncient, buildBeast, buildHumanoid, buildTower, type AttackStyle } from './humanoid';
+import { buildAncient, buildBeast, buildHumanoid, buildTotem, buildTower, type AttackStyle } from './humanoid';
 import { CREEP_LOOKS, GIANT_LOOK, HERO_LOOKS } from './looks';
 
 export const TEAM_COLORS = [0x3ec7a1, 0xe2504a, 0xc8b48a];
@@ -51,6 +51,16 @@ export function makeModel(model: string, team: number): Rig {
       return buildBeast(0x8a7a5a, 0xffc04a, 'wolf', 0.95);
     case 'n_big':
       return buildHumanoid(GIANT_LOOK, 2, 'giant', 0.9);
+    // Призванные: волки Звероловки, тотем Шамана
+    case 'spiritwolf':
+      return buildBeast(0x7a9ad8, 0xe0f0ff, 'spiritwolf', 0.95);
+    case 'totem':
+      return buildTotem(Math.min(1, team));
+    // Облики: Оборотень в облике волка, лягушка от «Сглаза»
+    case 'form:wolfform':
+      return buildBeast(0x5a4a3a, 0xffd040, 'bigwolf', 1.55);
+    case 'form:hex':
+      return buildBeast(0x5aa040, 0xfff080, 'frog', 0.6);
     default: {
       const look = HERO_LOOKS[model] ?? HERO_LOOKS.mage;
       return buildHumanoid(look, team, 'hero-' + model, 1);

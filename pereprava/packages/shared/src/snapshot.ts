@@ -78,6 +78,8 @@ export interface MeSnap {
   /** Сколько вернут за предмет в слоте сейчас и сколько ещё секунд действует полный возврат */
   sell: number[];
   full: number[];
+  /** Заряды умений по слотам (−1 — без зарядов) */
+  charges: number[];
   cd: number[];
   cdMax: number[];
   respawn: number;
@@ -252,7 +254,7 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; even
       });
   const zones: ZoneSnap[] = [];
   for (const z of w.zones)
-    if (z.team === team || pointVisible(w, team, z.x, z.z))
+    if (z.team === team || team === -1 || (!z.hidden && pointVisible(w, team, z.x, z.z)))
       zones.push({ id: z.id, k: z.kind, x: r2(z.x), z: r2(z.z), r: z.r, t: r2(z.t), d: r2(z.delay), tm: z.team });
   let me: MeSnap | null = null;
   const mu = p && unitById(w, p.unit);
@@ -269,11 +271,13 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; even
       need: xpNeed(h.level),
       items: [...h.items],
       itemCd: h.itemCd.map(r2),
+      charges: [...h.charges],
       sell: h.items.map((id, i) => (id ? sellValue(id, h.itemT[i], h.itemPaid[i], w.time) : 0)),
       full: h.items.map((id, i) =>
         id && h.itemPaid[i] > 0 ? r2(Math.max(0, FULL_REFUND_TIME - (w.time - h.itemT[i]))) : 0,
       ),
-      cd: h.cd.map(r2),
+      // Заряды кончились — показываем, сколько до следующего
+      cd: h.cd.map((c, i) => r2(h.charges[i] === 0 ? Math.max(c, h.chargeT[i]) : c)),
       cdMax: HERO[h.def].abilities.map((_, i) => abilityAt(mu, i)?.cd ?? 1),
       respawn: r2(h.respawn),
       nearShop: nearShop(w, mu),

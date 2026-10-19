@@ -23,7 +23,8 @@ import { ActivityBridge } from './net/activity';
 import { Connection } from './net/connection';
 import { Lobby } from './ui/lobby';
 import { Sound, type Volumes } from './audio/sound';
-import { renderHeroCards, renderPickGrid, scoreTable } from './ui/screens';
+import { renderHeroCards, scoreTable } from './ui/screens';
+import { PickScreen } from './ui/pick';
 import type { Session } from './game/session';
 import { attachInput } from './game/input';
 import { AutoScale } from './render/autoscale';
@@ -827,7 +828,7 @@ export class App {
       $('accept').hidden = true;
       $('pick').hidden = false;
       this.rollEnemy();
-      renderPickGrid($('pickGrid'), this.settings.hero, (id) => {
+      this.pickScreen.open(this.settings.hero, (id) => {
         this.pickHero(id);
         this.sound.play('ui');
       });
@@ -902,11 +903,18 @@ export class App {
     });
   }
 
+  /** Экран выбора героя (создаётся при первом показе) */
+  private _pick: PickScreen | null = null;
+  private get pickScreen() {
+    return (this._pick ??= new PickScreen());
+  }
+
   private toLoading() {
     if (this.state !== 'pick') return;
     this.setState('loading');
     this.loadT = 0;
     $('pick').hidden = true;
+    this._pick?.close();
     $('loading').hidden = false;
     const ld = document.querySelectorAll('#loading .side b');
     ld[0].textContent = HERO[this.settings.hero].name;
@@ -967,6 +975,7 @@ export class App {
     this.snap = null;
     $('screen').hidden = true;
     $('pick').hidden = true;
+    this._pick?.close();
     $('board').hidden = true;
     $('menu').hidden = false;
     this.preview = this.makeLocal();

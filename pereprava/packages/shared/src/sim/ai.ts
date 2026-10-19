@@ -38,7 +38,7 @@ function frontPos(w: World, b: Unit, lane: number): P2 {
   let best: Unit | null = null;
   let bs = -1e9;
   for (const v of w.units)
-    if (v.alive && v.kind === 'creep' && v.team === team && (v.lane ?? 0) === lane) {
+    if (v.alive && v.kind === 'creep' && !v.owner && v.team === team && (v.lane ?? 0) === lane) {
       const s = laneProgress(m, lane, team, v.x, v.z);
       if (s > bs) {
         bs = s;
@@ -134,6 +134,22 @@ function useAbilities(w: World, b: Unit, foe: Unit | null, hpP: number, retreati
           )
             best = v;
         if (best) return castAbility(w, b, slot, { x: best.x, z: best.z, id: best.id });
+        break;
+      }
+      case 'revive': {
+        // Есть павший союзник, который ещё долго будет мёртв, или союзник рядом при смерти
+        const dead = w.units.some(
+          (v) => v.kind === 'hero' && v.team === b.team && !v.alive && (v.hero?.respawn ?? 0) > 8,
+        );
+        const low = w.units.some(
+          (v) =>
+            v.kind === 'hero' &&
+            v.alive &&
+            v.team === b.team &&
+            dist(b, v) < (ai.range ?? 12) &&
+            v.hp / v.maxHp < (ai.hp ?? 0.35),
+        );
+        if (dead || low) return castAbility(w, b, slot, null);
         break;
       }
       case 'finish':

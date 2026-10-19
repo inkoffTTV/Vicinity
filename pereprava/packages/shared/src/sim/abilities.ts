@@ -4,6 +4,8 @@
 import type { Casting, Projectile, Unit, Zone } from '../types';
 import { HERO } from '../data/heroes';
 import { addMod, hasFlag, removeMod } from './modifiers';
+import { aimDir, aimPoint, aimUnit, amp, aoe, facing, launchAt, lvl, type Aim } from './abil-util';
+import { ABILITIES_2 } from './abilities2';
 import {
   addZone,
   clamp,
@@ -14,6 +16,7 @@ import {
   fx,
   heal,
   launch,
+  mapOf,
   nearestEnemy,
   resolveCollisions,
   ULT_LEVEL,
@@ -21,16 +24,12 @@ import {
   type World,
 } from './world';
 
-export interface Aim {
-  x: number;
-  z: number;
-  id: number;
-}
+export type { Aim } from './abil-util';
 
 /** Подсказка ИИ: как и когда бот применяет способность */
 export interface AiHint {
   /** nuke — урон в героя; aoe — по площади вокруг себя; escape — отход; defend — защита; buff — усиление в драке */
-  kind: 'nuke' | 'aoe' | 'escape' | 'defend' | 'buff' | 'disable' | 'heal' | 'finish';
+  kind: 'nuke' | 'aoe' | 'escape' | 'defend' | 'buff' | 'disable' | 'heal' | 'finish' | 'revive';
   /** Дистанция до героя-цели */
   range?: number;
   /** Сколько вражеских крипов рядом оправдывают применение по крипам */
@@ -65,6 +64,10 @@ export interface AbilityDef {
   onProjectileHit?(w: World, p: Projectile, hit: Unit): void;
   /** Пассивная: не применяется кнопкой */
   passive?: boolean;
+  /** Заряды: сколько применений копится (каждое восстанавливается за cd) */
+  charges?: number;
+  /** Пассивная реакция на любое своё применённое умение */
+  onCast?(w: World, u: Unit, a: AbilityDef): void;
   /** Пассивная реакция на собственную атаку: вернуть итоговый урон */
   onAttack?(w: World, u: Unit, target: Unit, dmg: number): number;
   /** Аура: союзникам рядом каждый тик обновляется модификатор */
@@ -75,105 +78,6 @@ export interface AbilityDef {
     pulse?(w: World, z: Zone, src: Unit | null): void;
     end?(w: World, z: Zone, src: Unit | null): void;
   };
-}
-
-const lvl = (u: Unit) => u.hero!.level - 1;
-const amp = (u: Unit) => u.hero!.spellAmp;
-
-/** Направление каста: к точке прицела, иначе запасной вариант */
-function aimDir(u: Unit, aim: Aim | null, fallback: () => { dx: number; dz: number }) {
-  if (aim) {
-    const dx = aim.x - u.x;
-    const dz = aim.z - u.z;
-    const len = Math.hypot(dx, dz);
-    if (len > 0.3) return { dx, dz, len };
-  }
-  const f = fallback();
-  return { ...f, len: 0 };
-}
-const facing = (u: Unit) => ({ dx: Math.sin(u.rot), dz: Math.cos(u.rot) });
-
-/** Урон по площади всем врагам (кроме неуязвимых), filter — дополнительное условие */
-export function aoe(
-  w: World,
-  u: Unit,
-  x: number,
-  z: number,
-  r: number,
-  amt: number,
-  type: 'physical' | 'magical' | 'pure',
-  filter?: (v: Unit) => boolean,
-): Unit[] {
-  const hit: Unit[] = [];
-  for (const v of w.units)
-    if (
-      v.alive &&
-      v.team !== u.team &&
-      !v.invuln &&
-      Math.hypot(v.x - x, v.z - z) < r + v.radius &&
-      (!filter || filter(v))
-    )
-      hit.push(v);
-  for (const v of hit) damage(w, v, amt, u, type);
-  return hit;
-}
-
-/** Точка каста: прицел или запасная (ближайший враг, иначе на 6 м вперёд) */
-function aimPoint(w: World, u: Unit, aim: Aim | null, range: number): { x: number; z: number } {
-  let x: number;
-  let z: number;
-  if (aim) {
-    x = aim.x;
-    z = aim.z;
-  } else {
-    const t = nearestEnemy(w, u, range, (v) => v.kind === 'hero') ?? nearestEnemy(w, u, range);
-    if (t) {
-      x = t.x;
-      z = t.z;
-    } else {
-      x = u.x + Math.sin(u.rot) * 6;
-      z = u.z + Math.cos(u.rot) * 6;
-    }
-  }
-  const dx = x - u.x;
-  const dz = z - u.z;
-  const d = Math.hypot(dx, dz);
-  if (d > range) {
-    x = u.x + (dx / d) * range;
-    z = u.z + (dz / d) * range;
-  }
-  u.rot = Math.atan2(x - u.x, z - u.z) || u.rot;
-  return { x: clamp(x, -58, 58), z: clamp(z, -58, 58) };
-}
-
-/** Цель-юнит: выбранная, иначе ближайший вражеский герой, иначе любой враг в радиусе */
-function aimUnit(w: World, u: Unit, aim: Aim | null, range: number): Unit | null {
-  const chosen = aim?.id ? unitById(w, aim.id) : undefined;
-  if (chosen?.alive && chosen.team !== u.team && !chosen.invuln && dist(u, chosen) <= range + chosen.radius + 1)
-    return chosen;
-  return nearestEnemy(w, u, range, (v) => v.kind === 'hero') ?? nearestEnemy(w, u, range);
-}
-
-/** Самонаводящийся снаряд способности */
-function launchAt(w: World, u: Unit, kind: string, t: Unit, speed: number, dmg: number, color: number, size = 0.7) {
-  w.projs.push({
-    id: w.nextId++,
-    kind,
-    x: u.x,
-    z: u.z,
-    y0: 1.8,
-    dx: 0,
-    dz: 0,
-    speed,
-    dist: 0,
-    max: 1e9,
-    target: t.id,
-    src: u.id,
-    team: u.team,
-    dmg,
-    color,
-    size,
-  });
 }
 
 export const ABILITIES: Record<string, AbilityDef> = {
@@ -235,8 +139,9 @@ export const ABILITIES: Record<string, AbilityDef> = {
       const L = Math.hypot(dx, dz) || 1;
       const d = Math.min(10, len || 10);
       fx(w, u.x, u.z, 1.2, 0x9d7bff, 0.8, 0.4, 1.8);
-      u.x = clamp(u.x + (dx / L) * d, -58, 58);
-      u.z = clamp(u.z + (dz / L) * d, -58, 58);
+      const lim = mapOf(w).limit - 1;
+      u.x = clamp(u.x + (dx / L) * d, -lim, lim);
+      u.z = clamp(u.z + (dz / L) * d, -lim, lim);
       u.rot = Math.atan2(dx, dz);
       u.hero!.order = null;
       resolveCollisions(w);
@@ -668,6 +573,20 @@ export const ABILITIES: Record<string, AbilityDef> = {
   },
 };
 
+// Умения 19 новых героев (0.4) — в отдельном файле
+Object.assign(ABILITIES, ABILITIES_2);
+
+// «На бис» Барда: каждое применённое умение лечит союзников рядом
+ABILITIES.encore.onCast = (w, u) => {
+  for (const v of w.units)
+    if (v.alive && v.team === u.team && v.kind === 'hero' && dist(u, v) < 6) heal(w, v, (45 + lvl(u) * 6) * amp(u));
+};
+
+/** После применения: пассивки героя, которые реагируют на любое умение */
+function afterCast(w: World, u: Unit, a: AbilityDef) {
+  for (const id of HERO[u.hero!.def].abilities) ABILITIES[id]?.onCast?.(w, u, a);
+}
+
 /** Способность в слоте героя (Q W E R) */
 export function abilityAt(u: Unit, slot: number): AbilityDef | undefined {
   const id = HERO[u.hero!.def]?.abilities[slot];
@@ -678,6 +597,7 @@ export function canCast(u: Unit, slot: number): boolean {
   const h = u.hero;
   const a = h && abilityAt(u, slot);
   if (!a || a.passive || !u.alive || h.casting || h.cd[slot] > 0) return false;
+  if (a.charges && h.charges[slot] <= 0) return false;
   if (a.ult && h.level < ULT_LEVEL) return false;
   return !hasFlag(u, 'stun') && !hasFlag(u, 'silence');
 }
@@ -697,7 +617,7 @@ export function castAbility(w: World, u: Unit, slot: number, aim: Aim | null): b
   const a = h && abilityAt(u, slot);
   if (!h || !a || a.passive || !u.alive) return false;
   if (a.ult && h.level < ULT_LEVEL) return castFail(w, u, slot, 'level');
-  if (h.cd[slot] > 0) return castFail(w, u, slot, 'cd');
+  if (h.cd[slot] > 0 || (a.charges && h.charges[slot] <= 0)) return castFail(w, u, slot, 'cd');
   if (hasFlag(u, 'stun')) return castFail(w, u, slot, 'stun');
   if (hasFlag(u, 'silence')) return castFail(w, u, slot, 'silence');
   // Идёт замах другого умения — запоминаем нажатие, сработает следом
@@ -738,16 +658,30 @@ export function castAbility(w: World, u: Unit, slot: number, aim: Aim | null): b
       id: aim?.id ?? 0,
     };
     h.order = null;
-    h.cd[slot] = a.cd * (1 - h.cdr);
+    spend(u, slot, a);
     emit(w, { e: 'cast', id: u.id, ability: a.id, x: h.casting.x, z: h.casting.z });
+    afterCast(w, u, a);
     return true;
   }
   if (!a.cast(w, u, aim)) return castFail(w, u, slot, 'target');
-  h.cd[slot] = a.cd * (1 - h.cdr);
+  spend(u, slot, a);
   u.castTick = w.tick;
   if (a.id !== 'veil') removeMod(u, 'invisible');
   emit(w, { e: 'cast', id: u.id, ability: a.id, x: aim?.x ?? u.x, z: aim?.z ?? u.z });
+  afterCast(w, u, a);
   return true;
+}
+
+/** Потратить применение: перезарядка или заряд (с короткой паузой между зарядами) */
+function spend(u: Unit, slot: number, a: AbilityDef) {
+  const h = u.hero!;
+  if (!a.charges) {
+    h.cd[slot] = a.cd * (1 - h.cdr);
+    return;
+  }
+  h.charges[slot]--;
+  if (h.chargeT[slot] <= 0) h.chargeT[slot] = a.cd * (1 - h.cdr);
+  h.cd[slot] = 0.5;
 }
 
 export function fireCasting(w: World, u: Unit) {

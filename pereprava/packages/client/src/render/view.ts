@@ -23,7 +23,12 @@ import { attackFx, FxPool, PROJ_FX, projMesh, spins, type ProjFx } from './fx';
 
 interface VUnit {
   id: number;
+  /** Текущая модель (в облике — модель облика) */
   rig: Rig;
+  /** Обычная модель и модели обликов */
+  base: Rig;
+  forms?: Record<string, Rig>;
+  form: string;
   snap: UnitSnap;
   prev: UnitSnap | null;
   bar: HTMLDivElement;
@@ -50,7 +55,22 @@ interface VZone {
   dome?: THREE.Mesh;
 }
 
-const ZONE_COLORS: Record<string, number> = { meteor: 0xff6a1f, volley: 0xc8f08a, dome: 0xffe08a };
+const ZONE_COLORS: Record<string, number> = {
+  meteor: 0xff6a1f,
+  volley: 0xc8f08a,
+  dome: 0xffe08a,
+  blizzard: 0xbfe8ff,
+  barrage: 0xff7a20,
+  snare: 0xc8a070,
+  smoke: 0x9a9aa4,
+  roots: 0x6a9a40,
+  miasma: 0x90d870,
+  totem: 0x80f0b0,
+  consecrate: 0xfff0a0,
+  thousandfists: 0xffe0b0,
+};
+/** Облики: какой модификатор меняет модель героя */
+const FORMS = ['wolfform', 'hex'];
 const RUNE_COLORS: Record<string, number> = { haste: 0xff4a4a, damage: 0x4a8aff, regen: 0x4aff8a, shield: 0xf1c453 };
 
 interface VProj {
@@ -213,6 +233,27 @@ export class GameView {
     } else this.rune.visible = false;
   }
 
+  /** Облик героя (волк, лягушка): подменяем модель, пока висит модификатор */
+  private updateForm(v: VUnit, s: UnitSnap) {
+    if (s.k !== 'hero') return;
+    const f = FORMS.find((x) => s.fx?.includes(x)) ?? '';
+    if (f === v.form) return;
+    const from = v.rig;
+    let to = v.base;
+    if (f) {
+      v.forms ??= {};
+      to = v.forms[f] ??= makeModel('form:' + f, s.tm);
+    }
+    to.root.position.copy(from.root.position);
+    to.root.rotation.y = from.root.rotation.y;
+    to.root.visible = from.root.visible;
+    this.scene.remove(from.root);
+    this.scene.add(to.root);
+    v.rig = to;
+    v.form = f;
+    this.puff(v.x, v.y + 1, v.z, f === 'hex' ? 0x8af080 : 0xc8b090, 1.2, 0.5, 1.6);
+  }
+
   private addZone(z: ZoneSnap): VZone {
     const color = ZONE_COLORS[z.k] ?? 0xffffff;
     const group = new THREE.Group();
@@ -261,6 +302,8 @@ export class GameView {
     const v: VUnit = {
       id: us.id,
       rig,
+      base: rig,
+      form: '',
       snap: us,
       prev: null,
       bar,
@@ -359,6 +402,7 @@ export class GameView {
     for (const [id, v] of this.units) {
       const s = v.snap;
       const p = v.prev ?? s;
+      this.updateForm(v, s);
       const root = v.rig.root;
       const mobile = s.k === 'hero' || s.k === 'creep' || s.k === 'neutral';
       if (v.dying > 0) {

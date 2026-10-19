@@ -112,6 +112,8 @@ export class Hud {
     const box = $('skills');
     box.innerHTML = '';
     this.skillBtns = [];
+    // Кнопки новые — забываем, что писали в старые
+    for (const k of Object.keys(this.last)) if (k.startsWith('sk') || k.startsWith('chg')) delete this.last[k];
     HERO[hero].abilities.forEach((id, slot) => {
       const a = ABILITIES[id];
       const b = document.createElement('button');
@@ -121,7 +123,7 @@ export class Hud {
       b.style.cssText = `--rim:${rim};--c1:${c1};--c2:${c2};--c3:${c3}`;
       b.setAttribute('aria-label', a.passive ? `${a.name}, пассивная` : `${a.name}, клавиша ${KEYS[slot]}`);
       b.title = `${a.name}${a.passive ? ' (пассивная)' : ` (${KEYS[slot]})`}: ${a.desc}`;
-      b.innerHTML = `<span>${a.passive ? '∞' : KEYS[slot]}</span>`;
+      b.innerHTML = `<span>${a.passive ? '∞' : KEYS[slot]}</span>${a.charges ? '<em class="chg"></em>' : ''}`;
       if (a.passive) {
         b.tabIndex = -1;
         box.appendChild(b);
@@ -257,6 +259,8 @@ export class Hud {
       if (ab?.passive) return;
       const locked = !!ab?.ult && me.level < ULT_LEVEL;
       b.classList.toggle('locked', locked);
+      const chg = me.charges[i] ?? -1;
+      if (chg >= 0) this.setText('chg' + i, b.querySelector('.chg') as HTMLElement, String(chg));
       b.style.setProperty('--cd', (locked ? 1 : me.cdMax[i] > 0 ? me.cd[i] / me.cdMax[i] : 0).toFixed(3));
       this.setText(
         'sk' + i,

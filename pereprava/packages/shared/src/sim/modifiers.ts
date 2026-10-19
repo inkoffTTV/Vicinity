@@ -4,9 +4,23 @@
 import type { Modifier, Unit } from '../types';
 import { DT, damage, recallHome, unitById, type World } from './world';
 
-export type ModFlag = 'stun' | 'silence' | 'root' | 'disarm' | 'invisible';
+export type ModFlag = 'stun' | 'silence' | 'root' | 'disarm' | 'invisible' | 'immune';
 /** Характеристики, в которые модификаторы добавляют значение v (или своё число) */
-export type ModStat = 'armor' | 'slow' | 'haste' | 'heal' | 'atkSpeed' | 'dmgAmp' | 'vuln' | 'resist';
+export type ModStat =
+  | 'armor'
+  | 'slow'
+  | 'haste'
+  | 'heal'
+  | 'atkSpeed'
+  | 'dmgAmp'
+  | 'vuln'
+  | 'resist'
+  /** Доля физического урона, которая возвращается напавшему вблизи */
+  | 'thorns'
+  /** Шанс уклониться от физического удара */
+  | 'evade'
+  /** Вампиризм от модификатора (сверх предметов) */
+  | 'lifesteal';
 
 export interface ModifierDef {
   name: string;
@@ -52,6 +66,71 @@ export const MODIFIERS: Record<string, ModifierDef> = {
       recallHome(w, u);
     },
   },
+  poison: {
+    name: 'Яд',
+    buff: false,
+    tick(w, u, m) {
+      damage(w, u, m.v * DT, unitById(w, m.src) ?? null, 'magical');
+    },
+  },
+  bleed: {
+    name: 'Кровотечение',
+    buff: false,
+    tick(w, u, m) {
+      damage(w, u, m.v * DT, unitById(w, m.src) ?? null, 'physical');
+    },
+  },
+  taunt: { name: 'Вызов', buff: false },
+  // Ауры-пассивки на себя (обновляются каждый тик, пока герой жив)
+  sap: {
+    name: 'Сок земли',
+    buff: true,
+    tick(_w, u) {
+      const o = u.hero?.order;
+      if (o && (o.type === 'move' || o.type === 'amove')) return;
+      u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.015 * DT);
+    },
+  },
+  thickhide: {
+    name: 'Толстокожесть',
+    buff: true,
+    stats: { resist: 'v' },
+    tick(_w, u, m) {
+      m.v = Math.min(0.3, u.maxHp / 10000);
+    },
+  },
+  bloodlust: {
+    name: 'Жажда битвы',
+    buff: true,
+    stats: { atkSpeed: 'v' },
+    tick(_w, u, m) {
+      m.v = 0.6 * (1 - u.hp / u.maxHp);
+    },
+  },
+  spiritAura: { name: 'Связь духов', buff: true, stats: { heal: 3, haste: 0.08 } },
+  graceAura: { name: 'Благодать', buff: true, stats: { armor: 2, heal: 2 } },
+  thorns: { name: 'Шипы', buff: true, stats: { thorns: 'v' } },
+  evade: { name: 'Бесплотность', buff: true, stats: { evade: 'v' } },
+  undying: { name: 'Неистовство', buff: true },
+  immune: { name: 'Неуязвимость', buff: true, flags: ['immune'] },
+  iceblock: { name: 'Ледяная глыба', buff: true, flags: ['stun', 'immune'] },
+  sleep: { name: 'Сон', buff: false, flags: ['stun'] },
+  hex: { name: 'Сглаз', buff: false, flags: ['silence', 'disarm'], stats: { slow: 0.35 } },
+  parry: { name: 'Парирование', buff: true },
+  deathmark: {
+    name: 'Метка смерти',
+    buff: false,
+    // Спала — ещё раз почти половина урона, полученного под меткой
+    expire(w, u, m) {
+      if (u.alive && m.v > 1) damage(w, u, (m.v - 1) * 0.45, unitById(w, m.src) ?? null, 'pure');
+    },
+  },
+  combo: { name: 'Серия', buff: true },
+  rage: { name: 'Ярость', buff: true, stats: { atkSpeed: 'v', vuln: 0.15, lifesteal: 0.15 } },
+  wolfform: { name: 'Облик волка', buff: true, stats: { dmgAmp: 0.35, haste: 0.25, armor: 5, lifesteal: 0.12 } },
+  fortress: { name: 'Крепость', buff: true, stats: { armor: 18, resist: 0.3 } },
+  song: { name: 'Баллада', buff: true, stats: { atkSpeed: 0.3, haste: 0.15 } },
+  atkSlow: { name: 'Вялость', buff: false, stats: { atkSpeed: 'v' } },
   burn: {
     name: 'Горение',
     buff: false,

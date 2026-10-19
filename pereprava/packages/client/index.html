@@ -134,7 +134,14 @@
   <div id="pick" hidden>
     <div class="pickbox panel" role="dialog" aria-modal="true" aria-label="Выбор героя">
       <header><h2>Выбор героя</h2><span class="pickT num" id="pickT" aria-label="Секунд на выбор">20</span></header>
-      <div class="pickgrid" id="pickGrid" role="group" aria-label="Герои"></div>
+      <div class="pickbar">
+        <input id="pickSearch" type="search" placeholder="Поиск героя" aria-label="Поиск героя" autocomplete="off" enterkeyhint="search">
+        <div id="pickRoles" role="tablist" aria-label="Роли"></div>
+      </div>
+      <div class="pickmain">
+        <div class="pickgrid" id="pickGrid" role="group" aria-label="Герои"></div>
+        <aside class="pickcard"><canvas id="pickPreview" aria-label="Модель выбранного героя"></canvas><div id="pickDetail"></div></aside>
+      </div>
       <div class="pickfoot"><p id="pickInfo"></p><button class="go" id="pickGo">В бой</button></div>
     </div>
   </div>

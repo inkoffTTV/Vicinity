@@ -122,6 +122,15 @@ export const PROJ_FX: Record<string, ProjFx> = {
   bind: { shape: 'vine', color: 0x6ad87a, trail: 0x4ab85a, hit: 0x8af0a0, hitSize: 1.2 },
   dagger: { shape: 'dagger', color: 0xd8c8ff, trail: 0x9d7bff, hit: 0xc6b8ff, hitSize: 0.9 },
   mend: { shape: 'star', color: 0xfff2b8, trail: 0xf1e38a, hit: 0xfff2b8, hitSize: 1.2 },
+  icelance: { shape: 'bolt', color: 0xdff4ff, trail: 0x9fd8ff, hit: 0xbfe8ff, hitSize: 1.1 },
+  static: { shape: 'star', color: 0xfff6a0, trail: 0xe8d040, hit: 0xfff6a0, hitSize: 0.8 },
+  timebolt: { shape: 'orb', color: 0xffe0a0, trail: 0xd4a040, hit: 0xffe0a0, hitSize: 1 },
+  grenade: { shape: 'rock', color: 0x4a4a50, trail: 0x8a7a6a, hit: 0xff8a40, hitSize: 1.6 },
+  netshot: { shape: 'vine', color: 0xe0d0a0, trail: 0, hit: 0xe0d0a0, hitSize: 1 },
+  pinshot: { shape: 'arrow', color: 0xffe8b0, trail: 0xffe8b0, hit: 0xffe8b0, hitSize: 1 },
+  lastshot: { shape: 'arrow', color: 0xff9a8a, trail: 0xff5a4a, hit: 0xff9a8a, hitSize: 1.6 },
+  toxin: { shape: 'orb', color: 0xb0f080, trail: 0x5ab030, hit: 0xb0f080, hitSize: 1 },
+  hammer: { shape: 'rock', color: 0xfff0b0, trail: 0xd8b040, hit: 0xfff0b0, hitSize: 1.3 },
 };
 
 /** Вид снаряда обычной атаки — по модели стрелявшего */

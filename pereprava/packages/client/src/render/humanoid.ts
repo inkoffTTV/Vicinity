@@ -529,6 +529,30 @@ export function buildBeast(fur: number, glow: number, key: string, scale = 1): R
   return { root, body, scale, weapon: body, kind: 'beast', legs, attack: 'thrust' };
 }
 
+// ── Тотем шамана ──
+
+export function buildTotem(team: number): Rig {
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(body);
+  const p = new Parts();
+  const tc = TEAM_ACCENT[team] ?? TEAM_ACCENT[2];
+  p.add(cyl(0.35, 0.45, 0.3, 6), 0x5a4a3a, [0, 0.15, 0]);
+  p.add(cyl(0.22, 0.26, 1.8, 6), 0x8a6a44, [0, 1.2, 0]);
+  for (const [y, c] of [
+    [0.8, 0x4a9a6a],
+    [1.4, 0xc8a050],
+    [2.0, 0x4a9a6a],
+  ] as const) {
+    p.add(box(0.5, 0.42, 0.5), c, [0, y, 0]);
+    p.add(box(0.3, 0.08, 0.05), 0x90f0b8, [0, y + 0.05, 0.26], [0, 0, 0], [1, 1, 1], true);
+  }
+  for (const sx of [-1, 1]) p.add(box(0.5, 0.12, 0.2), 0x8a6a44, [sx * 0.45, 2.1, 0], [0, 0, sx * 0.3]);
+  p.add(gem(0.18), tc, [0, 2.45, 0], [0, 0, 0], [1, 1.4, 1], true);
+  bone(body, p, 'totem|' + team);
+  return { root, body, scale: 1, kind: 'building' };
+}
+
 // ── Здания ──
 
 const STONE = [0xb4ab96, 0x6e5a56];

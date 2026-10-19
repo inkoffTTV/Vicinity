@@ -59,6 +59,11 @@ export interface HeroState {
   /** Когда куплен предмет в слоте (время мира) и сколько за него заплачено — для возврата в первые 10 с */
   itemT: number[];
   itemPaid: number[];
+  /** Заряды умений по слотам (−1 — у умения нет зарядов) и сколько до следующего заряда */
+  charges: number[];
+  chargeT: number[];
+  /** Где герой был последние 4 с (раз в 0,25 с) — для умений «отката во времени» */
+  hist: { x: number; z: number; hp: number }[];
   respawn: number;
   order: Order | null;
   casting: Casting | null;
@@ -128,6 +133,9 @@ export interface Unit {
   slotT?: number;
   /** Стоит и бьёт: почти не толкается и не дёргается (см. sim/engage.ts) */
   planted?: boolean;
+  /** Призванный: чей (id героя) и сколько ещё живёт, с */
+  owner?: number;
+  life?: number;
 }
 
 export interface Projectile {
@@ -171,6 +179,8 @@ export interface Zone {
   src: number;
   team: Side;
   v: number;
+  /** Ловушка: врагам не видна */
+  hidden?: boolean;
 }
 
 /** Приказы игрока. Приходят между тиками и применяются в начале следующего */

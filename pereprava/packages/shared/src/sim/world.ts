@@ -41,7 +41,7 @@ import type {
 import { ABILITIES, abilityAt, castAbility, fireCasting } from './abilities';
 import { botThink } from './ai';
 import { aggroNeutral, updateCamps, updateNeutral, setupCamps, updateRunes } from './jungle';
-import { addMod, hasFlag, modValue, removeMod, tickModifiers } from './modifiers';
+import { addMod, getMod, hasFlag, modValue, removeMod, tickModifiers } from './modifiers';
 import { useItem } from './items';
 
 export const TICK_RATE = 30;
@@ -287,6 +287,9 @@ export function createWorld(setup: MatchSetup): World {
       itemCd: Array(ALL_SLOTS).fill(0),
       itemT: Array(ALL_SLOTS).fill(-99),
       itemPaid: Array(ALL_SLOTS).fill(0),
+      charges: def.abilities.map((id) => ABILITIES[id]?.charges ?? -1),
+      chargeT: [0, 0, 0, 0],
+      hist: [],
       respawn: 0,
       order: null,
       casting: null,
@@ -540,6 +543,28 @@ export const armorMult = (a: number) => 1 - (0.06 * a) / (1 + 0.06 * Math.abs(a)
 
 export function damage(w: World, t: Unit, amt: number, src: Unit | null, type: DamageType = 'physical'): number {
   if (!t.alive || t.invuln || amt <= 0) return 0;
+  // Неуязвимость (ледяная глыба, божественный суд)
+  if (hasFlag(t, 'immune')) {
+    emit(w, { e: 'hit', id: t.id, src: src?.id ?? 0, amt: 0, shield: true });
+    return 0;
+  }
+  // Уклонение и парирование — только от физических ударов юнитов
+  if (type === 'physical' && src && src !== t) {
+    const ev = modValue(t, 'evade');
+    if (ev > 0 && rand(w) < ev) {
+      fx(w, t.x, t.z, 1.4, 0xd8d0ff, 0.35, 0.25, 1.6);
+      return 0;
+    }
+    if (getMod(t, 'parry') && dist(src, t) < 5) {
+      removeMod(t, 'parry');
+      fx(w, t.x, t.z, 1.6, 0xfff2b8, 0.6, 0.3, 2);
+      damage(w, src, amt, t, 'physical');
+      if (src.alive) addMod(src, 'stun', 1, 0, t.id);
+      return 0;
+    }
+  }
+  // Сон прерывается уроном
+  if (t.mods.length && getMod(t, 'sleep')) removeMod(t, 'sleep');
   // Вышка заступается за своего героя, на которого напал вражеский герой рядом с ней
   if (src?.kind === 'hero' && t.kind === 'hero')
     for (const tw of w.units)
@@ -577,8 +602,18 @@ export function damage(w: World, t: Unit, amt: number, src: Unit | null, type: D
     emit(w, { e: 'hit', id: t.id, src: src?.id ?? 0, amt: 0, shield: shielded });
     return 0;
   }
+  // Метка смерти копит полученный урон
+  const mark = t.mods.length ? getMod(t, 'deathmark') : undefined;
+  if (mark) mark.v += amt;
+  // Шипы: часть физического урона — обратно напавшему вблизи (магическим, чтобы не было эха)
+  if (type === 'physical' && src && src.alive && src !== t && dist(src, t) < 4) {
+    const th = modValue(t, 'thorns');
+    if (th > 0) damage(w, src, amt * th, t, 'magical');
+  }
   t.hp -= amt;
   t.hurtTick = w.tick;
+  // Неистовство: не умирает
+  if (t.hp < 1 && t.mods.length && getMod(t, 'undying')) t.hp = 1;
   if (t.kind === 'neutral' && src) aggroNeutral(w, t, src);
   emit(w, { e: 'hit', id: t.id, src: src?.id ?? 0, amt, shield: shielded });
   if (src?.hero && t.kind === 'hero') {
@@ -586,8 +621,10 @@ export function damage(w: World, t: Unit, amt: number, src: Unit | null, type: D
     sp.stats.heroDamage += amt;
     w.players[t.hero!.player].hurtBy[sp.slot] = w.tick;
   }
-  if (src?.hero && src.hero.lifesteal > 0 && type === 'physical')
-    src.hp = Math.min(src.maxHp, src.hp + amt * src.hero.lifesteal);
+  if (src && type === 'physical') {
+    const ls = (src.hero?.lifesteal ?? 0) + (src.mods.length ? modValue(src, 'lifesteal') : 0);
+    if (ls > 0) src.hp = Math.min(src.maxHp, src.hp + amt * ls);
+  }
   if (t.hp <= 0) {
     t.hp = 0;
     kill(w, t, src);
@@ -899,6 +936,21 @@ function respawn(w: World, u: Unit) {
 function heroTick(w: World, u: Unit): boolean {
   const h = u.hero!;
   for (let i = 0; i < h.cd.length; i++) h.cd[i] = Math.max(0, h.cd[i] - DT);
+  // Заряды копятся по одному за перезарядку умения
+  for (let i = 0; i < h.charges.length; i++) {
+    const a = ABILITIES[HERO[h.def].abilities[i]];
+    if (!a?.charges || h.charges[i] >= a.charges) continue;
+    h.chargeT[i] -= DT;
+    if (h.chargeT[i] <= 0) {
+      h.charges[i]++;
+      h.chargeT[i] = h.charges[i] < a.charges ? a.cd * (1 - h.cdr) : 0;
+    }
+  }
+  // История позиций для отката во времени: 16 точек раз в 0,25 с
+  if (u.alive && w.tick % 8 === 0) {
+    h.hist.push({ x: u.x, z: u.z, hp: u.hp });
+    if (h.hist.length > 16) h.hist.shift();
+  }
   for (let i = 0; i < h.itemCd.length; i++) h.itemCd[i] = Math.max(0, h.itemCd[i] - DT);
   if (!u.alive) {
     h.respawn -= DT;
@@ -950,6 +1002,15 @@ function heroUpdate(w: World, u: Unit) {
     }
     return;
   }
+  const taunt = u.mods.length ? getMod(u, 'taunt') : undefined;
+  if (taunt) {
+    const t = unitById(w, taunt.src);
+    if (t?.alive) {
+      if (!(h.order?.type === 'attack' && h.order.id === t.id)) h.order = { type: 'attack', id: t.id, auto: false };
+      doOrder(w, u);
+      return;
+    }
+  }
   if (p.bot) {
     p.ai.think -= DT;
     if (p.ai.think <= 0) {
@@ -959,6 +1020,79 @@ function heroUpdate(w: World, u: Unit) {
     }
     doOrder(w, u);
   } else playerLogic(w, u);
+}
+
+/** Воскресить павшего героя в точке с долей здоровья (Жрица) */
+export function reviveHero(w: World, u: Unit, x: number, z: number, hpFrac: number) {
+  const h = u.hero!;
+  Object.assign(u, { alive: true, hp: u.maxHp * hpFrac, x, z });
+  h.respawn = 0;
+  h.order = null;
+  h.casting = null;
+  w.players[h.player].ai.mode = 'lane';
+  emit(w, { e: 'respawn', id: u.id, player: h.player });
+  fx(w, x, z, 1, 0xfff2b8, 1.6, 0.8, 2);
+}
+
+/** Призвать существо на стороне героя (волки, тотем, отражения) */
+export function summon(
+  w: World,
+  owner: Unit,
+  model: string,
+  x: number,
+  z: number,
+  life: number,
+  o: Partial<Unit> & { maxHp: number },
+): Unit {
+  const L = mapOf(w).limit - 1;
+  return addUnit(w, {
+    kind: 'creep',
+    team: owner.team,
+    model,
+    x: clamp(x, -L, L),
+    z: clamp(z, -L, L),
+    owner: owner.id,
+    life,
+    speed: 9,
+    radius: 0.6,
+    range: 1.3,
+    atkInt: 1,
+    barH: 1.9,
+    rot: owner.rot,
+    ...o,
+  });
+}
+
+/** Призванный: живёт сколько отпущено, бьёт врагов рядом с хозяином, иначе держится за ним */
+function updateSummon(w: World, u: Unit) {
+  u.life! -= DT;
+  const owner = unitById(w, u.owner!);
+  if (u.life! <= 0 || !owner?.alive) {
+    u.alive = false;
+    u.hp = 0;
+    emit(w, { e: 'death', id: u.id, kind: u.kind, team: u.team, killer: 0, x: u.x, z: u.z });
+    return;
+  }
+  if (hasFlag(u, 'stun')) return;
+  let t = unitById(w, u.target);
+  if (t && (!t.alive || t.invuln || hasFlag(t, 'invisible') || dist(owner, t) > 12)) {
+    u.target = 0;
+    t = undefined;
+    disengage(u);
+  }
+  if (!t && u.dmg > 0) {
+    const n = nearestEnemy(w, owner, 9) ?? nearestEnemy(w, u, Math.max(u.range + 4, 7));
+    if (n) {
+      u.target = n.id;
+      t = n;
+    }
+  }
+  if (t) {
+    if (u.speed > 0) engage(w, u, t);
+    else if (dist(u, t) <= reach(u, t)) tryAttack(w, u, t);
+    return;
+  }
+  if (u.speed > 0 && dist(u, owner) > 3.5) moveToward(u, owner.x, owner.z, 2.5);
 }
 
 // ── Крипы и вышки ──
@@ -987,6 +1121,7 @@ function pickCreepTarget(w: World, u: Unit, r: number): Unit | null {
 }
 
 function updateCreep(w: World, u: Unit) {
+  if (u.owner) return updateSummon(w, u);
   if (hasFlag(u, 'stun')) return;
   let t = unitById(w, u.target);
   if (t && (!t.alive || t.invuln || hasFlag(t, 'invisible') || dist(u, t) > 11)) {

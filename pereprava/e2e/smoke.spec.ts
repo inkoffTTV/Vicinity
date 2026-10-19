@@ -82,7 +82,7 @@ test('меню: вкладки и настройки', async ({ page }) => {
   await page.goto('/#debug');
   await page.waitForFunction(() => !!window.__g, null, { timeout: 30_000 });
   await page.getByRole('tab', { name: 'Герои' }).click();
-  await expect(page.locator('#heroCards .card2')).toHaveCount(5);
+  await expect(page.locator('#heroCards .card2')).toHaveCount(24);
   await page.getByRole('tab', { name: 'Настройки' }).click();
   await expect(page.getByRole('radiogroup', { name: 'Время суток' })).toBeVisible();
   await page.getByRole('tab', { name: 'Профиль' }).click();
