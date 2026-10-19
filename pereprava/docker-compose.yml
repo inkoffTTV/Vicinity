@@ -1,0 +1,52 @@
+# Переправа: игровой сервер + nginx (клиент и прокси /ws). Настройки — в .env (см. .env.example).
+#   docker compose up -d --build        — собрать и запустить
+#   docker compose logs -f game         — логи сервера
+# Подробно — DEPLOY.md.
+name: pereprava
+
+services:
+  game:
+    build:
+      context: .
+      target: server
+    image: pereprava-game
+    restart: unless-stopped
+    environment:
+      PORT: 8787
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      MAX_ROOMS: ${MAX_ROOMS:-50}
+    # Наружу не открыт: к нему ходит только nginx по внутренней сети
+    expose:
+      - '8787'
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+
+  web:
+    build:
+      context: .
+      target: web
+    image: pereprava-web
+    restart: unless-stopped
+    depends_on:
+      game:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:-_}
+    ports:
+      - '${HTTP_PORT:-80}:80'
+      - '${HTTPS_PORT:-443}:443'
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt:ro
+      - ./data/certbot/www:/var/www/certbot:ro
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+
+  # Выдача и продление сертификата: запускается вручную (см. DEPLOY.md), постоянно не работает
+  certbot:
+    image: certbot/certbot:v3.0.1
+    profiles: ['certbot']
+    volumes:
+      - ./data/certbot/conf:/etc/letsencrypt
+      - ./data/certbot/www:/var/www/certbot

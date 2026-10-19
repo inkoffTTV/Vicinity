@@ -4,5 +4,7 @@ test-results/
 playwright-report/
 .env
 *.log
-test-results/
-playwright-report/
+# сертификаты и данные certbot на сервере
+data/
+# корневой .gitignore Vicinity прячет .env.example — у Переправы он нужен
+!.env.example

@@ -1,0 +1,14 @@
+server {
+  listen 80;
+  server_name __DOMAIN__;
+  server_tokens off;
+  gzip on;
+  gzip_types text/css application/javascript application/json image/svg+xml;
+
+  # Проверка домена для certbot
+  location /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+  }
+
+  include /etc/nginx/pereprava/game.conf.in;
+}
