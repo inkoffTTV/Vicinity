@@ -1,6 +1,6 @@
 // Ввод: мышь, тач и клавиатура превращаются в приказы. Тап/клик — идти или атаковать, перетаскивание
 // пальцем — вести героя, щипок и колесо — масштаб, Q W E R — способности (с прицелом по курсору),
-// 1–6 — предметы, B — лавка, S — стоп.
+// 1–6 — предметы, B — лавка, S — стоп, G или Alt+клик — пинг (Shift — «опасно»).
 import type { GameView } from '../render/view';
 
 export interface InputActions {
@@ -11,6 +11,8 @@ export interface InputActions {
   useItem(slot: number, aim: { x: number; z: number } | null): void;
   toggleShop(open?: boolean): void;
   stop(): void;
+  ping(x: number, z: number, kind: 'look' | 'danger' | 'go'): void;
+  heroPos(): { x: number; z: number } | null;
 }
 
 export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: InputActions) {
@@ -38,6 +40,11 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       pinchD = Math.hypot(a.x - b.x, a.y - b.y);
+      return;
+    }
+    if (pointers.size === 1 && e.altKey && act.playing()) {
+      const g = view.groundAt(p.x, p.y);
+      if (g) act.ping(g.x, g.z, e.shiftKey ? 'danger' : 'look');
       return;
     }
     if (pointers.size === 1) act.orderAt(p.x, p.y);
@@ -91,5 +98,9 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
     else if (e.code === 'KeyB') act.toggleShop();
     else if (e.code === 'Escape') act.toggleShop(false);
     else if (e.code === 'KeyS') act.stop();
+    else if (e.code === 'KeyG') {
+      const g = mouseAim() ?? act.heroPos();
+      if (g) act.ping(g.x, g.z, e.shiftKey ? 'danger' : 'look');
+    }
   });
 }

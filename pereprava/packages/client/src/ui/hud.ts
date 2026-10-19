@@ -8,6 +8,7 @@ import {
   ITEM,
   ITEMS,
   mapTrees,
+  RUNE_NAMES,
   ULT_LEVEL,
   type Command,
   type SimEvent,
@@ -70,13 +71,19 @@ export class Hud {
     HERO[hero].abilities.forEach((id, slot) => {
       const a = ABILITIES[id];
       const b = document.createElement('button');
-      b.className = 'sk';
+      b.className = 'sk' + (a.passive ? ' passive' : '');
       b.id = 'sk' + KEYS[slot];
       const [rim, c1, c2, c3] = a.colors;
       b.style.cssText = `--rim:${rim};--c1:${c1};--c2:${c2};--c3:${c3}`;
-      b.setAttribute('aria-label', `${a.name}, клавиша ${KEYS[slot]}`);
-      b.title = `${a.name} (${KEYS[slot]}): ${a.desc}`;
-      b.innerHTML = `<span>${KEYS[slot]}</span>`;
+      b.setAttribute('aria-label', a.passive ? `${a.name}, пассивная` : `${a.name}, клавиша ${KEYS[slot]}`);
+      b.title = `${a.name}${a.passive ? ' (пассивная)' : ` (${KEYS[slot]})`}: ${a.desc}`;
+      b.innerHTML = `<span>${a.passive ? '∞' : KEYS[slot]}</span>`;
+      if (a.passive) {
+        b.tabIndex = -1;
+        box.appendChild(b);
+        this.skillBtns.push(b);
+        return;
+      }
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -183,9 +190,11 @@ export class Hud {
     $('respawn').style.display = dead ? 'block' : 'none';
     if (dead) this.setText('rs', $('respawn'), 'Возрождение через ' + Math.ceil(me.respawn) + ' с');
     this.skillBtns.forEach((b, i) => {
-      const locked = !!ABILITIES[HERO[me.hero].abilities[i]]?.ult && me.level < ULT_LEVEL;
+      const ab = ABILITIES[HERO[me.hero].abilities[i]];
+      if (ab?.passive) return;
+      const locked = !!ab?.ult && me.level < ULT_LEVEL;
       b.classList.toggle('locked', locked);
-      b.style.setProperty('--cd', (locked ? 1 : me.cd[i] / me.cdMax[i]).toFixed(3));
+      b.style.setProperty('--cd', (locked ? 1 : me.cdMax[i] > 0 ? me.cd[i] / me.cdMax[i] : 0).toFixed(3));
       this.setText('sk' + i, b.firstChild as HTMLElement, locked ? String(ULT_LEVEL) : me.cd[i] > 0 ? String(Math.ceil(me.cd[i])) : KEYS[i]);
     });
     const key = me.items.join('|');
@@ -231,8 +240,14 @@ export class Hud {
           this.toast(killer ? `${killer.name} ${killer.fem ? 'убила' : 'убил'} вашего ${victim.acc}` : `Ваш ${victim.name.toLowerCase()} погиб`);
         else if (e.victimTeam !== myTeam) this.toast(`${victim.name} ${victim.fem ? 'повержена' : 'повержен'}`);
         else this.toast(`Союзник погиб: ${victim.name}`);
-      } else if (e.e === 'tower')
-        this.toast(e.team !== myTeam ? 'Вражеская вышка разрушена. Их кристалл уязвим' : 'Наша вышка разрушена. Защищайте кристалл');
+      } else if (e.e === 'tower') {
+        const last = e.tier >= 2;
+        if (e.team !== myTeam) this.toast(last ? 'Внутренняя вышка врага пала. Их кристалл уязвим' : 'Вражеская вышка разрушена. Следующая — внутренняя');
+        else this.toast(last ? 'Наша внутренняя вышка пала. Защищайте кристалл' : 'Наша вышка разрушена. Держите внутреннюю');
+      } else if (e.e === 'rune') {
+        if (!e.taker) this.toast('В реке появилась ' + (RUNE_NAMES[e.rune] ?? 'руна').toLowerCase());
+        else if (e.taker === me.unit) this.toast('Вы взяли: ' + (RUNE_NAMES[e.rune] ?? 'руна').toLowerCase());
+      } else if (e.e === 'ping' && e.team === myTeam) this.addPing(e.x, e.z, e.kind);
       else if (e.e === 'level' && e.player === me.slot) this.toast('Новый уровень: ' + e.level);
       else if (e.e === 'respawn' && e.player === me.slot) {
         const h = HERO[me.hero];
@@ -242,6 +257,14 @@ export class Hud {
   }
 
   // ── Миникарта ──
+
+  private pings: { x: number; z: number; kind: string; t: number }[] = [];
+
+  addPing(x: number, z: number, kind: string) {
+    this.pings.push({ x, z, kind, t: performance.now() / 1000 });
+    if (this.pings.length > 8) this.pings.shift();
+    this.view.ping(x, z, kind);
+  }
 
   initMinimap() {
     const mm = this.mm;
@@ -315,6 +338,22 @@ export class Hud {
       ctx.arc(X(v.x), X(v.z), 3.2 * k, 0, 7);
       ctx.fill();
       ctx.stroke();
+    }
+    // Пинги: расходящиеся кольца, 3 секунды
+    const now = performance.now() / 1000;
+    this.pings = this.pings.filter((p) => p.t > now - 3);
+    for (const p of this.pings) {
+      const age = now - p.t;
+      ctx.strokeStyle = p.kind === 'danger' ? '#ff5a4a' : p.kind === 'go' ? '#7dff9a' : '#f1c453';
+      ctx.lineWidth = 2 * k;
+      for (let r = 0; r < 2; r++) {
+        const f = (age * 1.4 + r * 0.5) % 1;
+        ctx.globalAlpha = 1 - f;
+        ctx.beginPath();
+        ctx.arc(X(p.x), X(p.z), (3 + f * 9) * k, 0, 7);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     }
     const vw = 34 * this.view.viewK();
     ctx.strokeStyle = 'rgba(255,255,255,.55)';

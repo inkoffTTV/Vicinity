@@ -1,7 +1,7 @@
 // Земля, вода, деревья, камни и фонтаны — статичная часть карты. Геометрия и случайные отклонения
 // повторяют прототип 0.3 (тот же генератор и порядок вызовов), поэтому карта выглядит так же.
 import * as THREE from 'three';
-import { ANCIENTS, dLane, dRiver, FOUNTAINS, groundH, MAP_SEED, mapTrees, Rng, treesRngEnd, WATER } from '@pereprava/shared';
+import { ANCIENTS, dLane, dRiver, FOUNTAINS, groundH, MAP_SEED, mapTreesAll, Rng, treeCleared, treesRngEnd, WATER } from '@pereprava/shared';
 import { mat, TEAM_COLORS } from './models';
 
 const C = {
@@ -75,23 +75,28 @@ export function buildTerrain(night: boolean): Terrain {
   group.add(water);
 
   // Деревья: позиции — из общей карты (это препятствия), повороты и цвета — дальше по той же последовательности
-  const trees = mapTrees();
+  // Перебираем все деревья прототипа (чтобы случайные повороты и цвета совпадали), а на полянах лагерей — пропускаем
+  const all = mapTreesAll();
+  const trees = all.filter((t) => !treeCleared(t));
   rng.seed = treesRngEnd;
   const crowns = new THREE.InstancedMesh(new THREE.ConeGeometry(1.25, 3.2, 6).translate(0, 2.7, 0), mat(0xffffff), trees.length);
   const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.2, 0.28, 1.4, 5).translate(0, 0.7, 0), mat(0x6b4b2e), trees.length);
   const dm = new THREE.Object3D();
   const greens = [0x2f6b35, 0x3b7a3a, 0x2a5a30, 0x4a7d3a];
   const dry = [0x4b5a35, 0x5d5b3a, 0x45502f];
-  trees.forEach((t, i) => {
+  let i = 0;
+  for (const t of all) {
     dm.position.set(t.x, groundH(t.x, t.z) - 0.1, t.z);
     dm.rotation.y = rnd() * 6.28;
     dm.scale.set(t.s, t.s * (0.9 + rnd() * 0.3), t.s);
+    const pal = t.x - t.z > 10 ? dry : greens;
+    const color = pal[Math.floor(rnd() * pal.length)];
+    if (treeCleared(t)) continue;
     dm.updateMatrix();
     crowns.setMatrixAt(i, dm.matrix);
     trunks.setMatrixAt(i, dm.matrix);
-    const pal = t.x - t.z > 10 ? dry : greens;
-    crowns.setColorAt(i, new THREE.Color(pal[Math.floor(rnd() * pal.length)]));
-  });
+    crowns.setColorAt(i++, new THREE.Color(color));
+  }
   crowns.instanceColor!.needsUpdate = true;
   crowns.castShadow = trunks.castShadow = true;
   crowns.receiveShadow = true;

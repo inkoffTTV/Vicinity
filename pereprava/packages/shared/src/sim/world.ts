@@ -409,7 +409,9 @@ function applyCommand(w: World, slot: number, cmd: Command) {
       useItem(w, u, cmd.slot, okNum(cmd.x) && okNum(cmd.z) ? { x: cmd.x, z: cmd.z } : null);
       return;
     case 'ping':
-      if (!okNum(cmd.x) || !okNum(cmd.z)) return;
+      // Не чаще двух раз в секунду — чтобы пинги не превращались в спам
+      if (!okNum(cmd.x) || !okNum(cmd.z) || w.time - (p.pingAt ?? -9) < 0.5) return;
+      p.pingAt = w.time;
       emit(w, {
         e: 'ping',
         player: slot,

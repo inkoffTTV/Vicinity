@@ -284,10 +284,14 @@ button.go:focus-visible{outline:3px solid #fff;outline-offset:2px}
 .score th:first-child,.score td:first-child{text-align:left}
 .score td{padding:6px;text-align:right;border-top:1px solid var(--panel-line);white-space:nowrap}
 .score tr.t0 td:first-child{border-left:3px solid var(--ally)} .score tr.t1 td:first-child{border-left:3px solid var(--enemy)}
-.score tr.me td{background:rgba(241,196,83,.08)}
+.score tr.mine td{background:rgba(241,196,83,.08)}
 .score .who b{display:block;font-weight:500} .score .who small{color:var(--ink-dim)}
 .score .its{display:flex;gap:2px;justify-content:flex-end}
 .score .its i{width:16px;height:16px;border-radius:3px;background:rgba(0,0,0,.35);display:grid;place-items:center;color:var(--ic)}
 .score .its svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2.2}
 #card.wide{max-width:760px}
 .setrow input[type=range]{width:100%;accent-color:var(--gold)}
+
+.keys{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:14px}
+.keys dt{color:var(--gold,#f1c453);font-weight:600;white-space:nowrap}
+.keys dd{margin:0;opacity:.85}

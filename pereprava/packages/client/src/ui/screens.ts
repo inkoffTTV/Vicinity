@@ -54,7 +54,7 @@ export function scoreTable(s: Snapshot, myTeam: number, mySlot: number): string 
     .flatMap((t) => s.players.filter((p) => p.team === t))
     .map((p) => {
       const h = HERO[p.hero];
-      const cls = `t${p.team === myTeam ? 0 : 1}${p.slot === mySlot ? ' me' : ''}`;
+      const cls = `t${p.team === myTeam ? 0 : 1}${p.slot === mySlot ? ' mine' : ''}`;
       return `<tr class="${cls}"><td class="who"><b>${esc(p.name)}</b><small>${h.name}, ур. ${p.level}${p.alive ? '' : ' · ' + Math.ceil(p.respawn) + ' с'}</small></td>
         <td>${p.kills} / ${p.deaths} / ${p.assists}</td><td>${p.lastHits}${p.denies ? ' / ' + p.denies : ''}</td><td>${p.gold}</td><td>${p.heroDamage}</td><td><span class="its">${items(p)}</span></td></tr>`;
     })

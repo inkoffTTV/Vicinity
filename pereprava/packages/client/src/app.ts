@@ -94,15 +94,31 @@ export class App {
       useItem: (slot, aim) => this.useItem(slot, aim),
       toggleShop: (open) => this.hud.toggleShop(open),
       stop: () => this.send({ c: 'stop' }),
+      ping: (x, z, kind) => this.ping(x, z, kind),
+      heroPos: () => {
+        const v = this.view.units.get(this.view.myUnit);
+        return v ? { x: v.x, z: v.z } : null;
+      },
     });
-    $('minimap').addEventListener('pointerdown', (e) => {
+    // Миникарта: нажатие — идти; правая кнопка, Alt или долгое нажатие пальцем — пинг союзникам
+    let holdT = 0;
+    const mm = $('minimap');
+    mm.addEventListener('contextmenu', (e) => e.preventDefault());
+    mm.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (this.state !== 'play' || !this.snap?.me?.alive) return;
+      if (this.state !== 'play') return;
       const p = this.hud.minimapPoint(e);
+      if (e.button === 2 || e.altKey) return this.ping(p.x, p.z, e.shiftKey ? 'danger' : 'look');
+      if (e.pointerType !== 'mouse') {
+        clearTimeout(holdT);
+        holdT = window.setTimeout(() => this.ping(p.x, p.z, 'look'), 550);
+      }
+      if (!this.snap?.me?.alive) return;
       this.send({ c: 'move', x: p.x, z: p.z });
       this.view.showMarker(p.x, p.z, false);
     });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) mm.addEventListener(ev, () => clearTimeout(holdT));
     this.initMenu();
     this.lobby = new Lobby(this.conn, $('game'), (room) => {
       // Матч кончился, а мы ещё на экране итогов — остаёмся; комнаты нет — в меню
@@ -183,8 +199,10 @@ export class App {
   }
 
   /** Пинг на карте: союзники видят метку и слышат сигнал */
+  private pingAt = 0;
   ping(x: number, z: number, kind: 'look' | 'danger' | 'go' = 'look') {
-    if (this.state !== 'play') return;
+    if (this.state !== 'play' || performance.now() - this.pingAt < 600) return;
+    this.pingAt = performance.now();
     this.send({ c: 'ping', x, z, kind });
   }
 
@@ -668,6 +686,7 @@ export class App {
           app.view.applySnapshot(s);
           app.view.handleEvents(s.events, app.session.slot);
           app.snap = app.hud.snap = s;
+          app.hud.events(s.events);
           if (s.winner !== -1) app.endGame(s);
         }
       },

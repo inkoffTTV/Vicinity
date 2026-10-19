@@ -201,6 +201,8 @@ export interface Player {
   stats: PlayerStats;
   /** Последний урон по этому герою от вражеских героев: player slot → тик (для помощи в убийстве) */
   hurtBy: Record<number, number>;
+  /** Время последнего пинга (антиспам) */
+  pingAt?: number;
 }
 
 export interface Rune {

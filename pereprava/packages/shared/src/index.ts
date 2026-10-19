@@ -10,3 +10,4 @@ export * from './sim/modifiers';
 export * from './sim/items';
 export * from './snapshot';
 export * from './protocol';
+export * from './sim/jungle';

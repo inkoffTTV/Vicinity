@@ -76,6 +76,8 @@ export class GameView {
   private rune: THREE.Mesh;
   private runeKind = '';
   private markerT = 0;
+  /** Пинги в мире: столб света и расходящееся кольцо, пул из 4 штук */
+  private pingFx: { group: THREE.Group; t: number }[] = [];
   /** Тик, на котором сейчас отрисовка (дробный) */
   renderTick = 0;
   myTeam = 0;
@@ -361,6 +363,43 @@ export class GameView {
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = this.markerT * 2;
     this.marker.scale.setScalar(1 + (0.45 - this.markerT) * 1.5);
+    for (const p of this.pingFx) {
+      if (p.t <= 0) continue;
+      p.t -= dt;
+      p.group.visible = p.t > 0;
+      const [ring, beam] = p.group.children as THREE.Mesh[];
+      const f = (3 - p.t) % 1;
+      ring.scale.setScalar(1 + f * 2.5);
+      (ring.material as THREE.MeshBasicMaterial).opacity = (1 - f) * 0.9;
+      (beam.material as THREE.MeshBasicMaterial).opacity = Math.min(1, p.t) * 0.45;
+    }
+  }
+
+  ping(x: number, z: number, kind: string) {
+    let p = this.pingFx.find((q) => q.t <= 0);
+    if (!p) {
+      if (this.pingFx.length >= 4) p = this.pingFx[0];
+      else {
+        const group = new THREE.Group();
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.7, 1, 32).rotateX(-Math.PI / 2),
+          new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+        );
+        const beam = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.35, 9, 8, 1, true).translate(0, 4.5, 0),
+          new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+        );
+        group.add(ring, beam);
+        this.scene.add(group);
+        p = { group, t: 0 };
+        this.pingFx.push(p);
+      }
+    }
+    const color = kind === 'danger' ? 0xff5a4a : kind === 'go' ? 0x7dff9a : 0xf1c453;
+    for (const m of p.group.children as THREE.Mesh[]) (m.material as THREE.MeshBasicMaterial).color.setHex(color);
+    p.group.position.set(x, groundH(x, z) + 0.15, z);
+    p.group.visible = true;
+    p.t = 3;
   }
 
   private updateCastRing(v: VUnit, s: UnitSnap) {
@@ -594,6 +633,10 @@ export class GameView {
     for (const z of this.zones.values()) this.scene.remove(z.group);
     this.zones.clear();
     this.rune.visible = false;
+    for (const p of this.pingFx) {
+      p.t = 0;
+      p.group.visible = false;
+    }
     for (const p of this.projs.values()) this.scene.remove(p.mesh);
     this.projs.clear();
     for (const f of this.puffs) this.scene.remove(f.mesh);
