@@ -1,0 +1,35 @@
+{
+  "name": "pereprava",
+  "private": true,
+  "version": "0.4.0",
+  "description": "Переправа — браузерная MOBA с сетевым режимом",
+  "type": "module",
+  "workspaces": [
+    "packages/shared",
+    "packages/client",
+    "packages/server"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @pereprava/client",
+    "dev:server": "npm run dev -w @pereprava/server",
+    "build": "npm run build -w @pereprava/client && npm run build -w @pereprava/server",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/client && tsc -p packages/server",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "balance": "tsx packages/shared/scripts/balance.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "@playwright/test": "1.56.1",
+    "@types/node": "22.19.1",
+    "eslint": "9.39.1",
+    "globals": "16.5.0",
+    "prettier": "3.6.2",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.4",
+    "vitest": "3.2.4"
+  }
+}

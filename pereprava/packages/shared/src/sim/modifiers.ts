@@ -1,0 +1,92 @@
+// Модификаторы — баффы и дебаффы. На юните лежат только данные { id, t, v, src };
+// что модификатор делает, описано здесь: флаги (стан, сайленс…), вклад в характеристики,
+// поведение каждый тик.
+import type { Modifier, Unit } from '../types';
+import { DT, damage, unitById, type World } from './world';
+
+export type ModFlag = 'stun' | 'silence' | 'root' | 'disarm' | 'invisible';
+/** Характеристики, в которые модификаторы добавляют значение v (или своё число) */
+export type ModStat = 'armor' | 'slow' | 'haste' | 'heal' | 'atkSpeed' | 'dmgAmp' | 'vuln';
+
+export interface ModifierDef {
+  name: string;
+  /** Положительный эффект (для интерфейса и развеивания) */
+  buff: boolean;
+  flags?: ModFlag[];
+  /** Вклад в характеристику: по умолчанию — v модификатора */
+  stats?: Partial<Record<ModStat, number | 'v'>>;
+  /** Каждый тик (урон со временем и т. п.) */
+  tick?(w: World, u: Unit, m: Modifier): void;
+}
+
+export const MODIFIERS: Record<string, ModifierDef> = {
+  shield: { name: 'Щит', buff: true },
+  potion: { name: 'Зелье лечения', buff: true, stats: { heal: 50 } },
+  stun: { name: 'Оглушение', buff: false, flags: ['stun'] },
+  slow: { name: 'Замедление', buff: false, stats: { slow: 'v' } },
+  root: { name: 'Корни', buff: false, flags: ['root'] },
+  silence: { name: 'Безмолвие', buff: false, flags: ['silence'] },
+  armorUp: { name: 'Броня', buff: true, stats: { armor: 'v' } },
+  armorDown: { name: 'Ослабленная броня', buff: false, stats: { armor: 'v' } },
+  haste: { name: 'Ускорение', buff: true, stats: { haste: 'v' } },
+  frenzy: { name: 'Ярость', buff: true, stats: { atkSpeed: 'v' } },
+  regen: { name: 'Восстановление', buff: true, stats: { heal: 'v' } },
+  dmgAmp: { name: 'Двойной урон', buff: true, stats: { dmgAmp: 'v' } },
+  vuln: { name: 'Уязвимость', buff: false, stats: { vuln: 'v' } },
+  burn: {
+    name: 'Горение',
+    buff: false,
+    tick(w, u, m) {
+      damage(w, u, m.v * DT, unitById(w, m.src) ?? null, 'magical');
+    },
+  },
+};
+
+export function hasFlag(u: Unit, flag: ModFlag): boolean {
+  for (const m of u.mods) if (MODIFIERS[m.id]?.flags?.includes(flag)) return true;
+  return false;
+}
+
+export function modValue(u: Unit, stat: ModStat): number {
+  let s = 0;
+  for (const m of u.mods) {
+    const c = MODIFIERS[m.id]?.stats?.[stat];
+    if (c === undefined) continue;
+    s += c === 'v' ? m.v : c;
+  }
+  // Замедление не больше 80%
+  return stat === 'slow' ? Math.min(0.8, s) : s;
+}
+
+export const getMod = (u: Unit, id: string) => u.mods.find((m) => m.id === id);
+
+/** Наложить модификатор; такой же — обновить (берём большее время и силу) */
+export function addMod(u: Unit, id: string, t: number, v = 0, src = 0): Modifier {
+  const old = getMod(u, id);
+  if (old) {
+    old.t = old.t < 0 || t < 0 ? -1 : Math.max(old.t, t);
+    old.v = Math.max(old.v, v);
+    old.src = src || old.src;
+    return old;
+  }
+  const m: Modifier = { id, t, v, src };
+  u.mods.push(m);
+  return m;
+}
+
+export function removeMod(u: Unit, id: string) {
+  u.mods = u.mods.filter((m) => m.id !== id);
+}
+
+/** Развеять дебаффы (сильное развеивание снимает и оглушение) */
+export function dispel(u: Unit, strong = false) {
+  u.mods = u.mods.filter((m) => MODIFIERS[m.id]?.buff || (!strong && m.id === 'stun'));
+}
+
+export function tickModifiers(w: World, u: Unit) {
+  for (const m of u.mods) {
+    MODIFIERS[m.id]?.tick?.(w, u, m);
+    if (m.t > 0) m.t = Math.max(0, m.t - DT);
+  }
+  if (u.mods.some((m) => m.t === 0)) u.mods = u.mods.filter((m) => m.t !== 0);
+}

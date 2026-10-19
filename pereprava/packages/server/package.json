@@ -1,0 +1,19 @@
+{
+  "name": "@pereprava/server",
+  "private": true,
+  "version": "0.4.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/server.js",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/server.js --external:ws"
+  },
+  "dependencies": {
+    "@pereprava/shared": "0.4.0",
+    "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.1",
+    "esbuild": "0.25.12"
+  }
+}
