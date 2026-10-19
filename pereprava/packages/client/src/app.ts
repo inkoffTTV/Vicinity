@@ -11,6 +11,7 @@ import {
 } from '@pereprava/shared';
 import { LocalSession } from './game/local';
 import { NetSession } from './game/net';
+import { ActivityBridge } from './net/activity';
 import { Connection } from './net/connection';
 import { Lobby } from './ui/lobby';
 import { Sound, type Volumes } from './audio/sound';
@@ -81,6 +82,9 @@ export class App {
   readonly lobby: Lobby;
   private menuFocusBot = false;
   private pendingJoin = '';
+  /** Активность в звонке Vicinity: мост к мессенджеру и создана ли уже комната ведущим */
+  private activity: ActivityBridge | null = null;
+  private activityCreated = false;
   private searchT = 0;
   private foundAt = 3;
   private acceptT = 0;
@@ -158,7 +162,8 @@ export class App {
     // Ссылка-приглашение ?room=КОД или сохранённый токен (вернуться в идущий матч после перезагрузки)
     const code =
       new URLSearchParams(location.search).get('room') ?? /room=([A-Za-z0-9]+)/.exec(location.hash)?.[1] ?? '';
-    if (code) {
+    if (ActivityBridge.active) this.startActivity();
+    else if (code) {
       this.pendingJoin = code.toUpperCase();
       this.lobby.open();
     } else if (store.get<string | undefined>('token', undefined)) this.conn.connect();
@@ -255,7 +260,50 @@ export class App {
 
   // ── Сеть ──
 
+  // ── Активность в звонке Vicinity ──
+  // Ведущий (первым открыл игру в звонке) сам создаёт комнату и рассылает код остальным участникам
+  // звонка — они заходят в неё автоматически. Дальше всё как в обычной игре с другом.
+
+  private startActivity() {
+    const act = new ActivityBridge();
+    this.activity = act;
+    let opened = false;
+    const open = () => {
+      if (opened) return;
+      opened = true;
+      this.lobby.open();
+      this.activityMaybeCreate();
+    };
+    act.onInit = open;
+    // Мессенджер не ответил (старая версия) — просто открываем обычное лобби
+    window.setTimeout(open, 3000);
+    act.onJoin = (peer) => {
+      const code = this.lobby.room?.code;
+      if (code && act.isHost()) act.shareRoom(code, peer.peerId);
+    };
+    act.onRoomCode = (code) => {
+      if (this.lobby.room) return;
+      if (this.conn.status === 'online') this.conn.send({ t: 'join', code });
+      else {
+        this.pendingJoin = code;
+        this.lobby.open();
+      }
+    };
+  }
+
+  private activityMaybeCreate() {
+    const act = this.activity;
+    if (!act || !act.self || this.activityCreated || this.pendingJoin || this.lobby.room) return;
+    if (this.conn.status !== 'online' || !act.isHost()) return;
+    this.activityCreated = true;
+    this.conn.send({ t: 'create', mode: act.count() > 2 ? '2v2' : '1v1' });
+  }
+
   private onServer(m: ServerMsg) {
+    if (m.t === 'room' && this.activity) {
+      if (m.room && this.activity.isHost()) this.activity.shareRoom(m.room.code);
+      if (!m.room) window.setTimeout(() => this.activityMaybeCreate(), 0);
+    }
     if (m.t === 'room') {
       if (this.pendingJoin && !m.room) {
         this.conn.send({ t: 'join', code: this.pendingJoin });
@@ -365,6 +413,8 @@ export class App {
   }
 
   private playerName() {
+    const fromCall = this.activity?.self?.name?.trim();
+    if (fromCall) return fromCall.slice(0, 24);
     return (this.profile.name || '').trim() || 'Игрок';
   }
 

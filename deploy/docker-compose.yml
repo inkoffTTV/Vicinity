@@ -79,6 +79,18 @@ services:
     restart: unless-stopped
     logging: *logging
 
+  # Игровой сервер «Переправы» — активности в звонке. Портов наружу нет: WebSocket проксирует web
+  # (/activities/pereprava/ws). Матчи живут в памяти, база не нужна.
+  pereprava:
+    build:
+      context: ../pereprava
+      target: server
+    container_name: vicinity-pereprava
+    environment:
+      MAX_ROOMS: ${PEREPRAVA_MAX_ROOMS:-30}
+    restart: unless-stopped
+    logging: *logging
+
   # TURN/STUN для звонков: UDP/TCP 3478 и relay-порты UDP 49160-49200 (открыть в файерволе).
   # Сеть хоста — coturn нужен реальный IP и диапазон UDP-портов без NAT Docker.
   # Публичный IP и секрет — из .env, turnserver.conf править не нужно.
