@@ -148,6 +148,18 @@ button.go{width:100%;padding:var(--s3) var(--s4);min-height:44px;border:0;border
 #clock{font-size:14px;color:var(--ink-dim)}
 #toast{padding:var(--s2) var(--s3);font-size:var(--fs-s);opacity:0;transform:translateY(-4px);transition:opacity var(--t2),transform var(--t2) var(--ease);text-align:center;max-width:min(52vw,420px);line-height:1.35}
 #toast.show{opacity:1;transform:none}
+/* Наведение: плашка цели сверху и курсоры */
+#hoverPlate{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:var(--s2);padding:var(--s1) var(--s3);min-width:min(260px,70vw);font-size:var(--fs-s);pointer-events:none}
+#hoverPlate[hidden]{display:none}
+#hoverPlate b{font-weight:500;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+#hoverPlate .hpb{height:8px;border-radius:4px;background:rgba(0,0,0,.45);overflow:hidden;min-width:70px}
+#hoverPlate i{display:block;height:100%;background:var(--ally)}
+#hoverPlate[data-rel="enemy"] i{background:var(--enemy)} #hoverPlate[data-rel="enemy"] b{color:var(--enemy)}
+#hoverPlate[data-rel="neutral"] i{background:var(--gold)} #hoverPlate[data-rel="neutral"] b{color:var(--gold)}
+#hoverPlate span{font-size:var(--fs-xs);color:var(--ink-dim)}
+#game.cur-attack canvas{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M3 3l11 4 9 9-3 3-9-9z' fill='%23e2504a' stroke='%23111' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M18 21l3-3 3 3-1.5 1.5L25 25l-1 1-2.5-2.5L20 25z' fill='%23f1c453' stroke='%23111' stroke-width='1.2'/%3E%3C/svg%3E") 3 3,crosshair}
+#game.cur-aim canvas{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23111' stroke-width='4'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23f1c453' stroke-width='2'/%3E%3Cpath d='M16 2v8M16 22v8M2 16h8M22 16h8' stroke='%23111' stroke-width='4'/%3E%3Cpath d='M16 2v8M16 22v8M2 16h8M22 16h8' stroke='%23f1c453' stroke-width='2'/%3E%3C/svg%3E") 16 16,crosshair}
+.sk.aiming{box-shadow:0 0 0 3px var(--gold),var(--shadow)}
 #gold{position:absolute;right:var(--s3);top:var(--s3);padding:5px var(--s3) 5px 9px;display:flex;align-items:center;gap:var(--s2);font-size:var(--fs-l);color:var(--gold)}
 #gold::before,.coin::before{content:"";display:inline-block;width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffe7a0,#d9a62a 60%,#a8781a);box-shadow:0 0 0 1px rgba(0,0,0,.4)}
 #shopBtn{position:absolute;right:var(--s3);top:56px;padding:var(--s2) var(--s4);min-height:40px;cursor:pointer;font-size:14px;font-weight:500}

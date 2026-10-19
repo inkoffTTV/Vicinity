@@ -14,6 +14,7 @@
   <canvas id="minimap" aria-label="Мини-карта: нажмите, чтобы отправить героя"></canvas>
   <div id="top">
     <div id="score" class="panel num" role="button" tabindex="0" aria-label="Счёт матча, подробнее — Tab"><span class="a" id="kA">0</span><span id="clock">0:00</span><span class="e" id="kE">0</span></div>
+    <div id="hoverPlate" class="panel" hidden aria-hidden="true"><b></b><div class="hpb"><i></i></div><span class="num"></span></div>
     <div id="toast" class="panel" role="status"></div>
   </div>
   <div id="gold" class="panel num">0</div>
@@ -74,6 +75,7 @@
         <div class="pcard panel">
           <h3>Графика</h3>
           <div class="setrow">Качество картинки<div class="seg" role="radiogroup" aria-label="Качество" id="qSeg"><button data-v="low">Низкое</button><button data-v="mid">Среднее</button><button data-v="high">Высокое</button></div></div>
+          <div class="setrow">Умения<div class="seg" style="--n:2" role="radiogroup" aria-label="Как применять умения с клавиатуры" id="castSeg"><button data-v="aim">С прицелом</button><button data-v="quick">Сразу по курсору</button></div></div>
           <div class="setrow">Тени<div class="seg" style="--n:2" role="radiogroup" aria-label="Тени" id="shSeg"><button data-v="on">Включены</button><button data-v="off">Выключены</button></div></div>
           <div class="setrow">Время суток<div class="seg" role="radiogroup" aria-label="Время суток" id="themeSeg"><button data-v="auto">Как в системе</button><button data-v="day">День</button><button data-v="night">Ночь</button></div></div>
         </div>

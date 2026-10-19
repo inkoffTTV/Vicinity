@@ -17,6 +17,7 @@ import {
 } from '@pereprava/shared';
 import { makeModel, setGhost, type Rig } from './models';
 import type { SceneKit } from './scene';
+import { pickByRay, type PickCand, type Ray3 } from '../game/pick';
 import { animateRig } from './anim';
 
 interface VUnit {
@@ -87,6 +88,16 @@ export class GameView {
   private freePuffs: Puff[] = [];
   private projMats = new Map<number, THREE.MeshBasicMaterial>();
   private marker: THREE.Mesh;
+  /** Юнит под курсором (0 — никого) и цвет его кольца */
+  hoverId = 0;
+  hoverColor = 0xffffff;
+  private hoverRing: THREE.Mesh;
+  /** Прицел умения: дальность вокруг своего героя, точка, радиус точки, рисовать ли полосу броска */
+  aim: { range: number; x: number; z: number; r: number; line: boolean; ok: boolean } | null = null;
+  private aimRange: THREE.Mesh;
+  private aimSpot: THREE.Mesh;
+  private aimSpotEdge: THREE.Mesh;
+  private aimLine: THREE.Mesh;
   private zones = new Map<number, VZone>();
   private rune: THREE.Mesh;
   private runeKind = '';
@@ -125,6 +136,23 @@ export class GameView {
       new THREE.MeshBasicMaterial({ color: 0x7dff9a, transparent: true, opacity: 0, depthWrite: false }),
     );
     kit.scene.add(this.marker);
+    // Наведение и прицел: кольцо под юнитом под курсором, круг дальности, точка прицела, линия броска
+    const flat = (g: THREE.BufferGeometry, color: number, opacity: number) => {
+      const m = new THREE.Mesh(
+        g.rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, depthTest: false }),
+      );
+      m.renderOrder = 5;
+      m.visible = false;
+      kit.scene.add(m);
+      return m;
+    };
+    this.hoverRing = flat(new THREE.RingGeometry(0.82, 1, 40), 0xffffff, 0.85);
+    this.aimRange = flat(new THREE.RingGeometry(0.985, 1, 96), 0xf1c453, 0.55);
+    this.aimSpot = flat(new THREE.CircleGeometry(1, 40), 0xf1c453, 0.22);
+    this.aimSpotEdge = flat(new THREE.RingGeometry(0.92, 1, 40), 0xf1c453, 0.8);
+    // Полоса броска: от героя вдоль +Z длиной 1 (масштабируем по длине)
+    this.aimLine = flat(new THREE.PlaneGeometry(1, 1).translate(0, -0.5, 0), 0xf1c453, 0.25);
     this.rune = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.6, 0),
       new THREE.MeshStandardMaterial({
@@ -394,6 +422,7 @@ export class GameView {
     }
     this.updatePuffs(dt);
     this.inst.update();
+    this.updateAimFx();
     this.markerT = Math.max(0, this.markerT - dt);
     const mm = this.marker.material as THREE.MeshBasicMaterial;
     mm.opacity = this.markerT * 2;
@@ -619,8 +648,64 @@ export class GameView {
     return { x: Math.max(-L, Math.min(L, this.gp.x)), z: Math.max(-L, Math.min(L, this.gp.z)) };
   }
 
-  /** Враг под пальцем/курсором (радиус попадания зависит от размера цели) */
-  pickEnemy(sx: number, sy: number): UnitSnap | null {
+  private updateAimFx() {
+    const hv = this.hoverId ? this.units.get(this.hoverId) : undefined;
+    if (hv && !hv.snap.dead && !hv.dying) {
+      this.hoverRing.visible = true;
+      this.hoverRing.position.set(hv.x, hv.y + 0.08, hv.z);
+      this.hoverRing.scale.setScalar(hv.snap.rad * 1.35 + 0.25);
+      (this.hoverRing.material as THREE.MeshBasicMaterial).color.setHex(this.hoverColor);
+    } else this.hoverRing.visible = false;
+    const a = this.aim;
+    const me = this.units.get(this.myUnit);
+    const show = !!a && !!me && !me.snap.dead;
+    this.aimRange.visible = this.aimSpot.visible = this.aimSpotEdge.visible = show;
+    this.aimLine.visible = show && !!a?.line;
+    if (!show || !a || !me) return;
+    const col = a.ok ? 0xf1c453 : 0xe2504a;
+    for (const m of [this.aimRange, this.aimSpot, this.aimSpotEdge, this.aimLine])
+      (m.material as THREE.MeshBasicMaterial).color.setHex(col);
+    const hy = me.y + 0.1;
+    this.aimRange.position.set(me.x, hy, me.z);
+    this.aimRange.scale.setScalar(Math.max(0.5, a.range));
+    const ay = unitY(this.map, a.x, a.z) + 0.1;
+    this.aimSpot.position.set(a.x, ay, a.z);
+    this.aimSpotEdge.position.set(a.x, ay, a.z);
+    this.aimSpot.scale.setScalar(a.r);
+    this.aimSpotEdge.scale.setScalar(a.r);
+    if (a.line) {
+      const dx = a.x - me.x;
+      const dz = a.z - me.z;
+      this.aimLine.position.set(me.x, hy, me.z);
+      this.aimLine.rotation.set(0, Math.atan2(dx, dz), 0);
+      this.aimLine.scale.set(0.9, 1, Math.max(0.01, Math.hypot(dx, dz)));
+    }
+  }
+
+  /** Луч из камеры через точку экрана — для чистой функции выбора */
+  rayAt(sx: number, sy: number): Ray3 {
+    this.ndc.set((sx / this.vw) * 2 - 1, -(sy / this.vh) * 2 + 1);
+    this.ray.setFromCamera(this.ndc, this.kit.camera);
+    const { origin: o, direction: d } = this.ray.ray;
+    return { ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z };
+  }
+
+  /** Юнит под курсором/пальцем по лучу (с запасом по радиусу); filter — кого вообще рассматривать */
+  pickUnit(sx: number, sy: number, filter: (s: UnitSnap) => boolean): UnitSnap | null {
+    const cands: PickCand[] = [];
+    for (const v of this.units.values()) {
+      const s = v.snap;
+      if (s.dead || v.dying || !filter(s)) continue;
+      cands.push({ id: s.id, x: v.x, y: v.y, z: v.z, r: s.rad, h: Math.max(1.2, s.bh - 0.4) });
+    }
+    const id = pickByRay(this.rayAt(sx, sy), cands);
+    return id ? (this.units.get(id)?.snap ?? null) : null;
+  }
+
+  /** Враг под пальцем/курсором: сначала по лучу; для пальца — ещё и по расстоянию на экране */
+  pickEnemy(sx: number, sy: number, touch = false): UnitSnap | null {
+    const byRay = this.pickUnit(sx, sy, (s) => s.tm !== this.myTeam);
+    if (byRay || !touch) return byRay;
     let best: UnitSnap | null = null;
     let bd = 1e9;
     for (const v of this.units.values()) {

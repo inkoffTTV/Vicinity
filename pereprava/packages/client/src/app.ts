@@ -1,6 +1,7 @@
 // Клиент целиком: меню → поиск → «Игра найдена» → загрузка → матч → итоги. Логика меню повторяет
 // прототип 0.3; матч идёт через Session (одиночный — LocalSession на общей симуляции).
 import {
+  ABILITIES,
   difficulty,
   DIFFICULTIES,
   getMap,
@@ -12,6 +13,7 @@ import {
   type MapId,
   type MatchSetup,
   type ServerMsg,
+  type UnitSnap,
   type Snapshot,
   type Team,
 } from '@pereprava/shared';
@@ -51,9 +53,23 @@ interface Settings {
   vol: Volumes;
   /** Оформление: как в системе, день или ночь */
   theme: 'auto' | 'day' | 'night';
+  /** Умения с клавиатуры — сразу по курсору, без режима прицела */
+  quickCast?: boolean;
 }
 
+/** Имя юнита для плашки наведения */
+const CREEP_NAMES: Record<string, string> = {
+  melee: 'Мечник',
+  ranged: 'Лучник',
+  tower: 'Вышка',
+  ancient: 'Кристалл',
+  n_small: 'Лесной волк',
+  n_big: 'Лесной великан',
+};
+
 const TIPS = [
+  'A и клик — атака с передвижением: герой идёт и бьёт всех врагов по пути.',
+  'На телефоне умение можно навести: потяните от кнопки и отпустите. Вернули палец на кнопку — отмена.',
   'Вышка бьёт героя, который атакует вражеского героя рядом с ней.',
   'Щит перед дракой с Громилой съедает почти весь его удар по земле.',
   'Добивайте крипов последним ударом: золото получает только добивший.',
@@ -135,6 +151,12 @@ export class App {
     this.hud = new Hud(this.view, {
       send: (c) => this.send(c),
       cast: (slot) => this.cast(slot, null),
+      skillKey: (slot) => this.skillKey(slot),
+      needsAim: (slot) => {
+        const a = this.abilityOf(slot);
+        return !!a && a.target !== 'none';
+      },
+      aimDrag: (slot, phase, dx, dy) => this.aimDrag(slot, phase, dx, dy),
       useItem: (slot) => this.useItem(slot, null),
     });
     this.hud.setMap(this.view.map);
@@ -143,9 +165,12 @@ export class App {
     this.showPreview();
     attachInput(this.kit.renderer.domElement, this.view, {
       playing: () => this.state === 'play' && !!this.snap?.me?.alive,
-      orderAt: (sx, sy) => this.orderAt(sx, sy),
+      orderAt: (sx, sy, button, touch) => this.orderAt(sx, sy, button, touch),
+      hover: (sx, sy) => this.hover(sx, sy),
       moveTo: (x, z) => this.send({ c: 'move', x, z }),
-      cast: (slot, aim) => this.cast(slot, aim),
+      skillKey: (slot) => this.skillKey(slot),
+      armAttackMove: () => this.armAttackMove(),
+      cancelAim: () => this.cancelAim(),
       useItem: (slot, aim) => this.useItem(slot, aim),
       toggleShop: (open) => this.hud.toggleShop(open),
       stop: () => this.send({ c: 'stop' }),
@@ -271,9 +296,10 @@ export class App {
     if (this.state === 'play') this.session?.send(cmd);
   }
 
-  private cast(slot: number, aim: { x: number; z: number } | null) {
+  private cast(slot: number, aim: { x: number; z: number } | null, unit = 0) {
     if (this.state !== 'play' || !this.snap?.me?.alive) return;
     if (!aim) return this.send({ c: 'cast', slot });
+    if (unit) return this.send({ c: 'cast', slot, x: aim.x, z: aim.z, id: unit });
     // Способности «в цель»: враг рядом с прицелом
     let id = 0;
     let bd = 2.5;
@@ -298,13 +324,37 @@ export class App {
     this.send(aim ? { c: 'use', slot, x: aim.x, z: aim.z } : { c: 'use', slot });
   }
 
-  private orderAt(sx: number, sy: number) {
-    if (this.state !== 'play' || !this.snap?.me?.alive) return;
-    const e = this.view.pickEnemy(sx, sy);
+  /** Нажатие по полю. true — можно вести героя за пальцем/мышью дальше */
+  private orderAt(sx: number, sy: number, button = 0, touch = false): boolean {
+    if (this.state !== 'play' || !this.snap?.me?.alive) return false;
+    // Идёт прицел умения: левая — применить, правая — отмена
+    if (this.aiming) {
+      if (button === 2) this.cancelAim();
+      else this.castAimed(sx, sy);
+      return false;
+    }
+    if (this.amoveArmed) {
+      this.amoveArmed = false;
+      this.refreshCursor();
+      if (button === 2) return false;
+      const e = this.view.pickEnemy(sx, sy, touch);
+      if (e && !e.inv) {
+        this.send({ c: 'attack', id: e.id });
+        this.view.showMarker(e.x, e.z, true);
+        return false;
+      }
+      const p = this.view.groundAt(sx, sy);
+      if (p) {
+        this.send({ c: 'amove', x: p.x, z: p.z });
+        this.view.showMarker(p.x, p.z, true);
+      }
+      return false;
+    }
+    const e = this.view.pickEnemy(sx, sy, touch);
     if (e && !e.inv) {
       this.send({ c: 'attack', id: e.id });
       this.view.showMarker(e.x, e.z, true);
-      return;
+      return false;
     }
     if (e?.inv) this.hud.toast('Сначала снесите вышку, кристалл под защитой');
     const p = this.view.groundAt(sx, sy);
@@ -312,6 +362,192 @@ export class App {
       this.send({ c: 'move', x: p.x, z: p.z });
       this.view.showMarker(p.x, p.z, false);
     }
+    return true;
+  }
+
+  // ── Наведение и прицел ──
+
+  /** Прицел умения: слот; touch — ведётся пальцем от кнопки (точка задаётся смещением) */
+  private aiming: { slot: number; touch: boolean } | null = null;
+  /** A нажата: следующий клик — атака с передвижением */
+  private amoveArmed = false;
+  /** Курсор мыши над полем (null — мышь ушла) */
+  private mouse: { x: number; y: number } | null = null;
+
+  private abilityOf(slot: number) {
+    const me = this.snap?.me;
+    const id = me ? HERO[me.hero]?.abilities[slot] : undefined;
+    const a = id ? ABILITIES[id] : undefined;
+    return a && !a.passive ? a : null;
+  }
+
+  /** Клавиша Q/W/E/R или клик мышью по кнопке */
+  private skillKey(slot: number) {
+    if (this.state !== 'play' || !this.snap?.me?.alive) return;
+    const a = this.abilityOf(slot);
+    if (!a) return;
+    const me = this.snap.me;
+    const ready = me.cd[slot] <= 0;
+    const g = this.mouse ? this.view.groundAt(this.mouse.x, this.mouse.y) : null;
+    // Без цели, на перезарядке или «сразу по курсору» — применяем сразу (отказ покажет кнопка)
+    if (a.target === 'none' || !ready || this.settings.quickCast) {
+      this.cancelAim();
+      const u = g && this.mouse ? this.hoverTarget(this.mouse.x, this.mouse.y) : null;
+      return this.cast(slot, a.target === 'none' ? null : g, u?.id ?? 0);
+    }
+    // Та же клавиша второй раз — применить туда, куда смотрит курсор (или с автоприцелом)
+    if (this.aiming?.slot === slot && !this.aiming.touch) {
+      if (this.mouse) this.castAimed(this.mouse.x, this.mouse.y);
+      else {
+        this.cancelAim();
+        this.cast(slot, null);
+      }
+      return;
+    }
+    this.amoveArmed = false;
+    this.aiming = { slot, touch: false };
+    this.updateAim();
+    this.refreshCursor();
+  }
+
+  /** Цель умения под курсором: любой юнит, кроме своего героя */
+  private hoverTarget(sx: number, sy: number): UnitSnap | null {
+    return this.view.pickUnit(sx, sy, (s) => s.id !== this.view.myUnit && s.k !== 'tower' && s.k !== 'ancient');
+  }
+
+  private castAimed(sx: number, sy: number) {
+    const aim = this.aiming;
+    if (!aim) return;
+    const g = this.view.groundAt(sx, sy);
+    const u = this.hoverTarget(sx, sy);
+    this.cancelAim();
+    if (g) this.cast(aim.slot, u ? { x: u.x, z: u.z } : g, u?.id ?? 0);
+  }
+
+  /** Обновить круг дальности и точку прицела под курсором */
+  private updateAim() {
+    const aim = this.aiming;
+    const a = aim ? this.abilityOf(aim.slot) : null;
+    if (!aim || !a || aim.touch) {
+      if (!aim) this.view.aim = null;
+      return;
+    }
+    const me = this.view.units.get(this.view.myUnit);
+    const g = this.mouse ? this.view.groundAt(this.mouse.x, this.mouse.y) : null;
+    if (!me || !g) {
+      this.view.aim = null;
+      return;
+    }
+    const d = Math.hypot(g.x - me.x, g.z - me.z);
+    this.view.aim = {
+      range: a.range,
+      x: g.x,
+      z: g.z,
+      r: a.ai?.radius ?? (a.target === 'unit' ? 0.9 : 1.2),
+      line: a.target === 'point',
+      ok: a.target === 'point' || d <= a.range + 0.5,
+    };
+  }
+
+  /** Перетаскивание пальцем от кнопки умения */
+  private aimDrag(slot: number, phase: 'start' | 'move' | 'over' | 'release' | 'cancel', dx: number, dy: number) {
+    if (this.state !== 'play' || !this.snap?.me?.alive) {
+      this.cancelAim();
+      return false;
+    }
+    const a = this.abilityOf(slot);
+    if (!a || a.target === 'none') return false;
+    if (phase === 'cancel') {
+      this.cancelAim();
+      return false;
+    }
+    const me = this.view.units.get(this.view.myUnit);
+    if (!me) return false;
+    // Направление на экране → на земле: от экранной точки героя в сторону пальца
+    const hs = this.view.toScreen(me.x, me.y, me.z);
+    const len = Math.hypot(dx, dy);
+    let p = { x: me.x, z: me.z };
+    if (hs && len > 1) {
+      const far = this.view.groundAt(hs.x + (dx / len) * 200, hs.y + (dy / len) * 200);
+      if (far) {
+        const fl = Math.hypot(far.x - me.x, far.z - me.z) || 1;
+        const k = Math.max(1, Math.min(1, len / 110) * a.range);
+        p = { x: me.x + ((far.x - me.x) / fl) * k, z: me.z + ((far.z - me.z) / fl) * k };
+      }
+    }
+    if (phase === 'release') {
+      this.cancelAim();
+      // Враг рядом с точкой прицела — по нему (как и раньше в cast)
+      this.cast(slot, p);
+      return true;
+    }
+    this.aiming = { slot, touch: true };
+    this.amoveArmed = false;
+    this.view.aim = {
+      range: a.range,
+      x: p.x,
+      z: p.z,
+      r: a.ai?.radius ?? (a.target === 'unit' ? 0.9 : 1.2),
+      line: a.target === 'point',
+      ok: phase !== 'over',
+    };
+    return true;
+  }
+
+  /** Отменить прицел и «атаку с передвижением»; true — было что отменять */
+  private cancelAim(): boolean {
+    const had = !!this.aiming || this.amoveArmed;
+    this.aiming = null;
+    this.amoveArmed = false;
+    this.view.aim = null;
+    this.refreshCursor();
+    return had;
+  }
+
+  private armAttackMove() {
+    if (this.state !== 'play' || !this.snap?.me?.alive) return;
+    this.aiming = null;
+    this.view.aim = null;
+    this.amoveArmed = true;
+    this.refreshCursor();
+  }
+
+  /** Мышь над полем: подсветка юнита, плашка, курсор */
+  private hover(sx: number, sy: number) {
+    this.mouse = sx < 0 ? null : { x: sx, y: sy };
+    this.refreshHover();
+    this.updateAim();
+  }
+
+  private refreshHover() {
+    const s =
+      this.state === 'play' && this.mouse
+        ? this.view.pickUnit(this.mouse.x, this.mouse.y, (u) => u.id !== this.view.myUnit)
+        : null;
+    this.view.hoverId = s?.id ?? 0;
+    if (!s) {
+      this.hud.hover(null);
+      this.refreshCursor(false);
+      return;
+    }
+    const rel = s.tm === this.view.myTeam ? 'ally' : s.tm === 2 ? 'neutral' : 'enemy';
+    this.view.hoverColor = rel === 'ally' ? 0x4fd17a : rel === 'neutral' ? 0xf1c453 : 0xe2504a;
+    const pl = s.pl !== undefined ? this.snap?.players[s.pl] : undefined;
+    const name =
+      s.k === 'hero'
+        ? `${pl?.name ?? ''}${pl ? ' · ' : ''}${HERO[s.m]?.name ?? 'Герой'}${s.lv ? `, ур. ${s.lv}` : ''}`
+        : (CREEP_NAMES[s.m] ?? CREEP_NAMES[s.k] ?? 'Существо');
+    this.hud.hover({ name, hp: s.hp, mhp: s.mhp, rel });
+    this.refreshCursor(rel === 'enemy' && !s.inv);
+  }
+
+  private hoverEnemy = false;
+  private refreshCursor(enemy = this.hoverEnemy) {
+    this.hoverEnemy = enemy;
+    const g = $('game');
+    const aim = !!this.aiming && !this.aiming.touch;
+    g.classList.toggle('cur-aim', aim);
+    g.classList.toggle('cur-attack', !aim && (this.amoveArmed || enemy));
   }
 
   // ── Сеть ──
@@ -503,6 +739,10 @@ export class App {
   private initMenu() {
     this.segInit('diffSeg', this.settings.diff, (v) => {
       this.settings.diff = v;
+      store.set('settings', this.settings);
+    });
+    this.segInit('castSeg', this.settings.quickCast ? 'quick' : 'aim', (v) => {
+      this.settings.quickCast = v === 'quick';
       store.set('settings', this.settings);
     });
     this.segInit('mapSeg', this.localMode(), (v) => {
@@ -833,6 +1073,16 @@ export class App {
     if (this.state === 'play') this.autoscale.tick(dt);
     if (this.fpsEl) this.fpsTick(dt);
     this.view.updateBars();
+    if (this.state === 'play') {
+      // Здоровье под курсором меняется, герой двигается — плашку и прицел обновляем каждый кадр
+      if (this.view.hoverId) this.refreshHover();
+      if (this.aiming && !this.aiming.touch) this.updateAim();
+    } else if (this.aiming || this.amoveArmed || this.view.hoverId) {
+      this.cancelAim();
+      this.view.hoverId = 0;
+      this.hud.hover(null);
+      this.refreshCursor(false);
+    }
     if (this.state === 'play' || this.state === 'over') this.hud.update(dt);
     if (!$('board').hidden) this.showBoard(true);
     this.sound.tick(dt);

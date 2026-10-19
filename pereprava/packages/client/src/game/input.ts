@@ -1,14 +1,23 @@
 // Ввод: мышь, тач и клавиатура превращаются в приказы. Тап/клик — идти или атаковать, перетаскивание
-// пальцем — вести героя, щипок и колесо — масштаб, Q W E R — способности (с прицелом по курсору),
+// пальцем — вести героя, щипок и колесо — масштаб, Q W E R — способности (прицел или сразу по курсору —
+// см. настройки), A + клик — атака с передвижением, Esc или правая кнопка — отменить прицел,
 // 1–6 — предметы, B — лавка, S — стоп, G или Alt+клик — пинг (Shift — «опасно»).
 import type { GameView } from '../render/view';
 
 export interface InputActions {
   playing(): boolean;
-  orderAt(sx: number, sy: number): void;
+  /** Нажатие по полю. button: 0 — левая/палец, 2 — правая. false — не вести героя за пальцем дальше */
+  orderAt(sx: number, sy: number, button: number, touch: boolean): boolean;
+  /** Курсор мыши над полем (без нажатия) */
+  hover(sx: number, sy: number): void;
   moveTo(x: number, z: number): void;
-  cast(slot: number, aim: { x: number; z: number } | null): void;
+  /** Клавиша способности */
+  skillKey(slot: number): void;
   useItem(slot: number, aim: { x: number; z: number } | null): void;
+  /** A: следующий клик — атака с передвижением */
+  armAttackMove(): void;
+  /** Esc: отменить прицел; true — было что отменять */
+  cancelAim(): boolean;
   toggleShop(open?: boolean): void;
   stop(): void;
   ping(x: number, z: number, kind: 'look' | 'danger' | 'go'): void;
@@ -16,11 +25,12 @@ export interface InputActions {
 }
 
 export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: InputActions) {
-  const pointers = new Map<number, { x: number; y: number; sx: number; sy: number }>();
+  const pointers = new Map<number, { x: number; y: number; sx: number; sy: number; drag: boolean }>();
   let pinchD = 0;
   let lastMouse: { x: number; y: number } | null = null;
   let lastType = 'mouse';
   let dragT = 0;
+  let hoverQueued = false;
   const rel = (e: PointerEvent) => {
     const r = canvas.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -36,7 +46,8 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
     }
     const p = rel(e);
     lastType = e.pointerType;
-    pointers.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y });
+    const ptr = { x: p.x, y: p.y, sx: p.x, sy: p.y, drag: false };
+    pointers.set(e.pointerId, ptr);
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       pinchD = Math.hypot(a.x - b.x, a.y - b.y);
@@ -47,13 +58,21 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
       if (g) act.ping(g.x, g.z, e.shiftKey ? 'danger' : 'look');
       return;
     }
-    if (pointers.size === 1) act.orderAt(p.x, p.y);
+    if (pointers.size === 1) ptr.drag = act.orderAt(p.x, p.y, e.button, e.pointerType !== 'mouse');
   });
   canvas.addEventListener('pointermove', (e) => {
     const p = rel(e);
     if (e.pointerType === 'mouse') {
       lastMouse = p;
       lastType = 'mouse';
+      // Наведение — не чаще раза за кадр
+      if (!hoverQueued) {
+        hoverQueued = true;
+        requestAnimationFrame(() => {
+          hoverQueued = false;
+          if (lastMouse) act.hover(lastMouse.x, lastMouse.y);
+        });
+      }
     }
     const ptr = pointers.get(e.pointerId);
     if (!ptr) return;
@@ -68,6 +87,7 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
     }
     if (
       pointers.size === 1 &&
+      ptr.drag &&
       act.playing() &&
       Math.hypot(p.x - ptr.sx, p.y - ptr.sy) > 10 &&
       performance.now() - dragT > 110
@@ -83,6 +103,12 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
   };
   canvas.addEventListener('pointerup', up);
   canvas.addEventListener('pointercancel', up);
+  canvas.addEventListener('pointerleave', (e) => {
+    if (e.pointerType === 'mouse') {
+      lastMouse = null;
+      act.hover(-1, -1);
+    }
+  });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener(
     'wheel',
@@ -98,11 +124,13 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
     if (e.repeat || !act.playing()) return;
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
-    if (e.code in SKILL) act.cast(SKILL[e.code], mouseAim());
+    if (e.code in SKILL) act.skillKey(SKILL[e.code]);
     else if (/^Digit[1-6]$/.test(e.code)) act.useItem(+e.code.slice(5) - 1, mouseAim());
+    else if (e.code === 'KeyA') act.armAttackMove();
     else if (e.code === 'KeyB') act.toggleShop();
-    else if (e.code === 'Escape') act.toggleShop(false);
-    else if (e.code === 'KeyS') act.stop();
+    else if (e.code === 'Escape') {
+      if (!act.cancelAim()) act.toggleShop(false);
+    } else if (e.code === 'KeyS') act.stop();
     else if (e.code === 'KeyG') {
       const g = mouseAim() ?? act.heroPos();
       if (g) act.ping(g.x, g.z, e.shiftKey ? 'danger' : 'look');

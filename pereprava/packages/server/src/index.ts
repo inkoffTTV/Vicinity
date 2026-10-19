@@ -43,6 +43,8 @@ function cleanCommand(c: unknown): Command | null {
   switch (o.c) {
     case 'move':
       return num(o.x) && num(o.z) ? { c: 'move', x: o.x, z: o.z } : null;
+    case 'amove':
+      return num(o.x) && num(o.z) ? { c: 'amove', x: o.x, z: o.z } : null;
     case 'attack':
       return int(o.id) ? { c: 'attack', id: o.id } : null;
     case 'stop':

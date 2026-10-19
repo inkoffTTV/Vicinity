@@ -419,11 +419,19 @@ function applyCommand(w: World, slot: number, cmd: Command) {
   const h = u.hero;
   switch (cmd.c) {
     case 'move':
+    case 'amove': {
       if (!u.alive || !okNum(cmd.x) || !okNum(cmd.z)) return;
       cancelCast(u);
       removeMod(u, 'recall');
-      h.order = { type: 'move', x: clamp(cmd.x, -58, 58), z: clamp(cmd.z, -58, 58), st: 0, best: Infinity };
+      const L = mapOf(w).limit - 1;
+      const x = clamp(cmd.x, -L, L);
+      const z = clamp(cmd.z, -L, L);
+      h.order =
+        cmd.c === 'move'
+          ? { type: 'move', x, z, st: 0, best: Infinity }
+          : { type: 'amove', x, z, st: 0, best: Infinity, tgt: 0 };
       return;
+    }
     case 'attack': {
       const t = unitById(w, cmd.id);
       if (!u.alive || !t?.alive || t.team === u.team || t.invuln) return;
@@ -800,32 +808,46 @@ export function launch(
   return p;
 }
 
+/** Шаг по приказу «идти» (или «идти с атакой»): true — приказ закончен (дошёл или упёрся) */
+function followMove(w: World, u: Unit, o: Extract<Order, { type: 'move' | 'amove' }>): boolean {
+  // Путь в обход деревьев считаем один раз на приказ; по прямой — одна точка
+  if (!o.path) o.path = findPath(mapOf(w), u.x, u.z, o.x, o.z);
+  while (o.path.length > 1 && Math.hypot(o.path[0].x - u.x, o.path[0].z - u.z) < 0.8) o.path.shift();
+  const wp = o.path[0] ?? { x: o.x, z: o.z };
+  if (moveToward(u, wp.x, wp.z) && o.path.length <= 1) return true;
+  // Упёрся (в дерево, в здание) — бросаем приказ, как в прототипе. Мерим остаток пути
+  let d = Math.hypot(wp.x - u.x, wp.z - u.z);
+  for (let i = 1; i < o.path.length; i++) d += Math.hypot(o.path[i].x - o.path[i - 1].x, o.path[i].z - o.path[i - 1].z);
+  o.st += DT;
+  if (o.st > 0.6) {
+    if (o.best - d < 0.15) return true;
+    o.best = d;
+    o.st = 0;
+  }
+  return false;
+}
+
 function doOrder(w: World, u: Unit) {
   const h = u.hero!;
   const o = h.order;
   if (!o) return;
   if (o.type === 'move') {
-    // Путь в обход деревьев считаем один раз на приказ; по прямой — одна точка
-    if (!o.path) o.path = findPath(mapOf(w), u.x, u.z, o.x, o.z);
-    while (o.path.length > 1 && Math.hypot(o.path[0].x - u.x, o.path[0].z - u.z) < 0.8) o.path.shift();
-    const wp = o.path[0] ?? { x: o.x, z: o.z };
-    if (moveToward(u, wp.x, wp.z) && o.path.length <= 1) {
-      h.order = null;
-      return;
+    if (followMove(w, u, o)) h.order = null;
+  } else if (o.type === 'amove') {
+    // Враг рядом — бьём его; ушёл или умер — ищем следующего; никого — идём дальше
+    let t = unitById(w, o.tgt);
+    if (t && (!t.alive || t.invuln || hasFlag(t, 'invisible') || dist(u, t) > reach(u, t) + 6)) t = undefined;
+    if (!t) {
+      t = nearestEnemy(w, u, Math.max(u.range + 3, 6)) ?? undefined;
+      o.tgt = t?.id ?? 0;
+      if (t) o.path = undefined;
     }
-    // Упёрся (в дерево, в здание) — бросаем приказ, как в прототипе. Мерим остаток пути
-    let d = Math.hypot(wp.x - u.x, wp.z - u.z);
-    for (let i = 1; i < o.path.length; i++)
-      d += Math.hypot(o.path[i].x - o.path[i - 1].x, o.path[i].z - o.path[i - 1].z);
-    o.st += DT;
-    if (o.st > 0.6) {
-      if (o.best - d < 0.15) {
-        h.order = null;
-        return;
-      }
-      o.best = d;
+    if (t) {
       o.st = 0;
-    }
+      o.best = Infinity;
+      if (dist(u, t) > reach(u, t)) moveToward(u, t.x, t.z);
+      else tryAttack(w, u, t);
+    } else if (followMove(w, u, o)) h.order = null;
   } else if (o.type === 'cast') {
     // Подходим к цели умения, на дальности — применяем
     const t = unitById(w, o.id);

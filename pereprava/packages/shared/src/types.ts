@@ -22,6 +22,16 @@ export interface Modifier {
 export type Order =
   | { type: 'move'; x: number; z: number; st: number; best: number; path?: { x: number; z: number }[] }
   | { type: 'attack'; id: number; auto: boolean }
+  /** Атака с передвижением: идти к точке, по пути бить врагов, оказавшихся рядом (tgt — текущий) */
+  | {
+      type: 'amove';
+      x: number;
+      z: number;
+      st: number;
+      best: number;
+      path?: { x: number; z: number }[];
+      tgt: number;
+    }
   /** Подойти к цели на дальность умения и применить его */
   | { type: 'cast'; slot: number; id: number };
 
@@ -164,6 +174,7 @@ export interface Zone {
 export type Command =
   | { c: 'move'; x: number; z: number }
   | { c: 'attack'; id: number }
+  | { c: 'amove'; x: number; z: number }
   | { c: 'stop' }
   | { c: 'cast'; slot: number; x?: number; z?: number; id?: number }
   | { c: 'buy'; item: string }

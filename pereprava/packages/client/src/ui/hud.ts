@@ -21,10 +21,27 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 export const fmt = (t: number) => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
 const KEYS = ['Q', 'W', 'E', 'R'];
 
+export type AimPhase = 'start' | 'move' | 'over' | 'release' | 'cancel';
+
 export interface HudActions {
   send(cmd: Command): void;
+  /** Тап пальцем по кнопке умения или Enter: применить с автоприцелом */
   cast(slot: number): void;
+  /** Клик мышью по кнопке — как клавиша (прицел или сразу по курсору) */
+  skillKey(slot: number): void;
+  /** Нужен ли умению прицел (для 'none' — применяется сразу при нажатии) */
+  needsAim(slot: number): boolean;
+  /** Прицел перетаскиванием от кнопки: смещение пальца от центра кнопки, px.
+   *  'over' — палец вернулся на кнопку (отпустит — отмена). 'start' → false: прицел не нужен */
+  aimDrag(slot: number, phase: AimPhase, dx: number, dy: number): boolean;
   useItem(slot: number): void;
+}
+
+export interface HoverInfo {
+  name: string;
+  hp: number;
+  mhp: number;
+  rel: 'ally' | 'enemy' | 'neutral';
 }
 
 export class Hud {
@@ -56,6 +73,25 @@ export class Hud {
       this.last[key] = v;
       el.textContent = v;
     }
+  }
+
+  /** Плашка сверху: кто под курсором и сколько у него здоровья */
+  private hoverKey = '';
+  hover(info: HoverInfo | null) {
+    const el = $('hoverPlate');
+    if (!info) {
+      if (!el.hidden) el.hidden = true;
+      this.hoverKey = '';
+      return;
+    }
+    const key = `${info.name}|${Math.ceil(info.hp)}|${info.mhp}|${info.rel}`;
+    if (key === this.hoverKey && !el.hidden) return;
+    this.hoverKey = key;
+    el.hidden = false;
+    el.dataset.rel = info.rel;
+    el.querySelector('b')!.textContent = info.name;
+    (el.querySelector('i') as HTMLElement).style.width = `${Math.max(0, Math.min(1, info.hp / info.mhp)) * 100}%`;
+    el.querySelector('span')!.textContent = `${Math.ceil(info.hp)} / ${Math.round(info.mhp)}`;
   }
 
   toast(text: string) {
@@ -90,7 +126,41 @@ export class Hud {
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        this.act.cast(slot);
+        if (e.pointerType === 'mouse') return this.act.skillKey(slot);
+        if (!this.act.needsAim(slot)) return this.act.cast(slot);
+        // Палец: тап — автоприцел; повёл — прицел; отпустил — применить; вернул на кнопку — отмена
+        const r = b.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        let aiming = false;
+        try {
+          b.setPointerCapture(e.pointerId);
+        } catch {
+          /* не важно */
+        }
+        const over = (ev: PointerEvent) => Math.hypot(ev.clientX - cx, ev.clientY - cy) < r.width * 0.6;
+        const move = (ev: PointerEvent) => {
+          if (ev.pointerId !== e.pointerId) return;
+          const dx = ev.clientX - cx;
+          const dy = ev.clientY - cy;
+          if (!aiming && Math.hypot(dx, dy) > 18) aiming = this.act.aimDrag(slot, 'start', dx, dy);
+          if (aiming) this.act.aimDrag(slot, over(ev) ? 'over' : 'move', dx, dy);
+          b.classList.toggle('aiming', aiming && !over(ev));
+        };
+        const end = (ev: PointerEvent) => {
+          if (ev.pointerId !== e.pointerId) return;
+          b.removeEventListener('pointermove', move);
+          b.removeEventListener('pointerup', end);
+          b.removeEventListener('pointercancel', end);
+          b.classList.remove('aiming');
+          if (!aiming) {
+            if (ev.type === 'pointerup') this.act.cast(slot);
+          } else if (ev.type === 'pointercancel' || over(ev)) this.act.aimDrag(slot, 'cancel', 0, 0);
+          else this.act.aimDrag(slot, 'release', ev.clientX - cx, ev.clientY - cy);
+        };
+        b.addEventListener('pointermove', move);
+        b.addEventListener('pointerup', end);
+        b.addEventListener('pointercancel', end);
       });
       b.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {

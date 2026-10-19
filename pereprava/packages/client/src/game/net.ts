@@ -81,7 +81,7 @@ export class NetSession implements Session {
     this.seq++;
     this.conn.send({ t: 'cmd', seq: this.seq, cmd });
     if (cmd.c === 'move') this.target = { x: cmd.x, z: cmd.z };
-    else if (cmd.c === 'attack' || cmd.c === 'stop' || cmd.c === 'cast') this.target = null;
+    else if (cmd.c === 'attack' || cmd.c === 'amove' || cmd.c === 'stop' || cmd.c === 'cast') this.target = null;
   }
 
   /** Позиция своего героя на экране: предсказанная, а без приказа — свежая серверная */
