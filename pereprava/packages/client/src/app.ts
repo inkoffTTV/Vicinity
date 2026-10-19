@@ -155,10 +155,20 @@ export class App {
     };
     $('modeFriend').addEventListener('click', () => this.lobby.open());
     $('modeBot').addEventListener('click', () => this.lobby.close());
+    // Сборка без сервера (VITE_OFFLINE=1, например демо-страница): только игра против бота
+    const offline = import.meta.env.VITE_OFFLINE === '1';
+    if (offline) {
+      const f = $<HTMLButtonElement>('modeFriend');
+      f.disabled = true;
+      f.innerHTML = 'С другом<small>нужен игровой сервер</small>';
+    }
     // Ссылка-приглашение ?room=КОД или сохранённый токен (вернуться в идущий матч после перезагрузки)
-    const code =
-      new URLSearchParams(location.search).get('room') ?? /room=([A-Za-z0-9]+)/.exec(location.hash)?.[1] ?? '';
-    if (code) {
+    const code = offline
+      ? ''
+      : (new URLSearchParams(location.search).get('room') ?? /room=([A-Za-z0-9]+)/.exec(location.hash)?.[1] ?? '');
+    if (offline) {
+      /* без сервера не подключаемся */
+    } else if (code) {
       this.pendingJoin = code.toUpperCase();
       this.lobby.open();
     } else if (store.get<string | undefined>('token', undefined)) this.conn.connect();
