@@ -685,6 +685,7 @@ export class App {
 
   /** #debug: хуки для отладки и автотестов (аналог window.__g прототипа) */
   private exposeDebug() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- геттеры объекта ниже читают состояние приложения
     const app = this;
     (window as unknown as { __g: unknown }).__g = {
       app,

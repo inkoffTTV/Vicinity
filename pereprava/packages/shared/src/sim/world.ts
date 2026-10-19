@@ -812,7 +812,7 @@ function heroTick(w: World, u: Unit): boolean {
   const team = u.team as Team;
   const f = FOUNTAINS[team];
   const ef = FOUNTAINS[1 - team];
-  let heal = h.regen + modValue(u, 'heal') + (Math.hypot(u.x - f.x, u.z - f.z) < 8 ? 90 : 0);
+  const heal = h.regen + modValue(u, 'heal') + (Math.hypot(u.x - f.x, u.z - f.z) < 8 ? 90 : 0);
   u.hp = Math.min(u.maxHp, u.hp + heal * DT);
   h.gold += 1.5 * DT;
   if (Math.hypot(u.x - ef.x, u.z - ef.z) < 9) damage(w, u, 170 * DT, null, 'pure');

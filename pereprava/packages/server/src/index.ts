@@ -28,6 +28,8 @@ function newCode(): string {
   }
 }
 
+// Управляющие символы и угловые скобки из имени убираем
+// eslint-disable-next-line no-control-regex
 const cleanName = (v: unknown) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 16) : '') || 'Игрок';
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const int = (v: unknown): v is number => Number.isInteger(v);

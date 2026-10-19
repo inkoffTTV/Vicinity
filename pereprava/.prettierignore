@@ -2,3 +2,8 @@ legacy/
 dist/
 node_modules/
 package-lock.json
+# Стили и разметка — в компактном виде «правило в строку», как в прототипе
+*.css
+*.html
+test-results/
+playwright-report/
