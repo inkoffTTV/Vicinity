@@ -15,10 +15,10 @@ function towerSiege(melee: number, ranged: number): { w: World; tower: Unit; cre
   const tower = w.units.find((u) => u.kind === 'tower' && u.team === 1 && u.tier === 1)!;
   // Вышка не умирает и не бьёт — смотрим только на расстановку
   Object.assign(tower, { maxHp: 1e9, hp: 1e9, dmg: 0 });
-  const mine = w.units.filter((u) => u.kind === 'creep' && u.team === 0);
+  const mine = w.units.filter((u) => u.kind === 'creep' && !u.owner && u.team === 0);
   const m = mine.filter((u) => !u.ranged).slice(0, melee);
   const r = mine.filter((u) => u.ranged).slice(0, ranged);
-  for (const u of w.units) if (u.kind === 'creep' && !m.includes(u) && !r.includes(u)) u.alive = false;
+  for (const u of w.units) if (u.kind === 'creep' && !u.owner && !m.includes(u) && !r.includes(u)) u.alive = false;
   w.units = w.units.filter((u) => u.alive || u.kind !== 'creep');
   const creeps = [...m, ...r];
   // Толпой подходят с одной стороны — худший случай для «все в одну точку»

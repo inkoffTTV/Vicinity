@@ -58,6 +58,12 @@ function cleanCommand(c: unknown): Command | null {
       return typeof o.item === 'string' && o.item.length < 32 ? { c: 'buy', item: o.item } : null;
     case 'sell':
       return int(o.slot) ? { c: 'sell', slot: o.slot } : null;
+    case 'learn':
+      return int(o.slot) && o.slot >= 0 && o.slot <= 3 ? { c: 'learn', slot: o.slot } : null;
+    case 'tp':
+      return num(o.x) && num(o.z) ? { c: 'tp', x: o.x, z: o.z } : null;
+    case 'courier':
+      return { c: 'courier' };
     case 'swap':
       return int(o.a) && int(o.b) && o.a >= 0 && o.b >= 0 && o.a < 9 && o.b < 9 ? { c: 'swap', a: o.a, b: o.b } : null;
     case 'use':

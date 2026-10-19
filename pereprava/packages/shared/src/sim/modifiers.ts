@@ -2,7 +2,7 @@
 // что модификатор делает, описано здесь: флаги (стан, сайленс…), вклад в характеристики,
 // поведение каждый тик.
 import type { Modifier, Unit } from '../types';
-import { DT, damage, recallHome, unitById, type World } from './world';
+import { DT, damage, finishTp, recallHome, unitById, type World } from './world';
 
 export type ModFlag = 'stun' | 'silence' | 'root' | 'disarm' | 'invisible' | 'immune';
 /** Характеристики, в которые модификаторы добавляют значение v (или своё число) */
@@ -20,7 +20,9 @@ export type ModStat =
   /** Шанс уклониться от физического удара */
   | 'evade'
   /** Вампиризм от модификатора (сверх предметов) */
-  | 'lifesteal';
+  | 'lifesteal'
+  /** Восстановление маны в секунду от модификатора */
+  | 'manaHeal';
 
 export interface ModifierDef {
   name: string;
@@ -81,6 +83,21 @@ export const MODIFIERS: Record<string, ModifierDef> = {
     },
   },
   taunt: { name: 'Вызов', buff: false },
+  tp: {
+    name: 'Телепорт',
+    buff: true,
+    tick(_w, u, m) {
+      // Урон сбивает телепорт (свиток не возвращается)
+      if (u.hurtTick > m.v) {
+        m.t = -2;
+        if (u.hero) u.hero.tpTo = null;
+      }
+    },
+    expire(w, u) {
+      finishTp(w, u);
+    },
+  },
+  salveMana: { name: 'Травяной бальзам', buff: true, stats: { manaHeal: 8 } },
   // Ауры-пассивки на себя (обновляются каждый тик, пока герой жив)
   sap: {
     name: 'Сок земли',

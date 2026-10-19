@@ -54,6 +54,9 @@ export function makeModel(model: string, team: number): Rig {
     // Призванные: волки Звероловки, тотем Шамана
     case 'spiritwolf':
       return buildBeast(0x7a9ad8, 0xe0f0ff, 'spiritwolf', 0.95);
+    // Курьер: маленький крылатый зверёк
+    case 'courier':
+      return buildBeast(0xd8b060, 0xfff4c0, 'courier', 0.55);
     case 'totem':
       return buildTotem(Math.min(1, team));
     // Облики: Оборотень в облике волка, лягушка от «Сглаза»

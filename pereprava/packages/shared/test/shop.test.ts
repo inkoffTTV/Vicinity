@@ -114,7 +114,7 @@ describe('покупка, рюкзак, продажа', () => {
     queueCommand(w, 0, { c: 'swap', a: slot, b: 0 });
     step(w);
     expect(h.hero!.items[0]).toBe('cloak');
-    expect(h.maxHp).toBe(hp + 180);
+    expect(h.maxHp).toBe(hp + 180 + 4 * 12);
   });
 
   it('все 9 слотов заняты — купить нельзя, если покупка не освобождает место', () => {

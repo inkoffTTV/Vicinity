@@ -39,6 +39,7 @@ function bastion(w: World, u: Unit): boolean {
 export const ITEM_USE: Record<string, ItemUse> = {
   salve(w, u) {
     addMod(u, 'regen', 10, 20, u.id);
+    addMod(u, 'salveMana', 10, 0, u.id);
     fx(w, u.x, u.z, 1, 0x9be38a, 0.6, 0.5, 1.4);
     return true;
   },

@@ -4,8 +4,8 @@
 // Порядок тика повторяет прототип 0.3: волна → таймеры атак → герои (игрок или бот) → крипы и вышки →
 // нейтралы → столкновения → снаряды → уборка мёртвых.
 import { difficulty } from '../data/difficulty';
-import { HERO } from '../data/heroes';
-import { ITEM } from '../data/items';
+import { attrsOf, HERO, turnOf, type Attr } from '../data/heroes';
+import { ITEM, NEUTRAL_ITEMS } from '../data/items';
 import {
   getMap,
   laneAhead,
@@ -26,6 +26,7 @@ import type {
   Camp,
   Command,
   DamageType,
+  HeroState,
   Modifier,
   Order,
   Player,
@@ -48,8 +49,15 @@ export const TICK_RATE = 30;
 export const DT = 1 / TICK_RATE;
 export const WAVE_INTERVAL = 25;
 export const SHOP_RADIUS = 14;
-export const MAX_LEVEL = 10;
+export const MAX_LEVEL = 15;
 export const ULT_LEVEL = 6;
+/** Уровни героя, на которых открываются уровни ультимейта */
+export const ULT_LEVELS = [6, 10, 14];
+/** Перезарядка свитка телепорта, с */
+export const TP_CD = 40;
+/** Курьер: скорость и время до возвращения после гибели */
+export const COURIER_SPEED = 11;
+export const COURIER_RESPAWN = 30;
 export const TEAM_COLORS = [0x3ec7a1, 0xe2504a] as const;
 
 /** Числа баланса зданий и крипов (подбирались прогонами бот против бота: npm run balance) */
@@ -194,6 +202,30 @@ export function recalc(u: Unit) {
   const old = u.maxHp || 0;
   let hp = h.baseHp + def.hpLvl * (h.level - 1);
   let dmg = h.baseDmg + def.dmgLvl * (h.level - 1);
+  // Атрибуты: с уровнем и с предметов. Рост здоровья и урона с уровнем уже в hpLvl/dmgLvl,
+  // поэтому сила и главный атрибут дают здоровье и урон только с предметов
+  const at = attrsOf(def);
+  const lv = (k: Attr) => at.base[k] + at.gain[k] * (h.level - 1);
+  const itm = { str: 0, agi: 0, int: 0 };
+  let mana = 0;
+  let mreg = 0;
+  const equipped = [...h.items.slice(0, INVENTORY), h.neutral];
+  for (const id of equipped) {
+    if (!id) continue;
+    const it = ITEM[id];
+    itm.str += it.str ?? 0;
+    itm.agi += it.agi ?? 0;
+    itm.int += it.int ?? 0;
+    mana += it.mana ?? 0;
+    mreg += it.manaRegen ?? 0;
+  }
+  h.attrs = {
+    str: Math.round(lv('str') + itm.str),
+    agi: Math.round(lv('agi') + itm.agi),
+    int: Math.round(lv('int') + itm.int),
+  };
+  hp += itm.str * 12;
+  dmg += itm[at.primary];
   let sp = def.baseSpeed;
   let rg = 2.5;
   let amp = 1;
@@ -201,8 +233,8 @@ export function recalc(u: Unit) {
   let atkSpeed = 0;
   let lifesteal = 0;
   let cdr = 0;
-  // Прибавки дают только основные слоты, рюкзак — нет
-  for (const id of h.items.slice(0, INVENTORY)) {
+  // Прибавки дают основные слоты и нейтральный, рюкзак — нет
+  for (const id of equipped) {
     if (!id) continue;
     const it = ITEM[id];
     hp += it.hp ?? 0;
@@ -215,6 +247,15 @@ export function recalc(u: Unit) {
     lifesteal += it.lifesteal ?? 0;
     cdr += it.cdr ?? 0;
   }
+  // Ловкость сверх базы 1 уровня: броня и скорость атаки; сила — восстановление здоровья
+  const agiUp = h.attrs.agi - at.base.agi;
+  armor += agiUp * 0.14;
+  atkSpeed += agiUp * 0.01;
+  rg += (h.attrs.str - at.base.str) * 0.05;
+  const oldMana = h.maxMana;
+  h.maxMana = Math.round(100 + h.attrs.int * 13 + mana);
+  h.manaRegen = 0.9 + h.attrs.int * 0.06 + mreg;
+  h.mana = oldMana ? Math.min(h.maxMana, h.mana + Math.max(0, h.maxMana - oldMana)) : h.maxMana;
   u.maxHp = hp;
   u.dmg = dmg;
   u.speed = sp;
@@ -282,6 +323,7 @@ export function createWorld(setup: MatchSetup): World {
       ranged: def.ranged,
       barH: def.barH,
       rot: ps.team ? -Math.PI * 0.25 : Math.PI * 0.75,
+      turn: turnOf(def),
     });
     u.hero = {
       def: def.id,
@@ -295,6 +337,19 @@ export function createWorld(setup: MatchSetup): World {
       itemT: Array(ALL_SLOTS).fill(-99),
       itemPaid: Array(ALL_SLOTS).fill(0),
       charges: def.abilities.map((id) => ABILITIES[id]?.charges ?? -1),
+      skill: [0, 0, 0, 0],
+      points: 1,
+      mana: 0,
+      maxMana: 0,
+      manaRegen: 0,
+      attrs: { ...attrsOf(def).base },
+      tp: 1,
+      tpCd: 0,
+      tpTo: null,
+      neutral: null,
+      stash: [],
+      courier: 0,
+      courierAt: 0,
       chargeT: [0, 0, 0, 0],
       hist: [],
       respawn: 0,
@@ -314,6 +369,7 @@ export function createWorld(setup: MatchSetup): World {
     };
     recalc(u);
     u.hp = u.maxHp;
+    if (ps.bot) autoLearn(u);
     w.players.push({
       slot,
       team: ps.team,
@@ -466,6 +522,15 @@ function applyCommand(w: World, slot: number, cmd: Command) {
     case 'sell':
       sellItem(w, u, cmd.slot);
       return;
+    case 'learn':
+      if (Number.isInteger(cmd.slot)) learn(u, cmd.slot);
+      return;
+    case 'tp':
+      if (okNum(cmd.x) && okNum(cmd.z)) startTp(w, u, cmd.x, cmd.z);
+      return;
+    case 'courier':
+      sendCourier(w, u);
+      return;
     case 'swap': {
       const { a, b } = cmd;
       if (!Number.isInteger(a) || !Number.isInteger(b) || a === b) return;
@@ -499,13 +564,48 @@ function applyCommand(w: World, slot: number, cmd: Command) {
 /** Цена с учётом компонентов, которые уже лежат в инвентаре (клиент считает так же) */
 export const itemCost = (u: Unit, id: string) => itemCostFor(u.hero!.items, id);
 
+/** Все вещи героя для расчёта рецепта: инвентарь, потом тайник */
+const allItems = (h: HeroState) => [...h.items, ...h.stash.map((s) => s.id)];
+
 export function canBuy(w: World, u: Unit, id: string): boolean {
-  return !!u.hero && nearShop(w, u) && canAfford(u.hero.items, u.hero.gold, id);
+  const h = u.hero;
+  if (!h || !ITEM[id] || ITEM[id].neutral) return false;
+  if (id === 'recall') return h.gold >= ITEM.recall.price && h.tp < 3;
+  if (nearShop(w, u)) return canAfford(h.items, h.gold, id);
+  // Вдали от лавки: в тайнике должно остаться место
+  const { cost, consume } = itemCostFor(allItems(h), id);
+  const fromStash = consume.filter((i) => i >= ALL_SLOTS).length;
+  if (h.gold < cost || h.stash.length - fromStash >= 6) return false;
+  return !(ITEM[id].unique && allItems(h).includes(id));
+}
+
+/** Первый свободный слот: основной, потом рюкзак */
+function freeSlotFor(h: HeroState): number {
+  const main = h.items.slice(0, INVENTORY).indexOf(null);
+  return main >= 0 ? main : h.items.indexOf(null);
+}
+
+function putItem(u: Unit, slot: number, id: string, t: number, paid: number) {
+  const h = u.hero!;
+  h.items[slot] = id;
+  h.itemCd[slot] = 0;
+  h.itemT[slot] = t;
+  h.itemPaid[slot] = paid;
 }
 
 export function buyItem(w: World, u: Unit, id: string, force = false): boolean {
   if (!force && !canBuy(w, u, id)) return false;
   const h = u.hero!;
+  // Свиток телепорта — в отдельный слот
+  if (id === 'recall') {
+    if (h.gold < ITEM.recall.price || h.tp >= 3) return false;
+    h.gold -= ITEM.recall.price;
+    h.tp++;
+    emit(w, { e: 'buy', player: h.player, item: id });
+    return true;
+  }
+  const away = !force && !nearShop(w, u);
+  if (away) return buyToStash(w, u, id);
   const { cost, consume } = itemCost(u, id);
   if (h.gold < cost) return false;
   // Возврат в первые 10 с: уплаченное золото плюс то, что вернули бы за ушедшие в рецепт части,
@@ -528,6 +628,164 @@ export function buyItem(w: World, u: Unit, id: string, force = false): boolean {
   recalc(u);
   emit(w, { e: 'buy', player: h.player, item: id });
   return true;
+}
+
+/** Покупка вдали от лавки: части берутся из инвентаря и тайника, вещь ложится в тайник */
+function buyToStash(w: World, u: Unit, id: string): boolean {
+  const h = u.hero!;
+  const { cost, consume } = itemCostFor(allItems(h), id);
+  if (h.gold < cost) return false;
+  let paid = cost;
+  const stashIdx: number[] = [];
+  for (const i of consume) {
+    if (i < ALL_SLOTS) {
+      paid += sellValue(h.items[i]!, h.itemT[i], h.itemPaid[i], w.time);
+      h.items[i] = null;
+      h.itemCd[i] = 0;
+    } else stashIdx.push(i - ALL_SLOTS);
+  }
+  for (const i of stashIdx.sort((a, b) => b - a)) {
+    const s = h.stash.splice(i, 1)[0];
+    paid += sellValue(s.id, s.t, s.paid, w.time);
+  }
+  if (h.stash.length >= 6) return false;
+  h.gold -= cost;
+  h.stash.push({ id, t: w.time, paid });
+  recalc(u);
+  emit(w, { e: 'buy', player: h.player, item: id });
+  return true;
+}
+
+/** Изучить умение: обычное 1–4 (уровень N — с уровня героя 2N−1), ультимейт 1–3 (6, 10, 14) */
+export function canLearn(u: Unit, slot: number): boolean {
+  const h = u.hero;
+  if (!h || h.points <= 0 || slot < 0 || slot > 3) return false;
+  const L = h.skill[slot];
+  if (slot === 3) return L < 3 && h.level >= ULT_LEVELS[L];
+  return L < 4 && h.level >= 2 * L + 1;
+}
+
+export function learn(u: Unit, slot: number): boolean {
+  if (!canLearn(u, slot)) return false;
+  const h = u.hero!;
+  h.skill[slot]++;
+  h.points--;
+  // Заряды появляются при изучении
+  const a = ABILITIES[HERO[h.def].abilities[slot]];
+  if (a?.charges && h.skill[slot] === 1) h.charges[slot] = a.charges;
+  return true;
+}
+
+/** Прокачка бота: сначала ультимейт, потом самое отстающее умение (Q, W, E) */
+export function autoLearn(u: Unit) {
+  const h = u.hero!;
+  for (let guard = 0; guard < 8 && h.points > 0; guard++) {
+    if (learn(u, 3)) continue;
+    const order = [0, 1, 2].filter((s) => canLearn(u, s)).sort((a, b) => h.skill[a] - h.skill[b] || a - b);
+    if (!order.length || !learn(u, order[0])) break;
+  }
+}
+
+/** Свиток телепорта: через 3 с — к своей постройке рядом с точкой или к фонтану */
+function startTp(w: World, u: Unit, x: number, z: number) {
+  const h = u.hero!;
+  if (!u.alive || h.tp <= 0 || h.tpCd > 0 || hasFlag(u, 'stun')) return;
+  const m = mapOf(w);
+  let to = m.spawns[u.team as Team] as P2;
+  let bd = 14;
+  for (const b of w.units)
+    if (
+      (b.kind === 'tower' || b.kind === 'ancient') &&
+      b.alive &&
+      b.team === u.team &&
+      Math.hypot(b.x - x, b.z - z) < bd
+    ) {
+      bd = Math.hypot(b.x - x, b.z - z);
+      // Встаём со стороны своей базы
+      const a = m.ancients[u.team as Team];
+      const L = Math.hypot(a.x - b.x, a.z - b.z) || 1;
+      to = { x: b.x + ((a.x - b.x) / L) * 3.5, z: b.z + ((a.z - b.z) / L) * 3.5 };
+    }
+  h.tp--;
+  h.tpCd = TP_CD;
+  h.tpTo = { x: to.x, z: to.z };
+  h.order = null;
+  addMod(u, 'tp', 3, w.tick, u.id);
+  fx(w, to.x, to.z, 0.4, 0xf1c453, 1.6, 3, 0.6);
+}
+
+/** Телепорт закончился: перенести (вызывается из модификатора 'tp') */
+export function finishTp(w: World, u: Unit) {
+  const h = u.hero!;
+  if (!h.tpTo || !u.alive) return;
+  fx(w, u.x, u.z, 1.2, 0xf1c453, 0.9, 0.5, 2);
+  u.x = h.tpTo.x;
+  u.z = h.tpTo.z;
+  h.tpTo = null;
+  h.order = null;
+  resolveCollisions(w);
+  fx(w, u.x, u.z, 1.2, 0xf1c453, 1, 0.6, 2);
+}
+
+// ── Курьер ──
+
+function spawnCourier(w: World, owner: Unit) {
+  const h = owner.hero!;
+  const f = mapOf(w).fountains[owner.team as Team];
+  const c = addUnit(w, {
+    kind: 'creep',
+    team: owner.team,
+    model: 'courier',
+    x: f.x + 1.5,
+    z: f.z - 1.5,
+    owner: owner.id,
+    courier: true,
+    cargo: [],
+    cState: 'idle',
+    maxHp: 260,
+    speed: COURIER_SPEED,
+    radius: 0.5,
+    barH: 2.2,
+  });
+  h.courier = c.id;
+}
+
+/** Курьер: везёт тайник герою, отдаёт в свободные слоты, остаток возвращает */
+function updateCourier(w: World, u: Unit) {
+  const owner = unitById(w, u.owner!);
+  const h = owner?.hero;
+  if (!owner || !h) return;
+  const f = mapOf(w).fountains[u.team as Team];
+  if (u.cState === 'go') {
+    if (!owner.alive) u.cState = 'back';
+    else if (moveToward(u, owner.x, owner.z, 2)) {
+      for (let i = 0; i < u.cargo!.length; i++) {
+        const slot = freeSlotFor(h);
+        if (slot < 0) break;
+        const s = u.cargo!.splice(i--, 1)[0];
+        putItem(owner, slot, s.id, s.t, s.paid);
+      }
+      recalc(owner);
+      emit(w, { e: 'courier', player: h.player, state: 'done' });
+      u.cState = 'back';
+    }
+  } else if (u.cState === 'back') {
+    if (moveToward(u, f.x + 1.5, f.z - 1.5)) {
+      h.stash.push(...u.cargo!);
+      u.cargo = [];
+      u.cState = 'idle';
+    }
+  }
+}
+
+/** Отправить курьера с тайником */
+function sendCourier(w: World, u: Unit) {
+  const h = u.hero!;
+  const c = unitById(w, h.courier);
+  if (!c?.alive || !h.stash.length || c.cState === 'go') return;
+  c.cargo!.push(...h.stash.splice(0, h.stash.length));
+  c.cState = 'go';
+  emit(w, { e: 'courier', player: h.player, state: 'go' });
 }
 
 function sellItem(w: World, u: Unit, slot: number) {
@@ -655,7 +913,9 @@ export function addXp(w: World, u: Unit, n: number) {
   while (h.level < MAX_LEVEL && h.xp >= xpNeed(h.level)) {
     h.xp -= xpNeed(h.level);
     h.level++;
+    h.points++;
     recalc(u);
+    if (w.players[h.player].bot) autoLearn(u);
     emit(w, { e: 'level', id: u.id, player: h.player, level: h.level });
     if (u.alive) fx(w, u.x, u.z, 1, 0xf1c453, 1, 0.6, 2.5);
   }
@@ -697,6 +957,27 @@ function kill(w: World, t: Unit, src: Unit | null) {
     victim.hurtBy = {};
     emit(w, { e: 'heroKill', victim: t.id, killer: killer?.id ?? 0, victimTeam: team });
     return;
+  }
+  if (t.kind === 'creep' && t.courier) {
+    const owner = unitById(w, t.owner!);
+    if (owner?.hero) {
+      owner.hero.stash.push(...(t.cargo ?? []));
+      owner.hero.courier = 0;
+      owner.hero.courierAt = COURIER_RESPAWN;
+      emit(w, { e: 'courier', player: owner.hero.player, state: 'dead' });
+    }
+    if (src?.hero) addGold(w, src, 60, t);
+    return;
+  }
+  if (t.kind === 'neutral') {
+    // Убивший зверя герой (или его призванный) может найти нейтральный предмет
+    const killer = src?.hero ? src : src?.owner ? unitById(w, src.owner) : undefined;
+    if (killer?.hero && !killer.hero.neutral && rand(w) < 0.12) {
+      const it = NEUTRAL_ITEMS[Math.floor(rand(w) * NEUTRAL_ITEMS.length)];
+      killer.hero.neutral = it.id;
+      recalc(killer);
+      emit(w, { e: 'neutral', player: killer.hero.player, item: it.id });
+    }
   }
   if (t.kind === 'creep' || t.kind === 'neutral') {
     if (src?.hero) {
@@ -763,9 +1044,17 @@ export function moveToward(u: Unit, tx: number, tz: number, stop = 0): boolean {
   if (d <= stop + 0.05) return true;
   const s = Math.min(speedOf(u) * DT, d - stop);
   if (s <= 0) return false;
+  const want = Math.atan2(dx, dz);
+  if (u.turn) {
+    // Скорость разворота: пока смотрит больше чем на 0,5 рад мимо — только поворачивается
+    const diff = Math.atan2(Math.sin(want - u.rot), Math.cos(want - u.rot));
+    const step = u.turn * DT;
+    u.rot += Math.abs(diff) <= step ? diff : Math.sign(diff) * step;
+    u.moving = true;
+    if (Math.abs(diff) > 0.5 + step) return false;
+  } else u.rot = want;
   u.x += (dx / d) * s;
   u.z += (dz / d) * s;
-  u.rot = Math.atan2(dx, dz);
   u.moving = true;
   u.planted = false;
   return false;
@@ -785,9 +1074,9 @@ export function tryAttack(w: World, u: Unit, t: Unit) {
       dmg += veil.v;
       removeMod(u, 'invisible');
     }
-    for (const id of HERO[u.hero.def].abilities) {
+    for (const [slot, id] of HERO[u.hero.def].abilities.entries()) {
       const on = ABILITIES[id]?.onAttack;
-      if (on) dmg = on(w, u, t, dmg);
+      if (on && u.hero.skill[slot]) dmg = on(w, u, t, dmg);
     }
   }
   if (u.ranged) shoot(w, u, t, dmg);
@@ -961,6 +1250,11 @@ function heroTick(w: World, u: Unit): boolean {
     if (h.hist.length > 16) h.hist.shift();
   }
   for (let i = 0; i < h.itemCd.length; i++) h.itemCd[i] = Math.max(0, h.itemCd[i] - DT);
+  h.tpCd = Math.max(0, h.tpCd - DT);
+  if (!h.courier) {
+    h.courierAt -= DT;
+    if (h.courierAt <= 0) spawnCourier(w, u);
+  }
   if (!u.alive) {
     h.respawn -= DT;
     if (h.respawn <= 0) respawn(w, u);
@@ -969,8 +1263,20 @@ function heroTick(w: World, u: Unit): boolean {
   const team = u.team as Team;
   const f = mapOf(w).fountains[team];
   const ef = mapOf(w).fountains[1 - team];
-  const heal = h.regen + modValue(u, 'heal') + (Math.hypot(u.x - f.x, u.z - f.z) < 8 ? 90 : 0);
+  const atFountain = Math.hypot(u.x - f.x, u.z - f.z) < 8;
+  const heal = h.regen + modValue(u, 'heal') + (atFountain ? 90 : 0);
   u.hp = Math.min(u.maxHp, u.hp + heal * DT);
+  h.mana = Math.min(h.maxMana, h.mana + (h.manaRegen + modValue(u, 'manaHeal') + (atFountain ? 40 : 0)) * DT);
+  // У лавки тайник сам перекладывается в свободные слоты
+  if (h.stash.length && nearShop(w, u)) {
+    for (let i = 0; i < h.stash.length; i++) {
+      const slot = freeSlotFor(h);
+      if (slot < 0) break;
+      const s = h.stash.splice(i--, 1)[0];
+      putItem(u, slot, s.id, s.t, s.paid);
+    }
+    recalc(u);
+  }
   h.gold += 1.5 * DT;
   if (Math.hypot(u.x - ef.x, u.z - ef.z) < 9) damage(w, u, 170 * DT, null, 'pure');
   return u.alive;
@@ -1130,6 +1436,7 @@ function pickCreepTarget(w: World, u: Unit, r: number): Unit | null {
 }
 
 function updateCreep(w: World, u: Unit) {
+  if (u.courier) return updateCourier(w, u);
   if (u.owner) return updateSummon(w, u);
   if (hasFlag(u, 'stun')) return;
   let t = unitById(w, u.target);
@@ -1293,13 +1600,15 @@ export function resolveCollisions(w: World) {
     for (const f of m.fountains) pushStatic(u, f.x, f.z, 2.8 + u.radius);
     for (const s of w.units)
       if ((s.kind === 'tower' && s.alive) || s.kind === 'ancient') pushStatic(u, s.x, s.z, s.radius + u.radius);
-    for (const t of grid.near(u.x, u.z, treeBuf)) {
-      const dx = u.x - t.x;
-      if (dx > 2.5 || dx < -2.5) continue;
-      const dz = u.z - t.z;
-      if (dz > 2.5 || dz < -2.5) continue;
-      push(u, t.x, t.z, 0.75 * t.s + u.radius * 0.6);
-    }
+    // Курьер летает над лесом
+    if (!u.courier)
+      for (const t of grid.near(u.x, u.z, treeBuf)) {
+        const dx = u.x - t.x;
+        if (dx > 2.5 || dx < -2.5) continue;
+        const dz = u.z - t.z;
+        if (dz > 2.5 || dz < -2.5) continue;
+        push(u, t.x, t.z, 0.75 * t.s + u.radius * 0.6);
+      }
     u.x = clamp(u.x, -m.limit, m.limit);
     u.z = clamp(u.z, -m.limit, m.limit);
   }
@@ -1397,9 +1706,10 @@ export function addZone(w: World, o: Omit<Zone, 'id' | 'next'> & { next?: number
 
 /** Ауры героев: каждый тик обновляют короткий модификатор союзникам рядом */
 function applyAuras(w: World, u: Unit) {
-  for (const id of HERO[u.hero!.def].abilities) {
+  const h = u.hero!;
+  for (const [slot, id] of HERO[h.def].abilities.entries()) {
     const aura = ABILITIES[id]?.aura;
-    if (!aura) continue;
+    if (!aura || !h.skill[slot]) continue;
     for (const v of w.units)
       if (v.alive && v.team === u.team && (v.kind === 'hero' || v.kind === 'creep') && dist(v, u) < aura.radius)
         addMod(v, aura.mod, 0.25, aura.v, u.id);

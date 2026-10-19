@@ -37,6 +37,15 @@ export interface ItemDef {
   lifesteal?: number;
   /** Сокращение перезарядки способностей, доля */
   cdr?: number;
+  /** Атрибуты: сила, ловкость, интеллект */
+  str?: number;
+  agi?: number;
+  int?: number;
+  /** Мана и её восстановление в секунду */
+  mana?: number;
+  manaRegen?: number;
+  /** Нейтральный предмет: не продаётся в лавке, выпадает в лесу, лежит в отдельном слоте */
+  neutral?: boolean;
   /** Одна штука на героя */
   unique?: boolean;
   /** Расходуется при использовании */
@@ -66,7 +75,7 @@ export const ITEMS: ItemDef[] = [
   {
     id: 'salve',
     name: 'Травяной бальзам',
-    desc: '+20 здоровья в секунду 10 с. Дешевле зелья, но медленнее',
+    desc: '+20 здоровья и +8 маны в секунду 10 с. Дешевле зелья, но медленнее',
     price: 50,
     tier: 1,
     section: 'consum',
@@ -78,7 +87,7 @@ export const ITEMS: ItemDef[] = [
   {
     id: 'recall',
     name: 'Свиток возвращения',
-    desc: 'Через 3 с переносит к фонтану. Урон или приказ «идти» прерывают',
+    desc: 'Ложится в отдельный слот телепорта (до 3 штук). Клавиша T: через 3 с перенос к своей постройке у точки или к фонтану. Урон прерывает',
     price: 60,
     tier: 1,
     section: 'consum',
@@ -96,6 +105,7 @@ export const ITEMS: ItemDef[] = [
     tier: 1,
     section: 'attack',
     dmg: 8,
+    agi: 2,
     color: '#d6dbe4',
     icon: '<path d="M5 19l9-9 4-6 1 1-6 4-9 9z"/><path d="M4 16l4 4"/>',
   },
@@ -118,6 +128,7 @@ export const ITEMS: ItemDef[] = [
     tier: 1,
     section: 'attack',
     atkSpeed: 0.25,
+    agi: 5,
     color: '#ffb0d8',
     icon: '<path d="M7 21v-8l-2-4 2-1 2 3V4a1.5 1.5 0 0 1 3 0v6-7a1.5 1.5 0 0 1 3 0v7-5a1.5 1.5 0 0 1 3 0v10l-2 6z"/>',
   },
@@ -151,6 +162,7 @@ export const ITEMS: ItemDef[] = [
     tier: 1,
     section: 'defense',
     hp: 180,
+    str: 4,
     color: '#8ec5ff',
     icon: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/>',
   },
@@ -185,6 +197,7 @@ export const ITEMS: ItemDef[] = [
     section: 'defense',
     hp: 120,
     regen: 1,
+    str: 3,
     color: '#ff9ab0',
     icon: '<path d="M7 4h10l4 5-9 11L3 9z"/><path d="M3 9h18M9 4l3 16 3-16"/>',
   },
@@ -196,6 +209,7 @@ export const ITEMS: ItemDef[] = [
     tier: 1,
     section: 'magic',
     spellAmp: 0.15,
+    int: 5,
     color: '#ff9a3d',
     icon: '<path d="M12 4c1 3 4 4 4 8a4 4 0 0 1-8 0c0-2 1-3 2-4 .5 1.5 1 2 2 2 0-2-1-4 0-6z"/><path d="M6 20h12"/>',
   },
@@ -207,6 +221,8 @@ export const ITEMS: ItemDef[] = [
     tier: 1,
     section: 'magic',
     cdr: 0.08,
+    int: 3,
+    manaRegen: 1,
     color: '#e8d28a',
     icon: '<path d="M7 3h10M7 21h10M8 3c0 6 8 6 8 9s-8 3-8 9M16 3c0 6-8 6-8 9s8 3 8 9"/>',
   },
@@ -247,6 +263,7 @@ export const ITEMS: ItemDef[] = [
     dmg: 30,
     atkSpeed: 0.35,
     lifesteal: 0.08,
+    agi: 6,
     color: '#ffcf5a',
     icon: '<path d="M14 4l6 0 0 6-9 9-3-3z"/><path d="M5 16l3 3M4 20l2-2"/>',
   },
@@ -288,6 +305,7 @@ export const ITEMS: ItemDef[] = [
     parts: ['cloak', 'ring'],
     hp: 260,
     regen: 7,
+    str: 6,
     color: '#6ff0b0',
     icon: '<circle cx="12" cy="12" r="7"/><path d="M12 8v8M8 12h8"/>',
   },
@@ -314,6 +332,8 @@ export const ITEMS: ItemDef[] = [
     parts: ['ember', 'hourglass'],
     spellAmp: 0.4,
     cdr: 0.1,
+    int: 6,
+    manaRegen: 1.5,
     color: '#ff7a2d',
     icon: '<path d="M12 3c1 4 5 5.5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-4 2.5-5 .5 2 1.5 3 2.5 3 0-3-1-5 0-8z"/>',
   },
@@ -328,6 +348,7 @@ export const ITEMS: ItemDef[] = [
     speed: 3,
     atkSpeed: 0.25,
     unique: true,
+    agi: 4,
     color: '#bfe8ff',
     icon: '<path d="M7 3h5v9l6 3a2 2 0 0 1 2 2v3H6z"/><path d="M2 9h4M1 13h5M3 17h3"/>',
   },
@@ -342,6 +363,8 @@ export const ITEMS: ItemDef[] = [
     speed: 3,
     regen: 5,
     unique: true,
+    str: 3,
+    manaRegen: 0.5,
     color: '#c8e08a',
     icon: '<path d="M7 3h5v9l6 3a2 2 0 0 1 2 2v3H6z"/><circle cx="17" cy="6" r="2.5"/>',
   },
@@ -357,6 +380,7 @@ export const ITEMS: ItemDef[] = [
     dmg: 50,
     atkSpeed: 0.45,
     lifesteal: 0.16,
+    agi: 12,
     color: '#ffe066',
     icon: '<path d="M14 3l7 0 0 7-10 10-4-4z"/><path d="M13 7l-3 4h3l-3 4"/>',
   },
@@ -371,6 +395,7 @@ export const ITEMS: ItemDef[] = [
     dmg: 42,
     hp: 160,
     lifesteal: 0.22,
+    str: 8,
     color: '#c03050',
     icon: '<path d="M6 21L15 8"/><path d="M15 8c-2-3-6-4-10-3 3 2 6 3 10 3z"/>',
   },
@@ -386,6 +411,9 @@ export const ITEMS: ItemDef[] = [
     hp: 150,
     regen: 3,
     cdr: 0.15,
+    int: 10,
+    mana: 150,
+    manaRegen: 2.5,
     color: '#ff8a5a',
     icon: '<path d="M7 21L16 8"/><path d="M16 3l2 3 3 1-2 3-3 1-1-3-3-2 3-1z"/>',
   },
@@ -400,6 +428,9 @@ export const ITEMS: ItemDef[] = [
     spellAmp: 0.55,
     hp: 200,
     cdr: 0.25,
+    int: 14,
+    mana: 200,
+    manaRegen: 3,
     color: '#b98aff',
     icon: '<path d="M8 3h8l3 18H5z"/><path d="M12 7v6M9 10h6"/>',
   },
@@ -416,6 +447,7 @@ export const ITEMS: ItemDef[] = [
     regen: 7,
     active: true,
     cooldown: 25,
+    str: 12,
     color: '#5fb0ff',
     icon: '<path d="M4 21V8l3-2 3 2V5l2-2 2 2v3l3-2 3 2v13z"/><path d="M10 21v-5h4v5"/>',
   },
@@ -432,12 +464,22 @@ export const ITEMS: ItemDef[] = [
     active: true,
     cooldown: 11,
     unique: true,
+    agi: 8,
     color: '#9fd8ff',
     icon: '<path d="M7 3h5v9l6 3a2 2 0 0 1 2 2v3H6z"/><path d="M14 4l3 3-3 3"/>',
   },
 ];
 
-export const ITEM: Record<string, ItemDef> = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
+/** Нейтральные предметы: выпадают из лесных зверей, в лавке их нет */
+export const NEUTRAL_ITEMS: ItemDef[] = [
+  { id: 'n_claw', name: 'Коготь зверя', desc: '+8 к урону, +3 к ловкости', price: 0, tier: 1, section: 'attack', neutral: true, dmg: 8, agi: 3, color: '#d8a070', icon: '<path d="M6 20c2-6 5-11 12-15-2 6-5 11-12 15z"/><path d="M9 17c1-3 3-6 7-8"/>' },
+  { id: 'n_amulet', name: 'Лесной оберег', desc: '+3 здоровья в секунду, +1 к броне', price: 0, tier: 1, section: 'defense', neutral: true, regen: 3, armor: 1, color: '#8ad08a', icon: '<circle cx="12" cy="14" r="5"/><path d="M12 3v6M8 5l4 4 4-4"/>' },
+  { id: 'n_heartwood', name: 'Сердцевина', desc: '+140 к здоровью, +3 к силе', price: 0, tier: 1, section: 'defense', neutral: true, hp: 140, str: 3, color: '#c09060', icon: '<path d="M12 21C6 16 4 12 4 9a4 4 0 0 1 8-1 4 4 0 0 1 8 1c0 3-2 7-8 12z"/>' },
+  { id: 'n_feather', name: 'Перо ветра', desc: '+1 к скорости, +10% к скорости атаки', price: 0, tier: 1, section: 'speed', neutral: true, speed: 1, atkSpeed: 0.1, color: '#c0e0ff', icon: '<path d="M5 19C9 9 14 5 20 4c-1 6-5 11-15 15z"/><path d="M5 19l8-8"/>' },
+  { id: 'n_spark', name: 'Искра леса', desc: '+12% к урону способностей, +1 маны в секунду, +3 к интеллекту', price: 0, tier: 1, section: 'magic', neutral: true, spellAmp: 0.12, manaRegen: 1, int: 3, color: '#f0e080', icon: '<path d="M12 3l2 6 6 1-5 4 2 7-5-4-5 4 2-7-5-4 6-1z"/>' },
+];
+
+export const ITEM: Record<string, ItemDef> = Object.fromEntries([...ITEMS, ...NEUTRAL_ITEMS].map((i) => [i.id, i]));
 
 /** Доплата за рецепт (цена минус части) */
 export const recipeCost = (id: string) => {

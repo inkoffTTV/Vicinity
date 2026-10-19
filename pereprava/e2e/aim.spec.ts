@@ -55,7 +55,9 @@ async function startMatch(page: Page) {
     g.step(30 * 3);
     const w = g.world;
     const me = w.units.find((u) => u.id === w.players[0].unit)!;
-    const c = w.units.find((u) => u.kind === 'creep' && u.team === 1 && u.alive)!;
+    // Умения изучены (на 1 уровне только одно — для проверки открываем три)
+    (me as unknown as { hero: { skill: number[] } }).hero.skill = [1, 1, 1, 0];
+    const c = w.units.find((u) => u.kind === 'creep' && !(u as { owner?: number }).owner && u.team === 1 && u.alive)!;
     Object.assign(c, { x: me.x + 4, z: me.z - 4 });
     g.step(2);
   });

@@ -25,6 +25,7 @@ import { Lobby } from './ui/lobby';
 import { Sound, type Volumes } from './audio/sound';
 import { renderHeroCards, scoreTable } from './ui/screens';
 import { PickScreen } from './ui/pick';
+import { Portrait } from './render/portrait';
 import type { Session } from './game/session';
 import { attachInput } from './game/input';
 import { AutoScale } from './render/autoscale';
@@ -159,6 +160,8 @@ export class App {
       },
       aimDrag: (slot, phase, dx, dy) => this.aimDrag(slot, phase, dx, dy),
       useItem: (slot) => this.useItem(slot, null),
+      tpAim: () => this.tpAim(),
+      centerCamera: () => this.centerCamera(),
     });
     this.hud.setMap(this.view.map);
     this.view.onFloat = (x, y, z, text, color) => this.floatText(x, y, z, text, color);
@@ -170,6 +173,9 @@ export class App {
       hover: (sx, sy) => this.hover(sx, sy),
       moveTo: (x, z) => this.send({ c: 'move', x, z }),
       skillKey: (slot) => this.skillKey(slot),
+      learn: (slot) => this.send({ c: 'learn', slot }),
+      tpAim: () => this.tpAim(),
+      courier: () => this.send({ c: 'courier' }),
       armAttackMove: () => this.armAttackMove(),
       cancelAim: () => this.cancelAim(),
       useItem: (slot, aim) => this.useItem(slot, aim),
@@ -190,7 +196,12 @@ export class App {
       e.stopPropagation();
       if (this.state !== 'play') return;
       const p = this.hud.minimapPoint(e);
-      if (e.button === 2 || e.altKey) return this.ping(p.x, p.z, e.shiftKey ? 'danger' : 'look');
+      if (this.tpPicking) {
+        this.tpPicking = false;
+        this.refreshCursor();
+        return this.send({ c: 'tp', x: p.x, z: p.z });
+      }
+      if (e.altKey) return this.ping(p.x, p.z, e.shiftKey ? 'danger' : 'look');
       if (e.pointerType !== 'mouse') {
         clearTimeout(holdT);
         holdT = window.setTimeout(() => this.ping(p.x, p.z, 'look'), 550);
@@ -328,6 +339,14 @@ export class App {
   /** Нажатие по полю. true — можно вести героя за пальцем/мышью дальше */
   private orderAt(sx: number, sy: number, button = 0, touch = false): boolean {
     if (this.state !== 'play' || !this.snap?.me?.alive) return false;
+    // Выбор точки телепорта: левая — сюда, правая — отмена
+    if (this.tpPicking) {
+      this.tpPicking = false;
+      this.refreshCursor();
+      const g = this.view.groundAt(sx, sy);
+      if (button !== 2 && g) this.send({ c: 'tp', x: g.x, z: g.z });
+      return false;
+    }
     // Идёт прицел умения: левая — применить, правая — отмена
     if (this.aiming) {
       if (button === 2) this.cancelAim();
@@ -495,11 +514,31 @@ export class App {
     return true;
   }
 
+  /** Свиток телепорта: следующий клик по полю или миникарте — куда */
+  private tpPicking = false;
+  private tpAim() {
+    const me = this.snap?.me;
+    if (this.state !== 'play' || !me?.alive) return;
+    if (!me.tp) return this.hud.toast('Нет свитков телепорта — купите в лавке');
+    if (me.tpCd > 0) return this.hud.toast(`Телепорт перезаряжается: ${Math.ceil(me.tpCd)} с`);
+    this.cancelAim();
+    this.tpPicking = true;
+    this.hud.toast('Телепорт: выберите свою вышку на поле или на миникарте');
+    this.refreshCursor();
+  }
+
+  /** Камера сразу к герою */
+  private centerCamera() {
+    const v = this.view.units.get(this.view.myUnit);
+    if (v) this.view.camT.set(v.x, this.view.camT.y, v.z);
+  }
+
   /** Отменить прицел и «атаку с передвижением»; true — было что отменять */
   private cancelAim(): boolean {
-    const had = !!this.aiming || this.amoveArmed;
+    const had = !!this.aiming || this.amoveArmed || this.tpPicking;
     this.aiming = null;
     this.amoveArmed = false;
+    this.tpPicking = false;
     this.view.aim = null;
     this.refreshCursor();
     return had;
@@ -546,7 +585,7 @@ export class App {
   private refreshCursor(enemy = this.hoverEnemy) {
     this.hoverEnemy = enemy;
     const g = $('game');
-    const aim = !!this.aiming && !this.aiming.touch;
+    const aim = (!!this.aiming && !this.aiming.touch) || this.tpPicking;
     g.classList.toggle('cur-aim', aim);
     g.classList.toggle('cur-attack', !aim && (this.amoveArmed || enemy));
   }
@@ -903,6 +942,8 @@ export class App {
     });
   }
 
+  private readonly portrait = new Portrait();
+
   /** Экран выбора героя (создаётся при первом показе) */
   private _pick: PickScreen | null = null;
   private get pickScreen() {
@@ -1079,6 +1120,22 @@ export class App {
       if (v) v.rig.root.rotation.y = face;
     }
     this.kit.renderer.render(this.kit.scene, this.kit.camera);
+    // Живой портрет героя в нижней панели
+    if ((this.state === 'play' || this.state === 'over') && this.snap?.me) {
+      const me = this.snap.me;
+      const us = this.snap.units.find((x) => x.id === me.unit);
+      const since = (t: number) => (us ? Math.max(0, (this.view.renderTick - t) / 30) : 9);
+      this.portrait.render(
+        this.kit.renderer,
+        $('portrait'),
+        me.hero,
+        this.view.myTeam,
+        us,
+        { atk: us ? since(us.at) : 9, cast: us ? since(us.ct) : 9, hurt: us ? since(us.ht) : 9 },
+        time,
+        dt,
+      );
+    }
     if (this.state === 'play') this.autoscale.tick(dt);
     if (this.fpsEl) this.fpsTick(dt);
     this.view.updateBars();

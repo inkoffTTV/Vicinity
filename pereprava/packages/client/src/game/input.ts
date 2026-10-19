@@ -1,7 +1,8 @@
 // Ввод: мышь, тач и клавиатура превращаются в приказы. Тап/клик — идти или атаковать, перетаскивание
 // пальцем — вести героя, щипок и колесо — масштаб, Q W E R — способности (прицел или сразу по курсору —
-// см. настройки), A + клик — атака с передвижением, Esc или правая кнопка — отменить прицел,
-// 1–6 — предметы, B — лавка, S — стоп, G или Alt+клик — пинг (Shift — «опасно»).
+// см. настройки), Ctrl + Q W E R — изучить умение, A + клик — атака с передвижением, Esc или правая
+// кнопка — отменить прицел, 1–6 — предметы, T — телепорт, C — курьер, B — лавка, S — стоп,
+// G или Alt+клик — пинг (Shift — «опасно»). Правую кнопку можно держать — герой идёт за курсором.
 import type { GameView } from '../render/view';
 
 export interface InputActions {
@@ -13,6 +14,12 @@ export interface InputActions {
   moveTo(x: number, z: number): void;
   /** Клавиша способности */
   skillKey(slot: number): void;
+  /** Ctrl + клавиша способности: изучить */
+  learn(slot: number): void;
+  /** T: свиток телепорта — выбрать, куда */
+  tpAim(): void;
+  /** C: отправить курьера */
+  courier(): void;
   useItem(slot: number, aim: { x: number; z: number } | null): void;
   /** A: следующий клик — атака с передвижением */
   armAttackMove(): void;
@@ -125,7 +132,12 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
     const t = e.target as HTMLElement | null;
     // В поле ввода (поиск в лавке) работает только Esc — закрыть
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') && e.code !== 'Escape') return;
-    if (e.code in SKILL) act.skillKey(SKILL[e.code]);
+    if (e.code in SKILL && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      act.learn(SKILL[e.code]);
+    } else if (e.code in SKILL) act.skillKey(SKILL[e.code]);
+    else if (e.code === 'KeyT') act.tpAim();
+    else if (e.code === 'KeyC') act.courier();
     else if (/^Digit[1-6]$/.test(e.code)) act.useItem(+e.code.slice(5) - 1, mouseAim());
     else if (e.code === 'KeyA') act.armAttackMove();
     else if (e.code === 'KeyB') act.toggleShop();

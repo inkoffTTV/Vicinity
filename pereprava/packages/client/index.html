@@ -17,20 +17,43 @@
     <div id="hoverPlate" class="panel" hidden aria-hidden="true"><b></b><div class="hpb"><i></i></div><span class="num"></span></div>
     <div id="toast" class="panel" role="status"></div>
   </div>
-  <div id="gold" class="panel num">0</div>
-  <button id="shopBtn" class="panel" title="Лавка (B)">Лавка</button>
-  <button id="quickBuy" class="panel" hidden type="button"></button>
-  <div id="hero" class="panel">
-    <div id="lvl" class="num">1</div>
-    <div id="hp"><div id="hpFill"></div><div id="shFill"></div><div id="hpText">600 / 600</div></div>
-    <div id="xp"><div id="xpFill"></div></div>
-    <div id="respawn"></div>
-    <div id="inv"></div>
-  </div>
-  <div id="skills">
-    <button class="sk" id="skE" data-k="e" aria-label="Щит, клавиша E" title="Щит (E)"><span>E</span></button>
-    <button class="sk" id="skW" data-k="w" aria-label="Скачок, клавиша W" title="Скачок (W)"><span>W</span></button>
-    <button class="sk" id="skQ" data-k="q" aria-label="Огненный шар, клавиша Q" title="Огненный шар (Q)"><span>Q</span></button>
+  <div id="dock">
+    <section class="dl" aria-label="Герой">
+      <div id="portrait" title="Двойное нажатие — камера к герою" role="button" aria-label="Портрет героя: двойное нажатие — камера к герою"><span id="lvl" class="num">1</span></div>
+      <div class="dstats">
+        <div id="attrs">
+          <span data-a="str" title="Сила: здоровье и его восстановление"><i class="ai"></i><b id="aStr">0</b></span>
+          <span data-a="agi" title="Ловкость: броня и скорость атаки"><i class="ai"></i><b id="aAgi">0</b></span>
+          <span data-a="int" title="Интеллект: мана и её восстановление"><i class="ai"></i><b id="aInt">0</b></span>
+        </div>
+        <div id="stats">
+          <span title="Урон атаки"><i class="si s-dmg"></i><b id="stDmg">0</b></span>
+          <span title="Броня"><i class="si s-arm"></i><b id="stArm">0</b></span>
+          <span title="Скорость бега"><i class="si s-spd"></i><b id="stSpd">0</b></span>
+          <span title="Ударов в секунду"><i class="si s-as"></i><b id="stAs">0</b></span>
+        </div>
+      </div>
+      <div id="xp" title="Опыт"><div id="xpFill"></div></div>
+    </section>
+    <section class="dc panel" aria-label="Умения, здоровье и мана">
+      <div id="skills"></div>
+      <div class="bar2 hpb" id="hp"><div id="hpFill"></div><div id="shFill"></div><span id="hpText">600 / 600</span><small id="hpRegen"></small></div>
+      <div class="bar2 mpb" id="mp"><div id="mpFill"></div><span id="mpText">0 / 0</span><small id="mpRegen"></small></div>
+      <div id="respawn"></div>
+    </section>
+    <section class="dr panel" aria-label="Инвентарь и лавка">
+      <div id="inv"></div>
+      <div class="dslots">
+        <button id="neutralSlot" class="slot nslot" type="button" aria-label="Нейтральный предмет: пусто"></button>
+        <button id="tpSlot" class="slot tslot" type="button" aria-label="Свиток телепорта, клавиша T"><span class="tpi">TP</span><b id="tpCount">1</b><i class="icd"></i></button>
+      </div>
+      <div class="dshop">
+        <div id="gold" class="num">0</div>
+        <button id="shopBtn" type="button" title="Лавка (B)">Лавка</button>
+        <button id="courierBtn" type="button" title="Курьер привезёт купленное вдали (C)">Курьер</button>
+        <button id="quickBuy" hidden type="button"></button>
+      </div>
+    </section>
   </div>
   <div id="shop" class="panel" hidden role="dialog" aria-modal="true" aria-label="Лавка">
     <header><h2>Лавка</h2><span id="shopGold" class="num coin" aria-label="Золото"></span><button id="shopClose" aria-label="Закрыть лавку">×</button></header>

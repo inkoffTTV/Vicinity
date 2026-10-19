@@ -112,8 +112,24 @@ export class ShopUI {
     if (!$('shop').hidden) this.render();
   }
 
+  /** У своего фонтана: можно продавать, покупки сразу в инвентарь */
   private here() {
     return !!this.me?.nearShop && !!this.me.alive;
+  }
+
+  /** Вещи для расчёта цены: у лавки — инвентарь, вдали — инвентарь и тайник */
+  private pool(me: MeSnap): (string | null)[] {
+    return this.here() ? me.items : [...me.items, ...me.stash];
+  }
+
+  /** Можно ли купить сейчас: у лавки — в инвентарь, вдали — в тайник (до 6 вещей) */
+  private canBuyNow(me: MeSnap, id: string): boolean {
+    if (id === 'recall') return me.gold >= ITEM.recall.price && me.tp < 3;
+    if (this.here()) return canAfford(me.items, me.gold, id);
+    const { cost, consume } = itemCostFor(this.pool(me), id);
+    const fromStash = consume.filter((i) => i >= me.items.length).length;
+    if (me.gold < cost || me.stash.length - fromStash >= 6) return false;
+    return !(ITEM[id].unique && this.pool(me).includes(id));
   }
 
   render() {
@@ -127,8 +143,8 @@ export class ShopUI {
     n.textContent = here
       ? me.items.every((x) => x)
         ? 'Все слоты и рюкзак заняты — продайте или соберите предмет'
-        : 'Вы у фонтана: можно покупать и продавать'
-      : 'Покупать и продавать можно только у своего фонтана';
+        : 'Вы у фонтана: покупки сразу в инвентарь, можно продавать'
+      : `Вдали от лавки покупки ждут в тайнике (${me.stash.length}/6) — курьер привезёт (C)`;
     // Вкладки
     $('shopTabs')
       .querySelectorAll<HTMLElement>('button')
@@ -150,11 +166,11 @@ export class ShopUI {
     }
     grid.querySelectorAll<HTMLElement>('.sitem').forEach((b) => {
       const id = b.dataset.id!;
-      const { cost } = itemCostFor(me.items, id);
+      const { cost } = itemCostFor(this.pool(me), id);
       const pr = b.querySelector('.pr')!;
       pr.textContent = String(cost);
       pr.classList.toggle('cut', cost < ITEM[id].price);
-      b.classList.toggle('can', canAfford(me.items, gold, id));
+      b.classList.toggle('can', this.canBuyNow(me, id));
       b.classList.toggle('own', me.items.includes(id));
       b.classList.toggle('tgt', this.target === id);
       b.classList.toggle('on', this.sel === id);
@@ -173,18 +189,21 @@ export class ShopUI {
       return;
     }
     const it = ITEM[id];
-    const { cost } = itemCostFor(me.items, id);
+    const { cost } = itemCostFor(this.pool(me), id);
     const stats = itemStats(it);
-    const can = canAfford(me.items, me.gold, id);
-    const reason = !this.here()
-      ? 'Нужно быть у фонтана'
-      : it.unique && me.items.includes(id)
+    const can = this.canBuyNow(me, id);
+    const reason =
+      it.unique && this.pool(me).includes(id)
         ? 'Уже есть — один на героя'
         : me.gold < cost
           ? `Не хватает ${cost - me.gold} золота`
           : !can
-            ? 'Нет места в инвентаре'
-            : '';
+            ? this.here()
+              ? 'Нет места в инвентаре'
+              : 'Тайник полон — отправьте курьера'
+            : this.here()
+              ? ''
+              : 'Купленное ляжет в тайник — курьер привезёт';
     const parts = it.parts
       ? `<p class="lbl">Собирается из</p><div class="chips">${it.parts
           .map((p) => {
@@ -202,7 +221,7 @@ export class ShopUI {
           .join('')}</div>`
       : '';
     const isT = this.target === id;
-    const next = isT ? nextPart(me.items, me.gold, id) : null;
+    const next = isT ? nextPart(this.pool(me), me.gold, id) : null;
     card.innerHTML = `
       <button class="back ghost" type="button">← К списку</button>
       <div class="ch" style="--ic:${it.color}"><span class="ic big">${icon(id)}</span><div><h3>${it.name}</h3><small>${TIER[it.tier]} · ${SECTIONS.find((s) => s.id === it.section)!.name}</small></div></div>
@@ -212,10 +231,10 @@ export class ShopUI {
       <p class="price">Цена: <b class="coin">${cost}</b>${cost < it.price ? ` <s>${it.price}</s> — части уже есть` : ''}</p>
       ${next && next.id !== id ? `<p class="next">Следующим: ${ITEM[next.id].name} (${next.cost})</p>` : ''}
       <div class="acts">
-        <button class="buy" type="button" ${can && this.here() ? '' : 'disabled'}>Купить</button>
+        <button class="buy" type="button" ${can ? '' : 'disabled'}>Купить</button>
         <button class="ghost tgtb" type="button" aria-pressed="${isT}">${isT ? '★ Цель отмечена' : '☆ Сделать целью'}</button>
       </div>
-      ${reason ? `<p class="why">${reason}</p>` : ''}`;
+      ${reason ? `<p class="why${can ? ' info' : ''}">${reason}</p>` : ''}`;
     card.querySelector('.back')!.addEventListener('click', () => this.back());
     card.querySelector('.buy')!.addEventListener('click', () => this.act.send({ c: 'buy', item: id }));
     card.querySelector('.tgtb')!.addEventListener('click', () => {
@@ -296,7 +315,7 @@ export class ShopUI {
   /** Кнопки быстрой покупки — у лавки на поле и внутри лавки: следующая часть цели */
   private renderQuick() {
     const me = this.me;
-    const n = me && this.target ? nextPart(me.items, me.gold, this.target) : null;
+    const n = me && this.target ? nextPart(this.pool(me), me.gold, this.target) : null;
     for (const [elId, long] of [
       ['quickBuy', false],
       ['shopQuick', true],
@@ -307,7 +326,7 @@ export class ShopUI {
         continue;
       }
       b.hidden = false;
-      b.classList.toggle('ok', n.ok && this.here());
+      b.classList.toggle('ok', n.ok && this.canBuyNow(me, n.id));
       b.style.setProperty('--ic', ITEM[n.id].color);
       const html = `${icon(n.id)}${long ? `<span>★ ${ITEM[this.target!].name}: купить ${ITEM[n.id].name}</span>` : ''}<span class="coin">${n.cost}</span>`;
       if (b.dataset.key !== html) {
@@ -331,10 +350,12 @@ export class ShopUI {
     const key = me.items.join('|');
     if (this.pending && this.pending.key === key && performance.now() - this.pending.t < 700) return;
     this.me = me;
-    const n = nextPart(me.items, me.gold, this.target);
+    const n = nextPart(this.pool(me), me.gold, this.target);
     if (!n) return;
-    if (!this.here()) return this.act.toast('Покупать можно только у своего фонтана');
-    if (!n.ok) return this.act.toast(`Не хватает золота: ${ITEM[n.id].name} стоит ${n.cost}`);
+    if (!n.ok || !this.canBuyNow(me, n.id))
+      return this.act.toast(
+        me.gold < n.cost ? `Не хватает золота: ${ITEM[n.id].name} стоит ${n.cost}` : 'Тайник полон — отправьте курьера',
+      );
     this.pending = { key, t: performance.now() };
     this.act.send({ c: 'buy', item: n.id });
   }

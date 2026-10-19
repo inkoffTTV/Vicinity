@@ -66,6 +66,8 @@ export interface AbilityDef {
   passive?: boolean;
   /** Заряды: сколько применений копится (каждое восстанавливается за cd) */
   charges?: number;
+  /** Стоимость маны (по умолчанию — от перезарядки, см. manaCost) */
+  mana?: number;
   /** Пассивная реакция на любое своё применённое умение */
   onCast?(w: World, u: Unit, a: AbilityDef): void;
   /** Пассивная реакция на собственную атаку: вернуть итоговый урон */
@@ -108,7 +110,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
       fx(w, p.x, p.z, 1.8, 0xff7a1f, 1.1, 0.4, 2.4);
       fx(w, p.x, p.z, 1.8, 0xffd27a, 0.6, 0.25, 2);
       if (!u?.hero) return;
-      aoe(w, u, p.x, p.z, 3.2, (80 + lvl(u) * 11) * amp(u), 'magical');
+      aoe(w, u, p.x, p.z, 3.2, (80 + lvl(u, 'fireball') * 11) * amp(u), 'magical');
     },
   },
   blink: {
@@ -161,7 +163,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
     cast(w, u) {
       addMod(u, 'shield', 4, 0, u.id);
       const m = u.mods.find((x) => x.id === 'shield')!;
-      m.v = 150 + 25 * lvl(u);
+      m.v = 150 + 25 * lvl(u, 'shield');
       m.t = 4;
       fx(w, u.x, u.z, 1.4, 0x8ee6ff, 0.8, 0.35, 1.5);
       return true;
@@ -184,7 +186,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
     fire(w, u) {
       u.castTick = w.tick;
       fx(w, u.x, u.z, 0.4, 0xb08a5a, 1.4, 0.45, 2.4);
-      aoe(w, u, u.x, u.z, 3.6, 90 + lvl(u) * 14, 'physical', (v) => v.kind !== 'tower');
+      aoe(w, u, u.x, u.z, 3.6, 90 + lvl(u, 'slam') * 14, 'physical', (v) => v.kind !== 'tower');
     },
   },
   meteor: {
@@ -209,7 +211,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
         period: 0.5,
         src: u.id,
         team: u.team,
-        v: (170 + lvl(u) * 24) * amp(u),
+        v: (170 + lvl(u, 'meteor') * 24) * amp(u),
       });
       return true;
     },
@@ -256,7 +258,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
       u.hero!.order = null;
       resolveCollisions(w);
       for (const v of hit) {
-        damage(w, v, 70 + lvl(u) * 10, u, 'physical');
+        damage(w, v, 70 + lvl(u, 'charge') * 10, u, 'physical');
         if (v.alive) addMod(v, 'slow', 2, 0.35, u.id);
       }
       return true;
@@ -297,7 +299,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
         const a = (k / 6) * Math.PI * 2;
         fx(w, u.x + Math.cos(a) * 3, u.z + Math.sin(a) * 3, 0.3, 0x9a7a52, 1.3, 0.6, 2);
       }
-      for (const v of aoe(w, u, u.x, u.z, 5.5, 180 + lvl(u) * 25, 'magical', (v) => v.kind !== 'tower'))
+      for (const v of aoe(w, u, u.x, u.z, 5.5, 180 + lvl(u, 'quake') * 25, 'magical', (v) => v.kind !== 'tower'))
         if (v.alive) addMod(v, 'stun', 1.6, 0, u.id);
     },
   },
@@ -318,7 +320,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
       const L = Math.hypot(dx, dz) || 1;
       dx /= L;
       dz /= L;
-      const pr = launch(w, u, 'pierce', dx, dz, 34, 20, 100 + lvl(u) * 16, 0xd7ffb0, 0.6);
+      const pr = launch(w, u, 'pierce', dx, dz, 34, 20, 100 + lvl(u, 'pierce') * 16, 0xd7ffb0, 0.6);
       pr.pierce = true;
       return true;
     },
@@ -385,7 +387,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
         period: 0.5,
         src: u.id,
         team: u.team,
-        v: 35 + lvl(u) * 6,
+        v: 35 + lvl(u, 'volley') * 6,
       });
       return true;
     },
@@ -421,7 +423,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
     cast(w, u, aim) {
       const x = aim ? aim.x : u.x;
       const z = aim ? aim.z : u.z;
-      const amt = (110 + lvl(u) * 18) * amp(u);
+      const amt = (110 + lvl(u, 'mend') * 18) * amp(u);
       fx(w, x, z, 0.3, 0xa8ffb8, 2, 0.5, 1.6);
       for (const v of w.units)
         if (v.alive && v.team === u.team && v.kind === 'hero' && Math.hypot(v.x - x, v.z - z) < 5 + v.radius)
@@ -446,7 +448,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
       const L = Math.hypot(dx, dz) || 1;
       dx /= L;
       dz /= L;
-      launch(w, u, 'bind', dx, dz, 26, 16, (60 + lvl(u) * 10) * amp(u), 0xc6b8ff, 0.6);
+      launch(w, u, 'bind', dx, dz, 26, 16, (60 + lvl(u, 'bind') * 10) * amp(u), 0xc6b8ff, 0.6);
       return true;
     },
     onProjectileEnd(w, p, hit) {
@@ -508,7 +510,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
       if (!t) return false;
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
       removeMod(u, 'invisible');
-      launchAt(w, u, 'dagger', t, 30, 80 + lvl(u) * 14, 0xd8dce8, 0.5);
+      launchAt(w, u, 'dagger', t, 30, 80 + lvl(u, 'dagger') * 14, 0xd8dce8, 0.5);
       return true;
     },
     onProjectileEnd(w, p, hit) {
@@ -528,7 +530,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
     ai: { kind: 'escape', hp: 0.4 },
     cast(w, u) {
       fx(w, u.x, u.z, 1, 0x4a3c80, 1.1, 0.5, 1.4);
-      addMod(u, 'invisible', 5, 60 + lvl(u) * 10, u.id);
+      addMod(u, 'invisible', 5, 60 + lvl(u, 'veil') * 10, u.id);
       addMod(u, 'haste', 5, 0.2, u.id);
       // Враги теряют цель
       for (const v of w.units) if (v.target === u.id) v.target = 0;
@@ -567,7 +569,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
       removeMod(u, 'invisible');
       fx(w, t.x, t.z, 1.4, 0xff5a6a, 1.1, 0.45, 2);
-      damage(w, t, 150 + lvl(u) * 20 + (t.maxHp - t.hp) * 0.5, u, 'pure');
+      damage(w, t, 150 + lvl(u, 'execute') * 20 + (t.maxHp - t.hp) * 0.5, u, 'pure');
       return true;
     },
   },
@@ -579,12 +581,14 @@ Object.assign(ABILITIES, ABILITIES_2);
 // «На бис» Барда: каждое применённое умение лечит союзников рядом
 ABILITIES.encore.onCast = (w, u) => {
   for (const v of w.units)
-    if (v.alive && v.team === u.team && v.kind === 'hero' && dist(u, v) < 6) heal(w, v, (45 + lvl(u) * 6) * amp(u));
+    if (v.alive && v.team === u.team && v.kind === 'hero' && dist(u, v) < 6)
+      heal(w, v, (45 + lvl(u, 'encore') * 6) * amp(u));
 };
 
 /** После применения: пассивки героя, которые реагируют на любое умение */
 function afterCast(w: World, u: Unit, a: AbilityDef) {
-  for (const id of HERO[u.hero!.def].abilities) ABILITIES[id]?.onCast?.(w, u, a);
+  const h = u.hero!;
+  for (const [slot, id] of HERO[h.def].abilities.entries()) if (h.skill[slot]) ABILITIES[id]?.onCast?.(w, u, a);
 }
 
 /** Способность в слоте героя (Q W E R) */
@@ -597,6 +601,7 @@ export function canCast(u: Unit, slot: number): boolean {
   const h = u.hero;
   const a = h && abilityAt(u, slot);
   if (!a || a.passive || !u.alive || h.casting || h.cd[slot] > 0) return false;
+  if (!h.skill[slot] || h.mana < manaCost(a)) return false;
   if (a.charges && h.charges[slot] <= 0) return false;
   if (a.ult && h.level < ULT_LEVEL) return false;
   return !hasFlag(u, 'stun') && !hasFlag(u, 'silence');
@@ -606,7 +611,12 @@ export function canCast(u: Unit, slot: number): boolean {
 const APPROACH = 12;
 
 /** Почему умение не сработало — показываем только живому игроку */
-function castFail(w: World, u: Unit, slot: number, reason: 'target' | 'cd' | 'stun' | 'silence' | 'level'): false {
+function castFail(
+  w: World,
+  u: Unit,
+  slot: number,
+  reason: 'target' | 'cd' | 'stun' | 'silence' | 'level' | 'mana',
+): false {
   const h = u.hero!;
   if (!w.players[h.player]?.bot) emit(w, { e: 'castFail', player: h.player, slot, reason });
   return false;
@@ -616,7 +626,8 @@ export function castAbility(w: World, u: Unit, slot: number, aim: Aim | null): b
   const h = u.hero;
   const a = h && abilityAt(u, slot);
   if (!h || !a || a.passive || !u.alive) return false;
-  if (a.ult && h.level < ULT_LEVEL) return castFail(w, u, slot, 'level');
+  if (!h.skill[slot] || (a.ult && h.level < ULT_LEVEL)) return castFail(w, u, slot, 'level');
+  if (h.mana < manaCost(a)) return castFail(w, u, slot, 'mana');
   if (h.cd[slot] > 0 || (a.charges && h.charges[slot] <= 0)) return castFail(w, u, slot, 'cd');
   if (hasFlag(u, 'stun')) return castFail(w, u, slot, 'stun');
   if (hasFlag(u, 'silence')) return castFail(w, u, slot, 'silence');
@@ -673,8 +684,18 @@ export function castAbility(w: World, u: Unit, slot: number, aim: Aim | null): b
 }
 
 /** Потратить применение: перезарядка или заряд (с короткой паузой между зарядами) */
+/** Стоимость маны: задана в умении или от перезарядки (дольше перезарядка — дороже) */
+export function manaCost(a: AbilityDef): number {
+  if (a.passive) return 0;
+  if (a.mana !== undefined) return a.mana;
+  if (a.ult) return 120;
+  if (a.charges) return 30;
+  return Math.round(20 + a.cd * 3.5);
+}
+
 function spend(u: Unit, slot: number, a: AbilityDef) {
   const h = u.hero!;
+  h.mana = Math.max(0, h.mana - manaCost(a));
   if (!a.charges) {
     h.cd[slot] = a.cd * (1 - h.cdr);
     return;

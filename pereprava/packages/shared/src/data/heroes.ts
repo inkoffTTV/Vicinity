@@ -585,3 +585,26 @@ export const HEROES: HeroDef[] = [
 ];
 
 export const HERO: Record<string, HeroDef> = Object.fromEntries(HEROES.map((h) => [h.id, h]));
+
+export type Attr = 'str' | 'agi' | 'int';
+export const ATTR_NAMES: Record<Attr, string> = { str: 'Сила', agi: 'Ловкость', int: 'Интеллект' };
+
+/** Атрибуты героя: главный — по роли; на 1 уровне и прирост за уровень.
+ *  Рост здоровья и урона с уровнем уже в hpLvl/dmgLvl; атрибуты добавляют броню и скорость атаки
+ *  (ловкость), ману (интеллект), а атрибуты с предметов — ещё здоровье и урон (см. recalc). */
+export function attrsOf(def: HeroDef): { primary: Attr; base: Record<Attr, number>; gain: Record<Attr, number> } {
+  const primary: Attr =
+    def.roleId === 'tank' || def.roleId === 'fighter'
+      ? 'str'
+      : def.roleId === 'marksman' || def.roleId === 'assassin'
+        ? 'agi'
+        : 'int';
+  const base = { str: 18, agi: 16, int: 16 };
+  const gain = { str: 1.8, agi: 1.4, int: 1.4 };
+  base[primary] = 24;
+  gain[primary] = 2.8;
+  return { primary, base, gain };
+}
+
+/** Скорость разворота героя, рад/с: тяжёлые разворачиваются медленнее */
+export const turnOf = (def: HeroDef) => (def.roleId === 'tank' ? 9 : def.roleId === 'fighter' ? 11 : 13);

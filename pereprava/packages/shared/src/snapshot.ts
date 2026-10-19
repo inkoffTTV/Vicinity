@@ -2,10 +2,10 @@
 // враги вне видимости команды в снимок не попадают вовсе, поэтому клиент не может их «подсмотреть».
 // Тот же код работает и в одиночной игре — клиент рисует только снимки, как в сетевой.
 import { FULL_REFUND_TIME, sellValue } from './sim/shop';
-import { ABILITIES, abilityAt } from './sim/abilities';
-import { HERO } from './data/heroes';
+import { ABILITIES, abilityAt, manaCost } from './sim/abilities';
+import { attrsOf, HERO } from './data/heroes';
 import { hasFlag, modValue } from './sim/modifiers';
-import { nearShop, unitById, xpNeed, type World } from './sim/world';
+import { canLearn, nearShop, unitById, xpNeed, type World } from './sim/world';
 import type { SimEvent, Side, Team, Unit, UnitKind } from './types';
 
 export const VISION: Record<UnitKind, number> = { hero: 14, creep: 10, tower: 14, ancient: 14, neutral: 0 };
@@ -65,6 +65,27 @@ export interface ZoneSnap {
 }
 
 export interface MeSnap {
+  mana: number;
+  maxMana: number;
+  manaRegen: number;
+  hpRegen: number;
+  hp: number;
+  maxHp: number;
+  /** Уровни умений, свободные очки и можно ли сейчас повысить умение в слоте */
+  skill: number[];
+  points: number;
+  canLearn: boolean[];
+  manaCost: number[];
+  attrs: { str: number; agi: number; int: number };
+  primary: 'str' | 'agi' | 'int';
+  /** Ударов в секунду */
+  atkSpeed: number;
+  tp: number;
+  tpCd: number;
+  neutral: string | null;
+  stash: string[];
+  courier: 'idle' | 'go' | 'back' | 'dead';
+  courierAt: number;
   slot: number;
   unit: number;
   hero: string;
@@ -285,6 +306,28 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; even
       dmg: Math.round(mu.dmg),
       speed: r2(mu.speed * (1 - modValue(mu, 'slow'))),
       armor: r2(mu.armor + modValue(mu, 'armor')),
+      mana: Math.floor(h.mana),
+      maxMana: h.maxMana,
+      manaRegen: r2(h.manaRegen),
+      hpRegen: r2(h.regen + modValue(mu, 'heal')),
+      hp: Math.ceil(mu.hp),
+      maxHp: Math.round(mu.maxHp),
+      skill: [...h.skill],
+      points: h.points,
+      canLearn: [0, 1, 2, 3].map((i) => canLearn(mu, i)),
+      manaCost: HERO[h.def].abilities.map((id) => manaCost(ABILITIES[id])),
+      attrs: { ...h.attrs },
+      primary: attrsOf(HERO[h.def]).primary,
+      atkSpeed: r2(1 / mu.atkInt),
+      tp: h.tp,
+      tpCd: r2(h.tpCd),
+      neutral: h.neutral,
+      stash: h.stash.map((s) => s.id),
+      courier: (() => {
+        const c = unitById(w, h.courier);
+        return c?.alive ? (c.cState ?? 'idle') : 'dead';
+      })(),
+      courierAt: r2(Math.max(0, h.courierAt)),
     };
   }
   const players: PlayerSnap[] = w.players.map((q) => {

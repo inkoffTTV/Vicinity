@@ -7,8 +7,8 @@ import {
   INVENTORY,
   ITEM,
   mapTrees,
+  MAX_LEVEL,
   RUNE_NAMES,
-  ULT_LEVEL,
   type Command,
   type MapDef,
   type SimEvent,
@@ -35,6 +35,10 @@ export interface HudActions {
    *  'over' — палец вернулся на кнопку (отпустит — отмена). 'start' → false: прицел не нужен */
   aimDrag(slot: number, phase: AimPhase, dx: number, dy: number): boolean;
   useItem(slot: number): void;
+  /** Свиток телепорта: выбрать, куда (клик по полю или миникарте) */
+  tpAim(): void;
+  /** Камера к герою (двойное нажатие по портрету) */
+  centerCamera(): void;
 }
 
 export interface HoverInfo {
@@ -65,6 +69,17 @@ export class Hud {
     readonly act: HudActions,
   ) {
     $('shopBtn').addEventListener('click', () => this.toggleShop());
+    $('courierBtn').addEventListener('click', () => this.act.send({ c: 'courier' }));
+    $('tpSlot').addEventListener('click', () => this.act.tpAim());
+    $('portrait').addEventListener('dblclick', () => this.act.centerCamera());
+    // На телефоне двойное касание
+    let tapT = 0;
+    $('portrait').addEventListener('pointerup', (e) => {
+      if (e.pointerType === 'mouse') return;
+      const now = performance.now();
+      if (now - tapT < 350) this.act.centerCamera();
+      tapT = now;
+    });
     $('shopClose').addEventListener('click', () => this.toggleShop(false));
     this.shopUi = new ShopUI({
       send: (c) => this.act.send(c),
@@ -116,6 +131,25 @@ export class Hud {
     for (const k of Object.keys(this.last)) if (k.startsWith('sk') || k.startsWith('chg')) delete this.last[k];
     HERO[hero].abilities.forEach((id, slot) => {
       const a = ABILITIES[id];
+      const wrap = document.createElement('div');
+      wrap.className = 'skw';
+      wrap.dataset.slot = String(slot);
+      const up = document.createElement('button');
+      up.className = 'lvlup';
+      up.type = 'button';
+      up.hidden = true;
+      up.textContent = '+';
+      up.setAttribute('aria-label', `Изучить: ${a.name} (Ctrl+${KEYS[slot]})`);
+      up.title = `Изучить: ${a.name} (Ctrl+${KEYS[slot]})`;
+      up.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.act.send({ c: 'learn', slot });
+      });
+      wrap.appendChild(up);
+      const pips = document.createElement('div');
+      pips.className = 'pips';
+      pips.innerHTML = '<i></i>'.repeat(a.ult ? 3 : 4);
       const b = document.createElement('button');
       b.className = 'sk' + (a.passive ? ' passive' : '');
       b.id = 'sk' + KEYS[slot];
@@ -123,10 +157,11 @@ export class Hud {
       b.style.cssText = `--rim:${rim};--c1:${c1};--c2:${c2};--c3:${c3}`;
       b.setAttribute('aria-label', a.passive ? `${a.name}, пассивная` : `${a.name}, клавиша ${KEYS[slot]}`);
       b.title = `${a.name}${a.passive ? ' (пассивная)' : ` (${KEYS[slot]})`}: ${a.desc}`;
-      b.innerHTML = `<span>${a.passive ? '∞' : KEYS[slot]}</span>${a.charges ? '<em class="chg"></em>' : ''}`;
+      b.innerHTML = `<span class="k">${KEYS[slot]}</span><b class="cdn"></b>${a.passive ? '' : '<small class="mc"></small>'}${a.charges ? '<em class="chg"></em>' : ''}`;
+      wrap.append(b, pips);
       if (a.passive) {
         b.tabIndex = -1;
-        box.appendChild(b);
+        box.appendChild(wrap);
         this.skillBtns.push(b);
         return;
       }
@@ -175,7 +210,7 @@ export class Hud {
           this.act.cast(slot);
         }
       });
-      box.appendChild(b);
+      box.appendChild(wrap);
       this.skillBtns.push(b);
     });
     this.skillHero = hero;
@@ -186,21 +221,22 @@ export class Hud {
   private renderInv(items: (string | null)[]) {
     const el = $('inv');
     el.innerHTML = '';
-    // На панели героя — только основные слоты; рюкзак виден в лавке
-    items.slice(0, INVENTORY).forEach((id, i) => {
+    // 6 основных слотов 3×2 и рюкзак на 3 (в рюкзаке предметы не работают)
+    items.forEach((id, i) => {
       const it = id ? ITEM[id] : null;
       const b = document.createElement('button');
-      b.className = 'slot' + (it?.active ? ' use' : '');
+      b.className = 'slot' + (it?.active && i < INVENTORY ? ' use' : '') + (i >= INVENTORY ? ' bp' : '');
       if (it) {
         b.style.setProperty('--ic', it.color);
-        b.innerHTML = `<svg viewBox="0 0 24 24">${it.icon}</svg><kbd>${i + 1}</kbd><i class="icd"></i>`;
-        b.title = it.name + (it.active ? `: нажмите или клавиша ${i + 1}` : '');
+        b.innerHTML = `<svg viewBox="0 0 24 24">${it.icon}</svg>${i < INVENTORY ? `<kbd>${i + 1}</kbd>` : ''}<i class="icd"></i>`;
+        b.title =
+          it.name + (i >= INVENTORY ? ' (в рюкзаке — не работает)' : it.active ? `: нажмите или клавиша ${i + 1}` : '');
         b.setAttribute('aria-label', b.title);
       } else {
         b.setAttribute('aria-label', 'Пустой слот');
         b.tabIndex = -1;
       }
-      if (it?.active)
+      if (it?.active && i < INVENTORY)
         b.addEventListener('pointerdown', (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -244,28 +280,82 @@ export class Hud {
     this.setText('gold', $('gold'), String(me.gold));
     this.setText('lvl', $('lvl'), String(me.level));
     const u = s.units.find((x) => x.id === me.unit);
-    const hp = u ? u.hp : 0;
-    const mhp = u ? u.mhp : 1;
+    const hp = me.alive ? me.hp : 0;
+    const mhp = me.maxHp || 1;
     const sh = u?.sh ?? 0;
     this.setText('hp', $('hpText'), `${hp} / ${mhp}${sh ? '  +' + sh : ''}`);
+    this.setText('hpr', $('hpRegen'), `+${me.hpRegen.toFixed(1)}`);
     $('hpFill').style.transform = `scaleX(${hp / mhp})`;
     $('shFill').style.width = (sh ? Math.min(100, (sh / mhp) * 100) : 0) + '%';
-    $('xpFill').style.width = (me.level >= 10 ? 100 : (me.xp / me.need) * 100) + '%';
+    this.setText('mp', $('mpText'), `${me.mana} / ${me.maxMana}`);
+    this.setText('mpr', $('mpRegen'), `+${me.manaRegen.toFixed(1)}`);
+    $('mpFill').style.transform = `scaleX(${me.maxMana ? me.mana / me.maxMana : 0})`;
+    $('xpFill').style.width = (me.level >= MAX_LEVEL ? 100 : (me.xp / me.need) * 100) + '%';
+    // Атрибуты и характеристики
+    this.setText('aStr', $('aStr'), String(me.attrs.str));
+    this.setText('aAgi', $('aAgi'), String(me.attrs.agi));
+    this.setText('aInt', $('aInt'), String(me.attrs.int));
+    if (this.last.prim !== me.primary) {
+      this.last.prim = me.primary;
+      document
+        .querySelectorAll<HTMLElement>('#attrs span')
+        .forEach((el) => el.classList.toggle('prim', el.dataset.a === me.primary));
+    }
+    this.setText('stDmg', $('stDmg'), String(me.dmg));
+    this.setText('stArm', $('stArm'), me.armor.toFixed(1));
+    this.setText('stSpd', $('stSpd'), me.speed.toFixed(1));
+    this.setText('stAs', $('stAs'), me.atkSpeed.toFixed(2));
+    // Телепорт, нейтральный предмет, курьер
+    this.setText('tpc', $('tpCount'), String(me.tp));
+    ($('tpSlot').querySelector('.icd') as HTMLElement).style.setProperty('--cd', me.tpCd > 0 || !me.tp ? '1' : '0');
+    if (this.last.neutral !== String(me.neutral)) {
+      this.last.neutral = String(me.neutral);
+      const it = me.neutral ? ITEM[me.neutral] : null;
+      const nb = $('neutralSlot');
+      nb.style.setProperty('--ic', it?.color ?? 'transparent');
+      nb.innerHTML = it ? `<svg viewBox="0 0 24 24">${it.icon}</svg>` : '';
+      nb.title = it ? `${it.name}: ${it.desc}` : 'Нейтральный предмет: выпадает из лесных зверей';
+      nb.setAttribute('aria-label', it ? `Нейтральный предмет: ${it.name}` : 'Нейтральный предмет: пусто');
+    }
+    const cb = $('courierBtn');
+    const cs =
+      me.courier === 'dead'
+        ? `Курьер · ${Math.ceil(me.courierAt)} с`
+        : me.courier === 'go'
+          ? 'Курьер везёт'
+          : me.courier === 'back'
+            ? 'Курьер летит назад'
+            : me.stash.length
+              ? `Курьер · ${me.stash.length}`
+              : 'Курьер';
+    this.setText('cour', cb, cs);
+    cb.className = me.courier === 'go' ? 'go' : me.courier === 'dead' ? 'dead' : '';
     const dead = !me.alive;
     $('respawn').style.display = dead ? 'block' : 'none';
     if (dead) this.setText('rs', $('respawn'), 'Возрождение через ' + Math.ceil(me.respawn) + ' с');
     this.skillBtns.forEach((b, i) => {
       const ab = ABILITIES[HERO[me.hero].abilities[i]];
+      const wrap = b.parentElement!;
+      const L = me.skill[i] ?? 0;
+      // Кнопка «+» и деления уровня
+      (wrap.querySelector('.lvlup') as HTMLElement).hidden = !(me.points > 0 && me.canLearn[i]);
+      if (this.last['pip' + i] !== String(L)) {
+        this.last['pip' + i] = String(L);
+        wrap.querySelectorAll('.pips i').forEach((p, k) => p.classList.toggle('on', k < L));
+      }
+      b.classList.toggle('unlearned', L === 0);
       if (ab?.passive) return;
-      const locked = !!ab?.ult && me.level < ULT_LEVEL;
-      b.classList.toggle('locked', locked);
+      const locked = L === 0;
+      b.classList.toggle('locked', false);
+      b.classList.toggle('nomana', !locked && me.mana < me.manaCost[i]);
       const chg = me.charges[i] ?? -1;
       if (chg >= 0) this.setText('chg' + i, b.querySelector('.chg') as HTMLElement, String(chg));
-      b.style.setProperty('--cd', (locked ? 1 : me.cdMax[i] > 0 ? me.cd[i] / me.cdMax[i] : 0).toFixed(3));
+      this.setText('mc' + i, b.querySelector('.mc') as HTMLElement, me.manaCost[i] ? String(me.manaCost[i]) : '');
+      b.style.setProperty('--cd', (me.cdMax[i] > 0 && !locked ? me.cd[i] / me.cdMax[i] : 0).toFixed(3));
       this.setText(
         'sk' + i,
-        b.firstChild as HTMLElement,
-        locked ? String(ULT_LEVEL) : me.cd[i] > 0 ? String(Math.ceil(me.cd[i])) : KEYS[i],
+        b.querySelector('.cdn') as HTMLElement,
+        me.cd[i] > 0 && !locked ? String(Math.ceil(me.cd[i])) : '',
       );
     });
     const key = me.items.join('|');
@@ -337,6 +427,18 @@ export class Hud {
         const h = HERO[me.hero];
         this.toast(`${h.name} ${h.fem ? 'вернулась' : 'вернулся'} в бой`);
       } else if (e.e === 'buy' && e.player === me.slot && e.item) this.toast('Куплено: ' + ITEM[e.item].name);
+      else if (e.e === 'neutral' && e.player === me.slot)
+        this.toast('Найден нейтральный предмет: ' + ITEM[e.item].name);
+      else if (e.e === 'courier' && e.player === me.slot)
+        this.toast(
+          e.state === 'go'
+            ? 'Курьер полетел к вам'
+            : e.state === 'done'
+              ? 'Курьер доставил вещи'
+              : e.state === 'dead'
+                ? 'Курьер погиб — вещи вернулись в тайник'
+                : '',
+        );
     }
   }
 
@@ -354,7 +456,8 @@ export class Hud {
       cd: 'Умение перезаряжается',
       stun: 'Герой оглушён',
       silence: 'Умения заблокированы',
-      level: `Ультимейт откроется на ${ULT_LEVEL} уровне`,
+      level: 'Умение не изучено — нажмите «+» над ним (Ctrl+клавиша)',
+      mana: 'Не хватает маны',
     };
     this.toast(text[reason] ?? 'Не получилось');
   }

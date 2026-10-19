@@ -1,4 +1,5 @@
 // Общие помощники умений: уровень и усиление, направление и точка прицела, цель, снаряды, площадь.
+import { HERO } from '../data/heroes';
 import type { Unit } from '../types';
 import { clamp, damage, dist, mapOf, nearestEnemy, unitById, type World } from './world';
 
@@ -8,7 +9,15 @@ export interface Aim {
   id: number;
 }
 
-export const lvl = (u: Unit) => u.hero!.level - 1;
+/** Рост чисел умения от его уровня: обычное 1–4 → 0, 3, 6, 9; ультимейт 1–3 → 0, 4,5, 9
+ *  (те же числа, что раньше давал уровень героя 1–10) */
+export function lvl(u: Unit, id: string): number {
+  const h = u.hero;
+  if (!h) return 0;
+  const slot = HERO[h.def]?.abilities.indexOf(id) ?? -1;
+  const L = slot >= 0 ? h.skill[slot] : 1;
+  return Math.max(0, L - 1) * (slot === 3 ? 4.5 : 3);
+}
 export const amp = (u: Unit) => u.hero!.spellAmp;
 
 /** Направление каста: к точке прицела, иначе запасной вариант */

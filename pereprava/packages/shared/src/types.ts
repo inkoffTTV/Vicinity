@@ -82,6 +82,26 @@ export interface HeroState {
   cdr: number;
   /** Счётчик для пассивок («каждый 4-й выстрел») */
   stacks: number;
+  /** Уровни умений по слотам Q W E R (0 — не изучено) и свободные очки навыков */
+  skill: number[];
+  points: number;
+  /** Мана: запас, максимум, восстановление в секунду */
+  mana: number;
+  maxMana: number;
+  manaRegen: number;
+  /** Атрибуты с уровнем и предметами */
+  attrs: { str: number; agi: number; int: number };
+  /** Свитки телепорта (отдельный слот), перезарядка и куда переносит идущий телепорт */
+  tp: number;
+  tpCd: number;
+  tpTo: { x: number; z: number } | null;
+  /** Нейтральный предмет (выпадает из лесных зверей) */
+  neutral: string | null;
+  /** Тайник у фонтана: куплено вдали от лавки, ждёт курьера */
+  stash: { id: string; t: number; paid: number }[];
+  /** Курьер: id юнита (0 — погиб) и через сколько вернётся */
+  courier: number;
+  courierAt: number;
 }
 
 export interface Unit {
@@ -133,6 +153,12 @@ export interface Unit {
   slotT?: number;
   /** Стоит и бьёт: почти не толкается и не дёргается (см. sim/engage.ts) */
   planted?: boolean;
+  /** Скорость разворота, рад/с (герои): развернувшись, только потом идёт */
+  turn?: number;
+  /** Курьер: что везёт и что делает */
+  courier?: boolean;
+  cargo?: { id: string; t: number; paid: number }[];
+  cState?: 'idle' | 'go' | 'back';
   /** Призванный: чей (id героя) и сколько ещё живёт, с */
   owner?: number;
   life?: number;
@@ -192,6 +218,12 @@ export type Command =
   | { c: 'cast'; slot: number; x?: number; z?: number; id?: number }
   | { c: 'buy'; item: string }
   | { c: 'sell'; slot: number }
+  /** Изучить или повысить умение в слоте */
+  | { c: 'learn'; slot: number }
+  /** Свиток телепорта: к своей постройке у точки (или к фонтану) */
+  | { c: 'tp'; x: number; z: number }
+  /** Курьер: отвезти тайник герою */
+  | { c: 'courier' }
   /** Поменять местами два слота (в том числе с рюкзаком) */
   | { c: 'swap'; a: number; b: number }
   | { c: 'use'; slot: number; x?: number; z?: number }
@@ -204,7 +236,9 @@ export type SimEvent =
   | { e: 'attack'; id: number; target: number; ranged: boolean }
   | { e: 'cast'; id: number; ability: string; x: number; z: number }
   /** Умение не сработало — игроку объясняем почему */
-  | { e: 'castFail'; player: number; slot: number; reason: 'target' | 'cd' | 'stun' | 'silence' | 'level' }
+  | { e: 'castFail'; player: number; slot: number; reason: 'target' | 'cd' | 'stun' | 'silence' | 'level' | 'mana' }
+  | { e: 'neutral'; player: number; item: string }
+  | { e: 'courier'; player: number; state: 'go' | 'back' | 'done' | 'dead' }
   | { e: 'death'; id: number; kind: UnitKind; team: Side; killer: number; x: number; z: number }
   | { e: 'heroKill'; victim: number; killer: number; victimTeam: Team }
   | { e: 'gold'; player: number; amt: number; x: number; z: number }

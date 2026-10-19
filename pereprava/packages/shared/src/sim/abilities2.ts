@@ -115,7 +115,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     ai: { kind: 'nuke', range: 16 },
     cast(w, u, aim) {
       const { dx, dz } = throwDir(w, u, aim, 18);
-      launch(w, u, 'icelance', dx, dz, 30, 18, (90 + lvl(u) * 14) * amp(u), 0xbfe8ff, 0.7);
+      launch(w, u, 'icelance', dx, dz, 30, 18, (90 + lvl(u, 'icelance') * 14) * amp(u), 0xbfe8ff, 0.7);
       return true;
     },
     onProjectileEnd(w, p, hit) {
@@ -137,7 +137,16 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     ai: { kind: 'aoe', range: 4, creeps: 4, radius: 4.5 },
     cast(w, u) {
       fx(w, u.x, u.z, 0.3, 0xbfe8ff, 2, 0.5, 2.2);
-      for (const v of aoe(w, u, u.x, u.z, 4.5, (70 + lvl(u) * 10) * amp(u), 'magical', (v) => !isBuilding(v)))
+      for (const v of aoe(
+        w,
+        u,
+        u.x,
+        u.z,
+        4.5,
+        (70 + lvl(u, 'frostnova') * 10) * amp(u),
+        'magical',
+        (v) => !isBuilding(v),
+      ))
         if (v.alive) addMod(v, 'root', 1.4, 0, u.id);
       return true;
     },
@@ -181,7 +190,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         period: 0.5,
         src: u.id,
         team: u.team,
-        v: (45 + lvl(u) * 7) * amp(u),
+        v: (45 + lvl(u, 'blizzard') * 7) * amp(u),
       });
       return true;
     },
@@ -219,7 +228,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       let t: Unit | undefined = aimUnit(w, u, aim, 12) ?? undefined;
       if (!t) return false;
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
-      let dmg = (75 + lvl(u) * 11) * amp(u);
+      let dmg = (75 + lvl(u, 'chain') * 11) * amp(u);
       const hit = new Set<number>();
       let from: Unit = u;
       for (let k = 0; k < 4 && t; k++) {
@@ -253,7 +262,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       const t = aimUnit(w, u, aim, 13);
       if (!t) return false;
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
-      launchAt(w, u, 'static', t, 34, (40 + lvl(u) * 6) * amp(u), 0xfff6a0, 0.5);
+      launchAt(w, u, 'static', t, 34, (40 + lvl(u, 'static') * 6) * amp(u), 0xfff6a0, 0.5);
       return true;
     },
     onProjectileEnd(w, p, hit) {
@@ -276,7 +285,16 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       if (u.castTick < w.tick - 30 * 4 || u.hero!.stacks === u.castTick) return dmg;
       u.hero!.stacks = u.castTick;
       fx(w, t.x, t.z, 1.2, 0xc8d8ff, 1, 0.3, 2);
-      for (const v of aoe(w, u, t.x, t.z, 2.5, (40 + lvl(u) * 8) * amp(u), 'magical', (v) => !isBuilding(v)))
+      for (const v of aoe(
+        w,
+        u,
+        t.x,
+        t.z,
+        2.5,
+        (40 + lvl(u, 'overload') * 8) * amp(u),
+        'magical',
+        (v) => !isBuilding(v),
+      ))
         if (v.alive) addMod(v, 'silence', 1, 0, u.id);
       return dmg;
     },
@@ -298,7 +316,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       for (const v of w.units)
         if (v.alive && v.kind === 'hero' && v.team !== u.team && dist(u, v) < 15) {
           for (let k = 0; k < 4; k++) fx(w, v.x, v.z, 1 + k * 1.5, 0xe0e8ff, 0.4, 0.3, 0.5);
-          damage(w, v, (190 + lvl(u) * 25) * amp(u), u, 'magical');
+          damage(w, v, (190 + lvl(u, 'thunder') * 25) * amp(u), u, 'magical');
           if (v.alive) addMod(v, 'stun', 1, 0, u.id);
         }
     },
@@ -316,7 +334,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     ai: { kind: 'nuke', range: 15 },
     cast(w, u, aim) {
       const { dx, dz } = throwDir(w, u, aim, 17);
-      launch(w, u, 'timebolt', dx, dz, 26, 17, (85 + lvl(u) * 13) * amp(u), 0xffe0a0, 0.7);
+      launch(w, u, 'timebolt', dx, dz, 26, 17, (85 + lvl(u, 'timebolt') * 13) * amp(u), 0xffe0a0, 0.7);
       return true;
     },
     onProjectileEnd(w, p, hit) {
@@ -383,7 +401,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     cast(w, u, aim) {
       const p = aimPoint(w, u, aim, 14);
       fx(w, p.x, p.z, 0.4, 0xfff0c0, 2.6, 0.8, 1.2);
-      for (const v of aoe(w, u, p.x, p.z, 5, (120 + lvl(u) * 18) * amp(u), 'magical', (v) => !isBuilding(v)))
+      for (const v of aoe(w, u, p.x, p.z, 5, (120 + lvl(u, 'stasis') * 18) * amp(u), 'magical', (v) => !isBuilding(v)))
         if (v.alive) addMod(v, 'stun', 2.2, 0, u.id);
       return true;
     },
@@ -409,7 +427,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       const u = unitById(w, p.src);
       fx(w, p.x, p.z, 1, 0xff8a40, 1.4, 0.4, 2.4);
       if (!u?.hero) return;
-      for (const v of aoe(w, u, p.x, p.z, 3, 90 + lvl(u) * 14, 'physical', (v) => !isBuilding(v)))
+      for (const v of aoe(w, u, p.x, p.z, 3, 90 + lvl(u, 'grenade') * 14, 'physical', (v) => !isBuilding(v)))
         if (v.alive) knock(w, v, p.x, p.z, 2.5);
       resolveCollisions(w);
     },
@@ -431,7 +449,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       const L = Math.hypot(dx, dz) || 1;
       const d = Math.min(8, len || 8);
       fx(w, u.x, u.z, 0.4, 0xffa040, 1.3, 0.4, 2);
-      aoe(w, u, u.x, u.z, 2.5, 60 + lvl(u) * 8, 'physical', (v) => !isBuilding(v));
+      aoe(w, u, u.x, u.z, 2.5, 60 + lvl(u, 'rocketjump') * 8, 'physical', (v) => !isBuilding(v));
       place(w, u, u.x + (dx / L) * d, u.z + (dz / L) * d);
       resolveCollisions(w);
       return true;
@@ -480,7 +498,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
           period: 0,
           src: u.id,
           team: u.team,
-          v: 110 + lvl(u) * 16,
+          v: 110 + lvl(u, 'barrage') * 16,
         });
       }
       return true;
@@ -519,7 +537,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         period: 0,
         src: u.id,
         team: u.team,
-        v: 80 + lvl(u) * 12,
+        v: 80 + lvl(u, 'snare') * 12,
         hidden: true,
       });
       return true;
@@ -553,7 +571,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     ai: { kind: 'disable', range: 13 },
     cast(w, u, aim) {
       const { dx, dz } = throwDir(w, u, aim, 15);
-      launch(w, u, 'netshot', dx, dz, 26, 15, 60 + lvl(u) * 10, 0xe0d0a0, 0.7);
+      launch(w, u, 'netshot', dx, dz, 26, 15, 60 + lvl(u, 'netshot') * 10, 0xe0d0a0, 0.7);
       return true;
     },
     onProjectileEnd(w, p, hit) {
@@ -591,8 +609,8 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     cast(w, u) {
       for (const sx of [-1, 1]) {
         const s = summon(w, u, 'spiritwolf', u.x + sx * 1.5, u.z - 1, 14, {
-          maxHp: 350 + lvl(u) * 40,
-          dmg: 30 + lvl(u) * 3,
+          maxHp: 350 + lvl(u, 'packhunt') * 40,
+          dmg: 30 + lvl(u, 'packhunt') * 3,
           speed: 10,
           radius: 0.6,
           barH: 1.8,
@@ -623,7 +641,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     fire(w, u, c) {
       const t = unitById(w, c.id) ?? aimUnit(w, u, { x: c.x, z: c.z, id: c.id }, 28);
       if (!t?.alive) return;
-      launchAt(w, u, 'pinshot', t, 60, 150 + lvl(u) * 22, 0xffe8b0, 0.6);
+      launchAt(w, u, 'pinshot', t, 60, 150 + lvl(u, 'pinshot') * 22, 0xffe8b0, 0.6);
     },
     onProjectileEnd(w, p, hit) {
       if (hit) damage(w, hit, p.dmg, unitById(w, p.src) ?? null, 'physical');
@@ -695,7 +713,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     fire(w, u, c) {
       const t = unitById(w, c.id) ?? aimUnit(w, u, { x: c.x, z: c.z, id: c.id }, 34);
       if (!t?.alive) return;
-      launchAt(w, u, 'lastshot', t, 70, 300 + lvl(u) * 40, 0xff9a8a, 0.8);
+      launchAt(w, u, 'lastshot', t, 70, 300 + lvl(u, 'lastshot') * 40, 0xff9a8a, 0.8);
     },
     onProjectileEnd(w, p, hit) {
       if (!hit) return;
@@ -738,7 +756,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       if (!t) return false;
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
       fx(w, t.x, t.z, 1.2, 0xc8d0dc, 0.9, 0.3, 1.8);
-      damage(w, t, 70 + lvl(u) * 12, u, 'physical');
+      damage(w, t, 70 + lvl(u, 'shieldbash') * 12, u, 'physical');
       if (t.alive) {
         addMod(t, 'stun', 1, 0, u.id);
         knock(w, t, u.x, u.z, 3);
@@ -803,7 +821,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         period: 0,
         src: u.id,
         team: u.team,
-        v: 70 + lvl(u) * 11,
+        v: 70 + lvl(u, 'roots') * 11,
       });
       return true;
     },
@@ -864,7 +882,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         const a = (k / 8) * Math.PI * 2;
         fx(w, u.x + Math.cos(a) * 5, u.z + Math.sin(a) * 5, 0.4, 0x5a9a30, 1.4, 0.6, 1.4);
       }
-      for (const v of aoe(w, u, u.x, u.z, 8, 130 + lvl(u) * 20, 'magical', (v) => !isBuilding(v)))
+      for (const v of aoe(w, u, u.x, u.z, 8, 130 + lvl(u, 'overgrowth') * 20, 'magical', (v) => !isBuilding(v)))
         if (v.alive) addMod(v, 'root', 2.2, 0, u.id);
     },
   },
@@ -918,7 +936,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         fx(w, x0 + ((p.x - x0) * k) / 4, z0 + ((p.z - z0) * k) / 4, 0.4, 0xb08a5a, 0.8, 0.4, 1.6);
       place(w, u, p.x, p.z);
       for (const v of hit) {
-        damage(w, v, 80 + lvl(u) * 12, u, 'physical');
+        damage(w, v, 80 + lvl(u, 'roll') * 12, u, 'physical');
         if (v.alive) {
           // В сторону от линии качения
           const side = (v.x - x0) * (p.z - z0) - (v.z - z0) * (p.x - x0) > 0 ? 1 : -1;
@@ -961,7 +979,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       place(w, u, p.x, p.z);
       u.castTick = w.tick;
       fx(w, u.x, u.z, 0.3, 0xb08a5a, 2.4, 0.6, 2);
-      for (const v of aoe(w, u, u.x, u.z, 4, 160 + lvl(u) * 24, 'physical', (v) => !isBuilding(v)))
+      for (const v of aoe(w, u, u.x, u.z, 4, 160 + lvl(u, 'bellyflop') * 24, 'physical', (v) => !isBuilding(v)))
         if (v.alive) addMod(v, 'stun', 1.3, 0, u.id);
       resolveCollisions(w);
     },
@@ -989,7 +1007,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         t.z - ((t.z - u.z) / d) * (t.radius + u.radius + 0.3),
       );
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
-      damage(w, t, 80 + lvl(u) * 13, u, 'physical');
+      damage(w, t, 80 + lvl(u, 'lunge') * 13, u, 'physical');
       if (u.hero) u.hero.order = { type: 'attack', id: t.id, auto: false };
       return true;
     },
@@ -1066,14 +1084,14 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     ai: { kind: 'nuke', range: 12 },
     cast(w, u, aim) {
       const { dx, dz } = throwDir(w, u, aim, 14);
-      launch(w, u, 'toxin', dx, dz, 24, 14, (50 + lvl(u) * 8) * amp(u), 0xb0f080, 0.6);
+      launch(w, u, 'toxin', dx, dz, 24, 14, (50 + lvl(u, 'toxin') * 8) * amp(u), 0xb0f080, 0.6);
       return true;
     },
     onProjectileEnd(w, p, hit) {
       if (!hit) return;
       const u = unitById(w, p.src);
       damage(w, hit, p.dmg, u ?? null, 'magical');
-      if (hit.alive && u?.hero) poison(hit, (25 + lvl(u) * 4) * amp(u), 4, u.id);
+      if (hit.alive && u?.hero) poison(hit, (25 + lvl(u, 'toxin') * 4) * amp(u), 4, u.id);
       fx(w, hit.x, hit.z, 1, 0xb0f080, 0.6, 0.4, 1.4);
     },
   },
@@ -1098,7 +1116,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         period: 0.5,
         src: u.id,
         team: u.team,
-        v: (30 + lvl(u) * 5) * amp(u),
+        v: (30 + lvl(u, 'miasma') * 5) * amp(u),
       });
       return true;
     },
@@ -1124,7 +1142,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     colors: C('#a0e070', '#d8f4c8', '#4a9a28', '#183c0a'),
     cast: () => false,
     onAttack(_w, u, t, dmg) {
-      if (t.team !== 2 || t.kind === 'neutral') poison(t, 10 + lvl(u) * 2, 3, u.id);
+      if (t.team !== 2 || t.kind === 'neutral') poison(t, 10 + lvl(u, 'venomblade') * 2, 3, u.id);
       return dmg;
     },
   },
@@ -1141,7 +1159,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     cast(w, u) {
       fx(w, u.x, u.z, 0.6, 0xc0ff80, 2.4, 0.7, 1.6);
       for (const v of enemiesIn(w, u, u.x, u.z, 8)) {
-        const m = addMod(v, 'poison', 6, (50 + lvl(u) * 7) * amp(u), u.id);
+        const m = addMod(v, 'poison', 6, (50 + lvl(u, 'plague') * 7) * amp(u), u.id);
         m.t = 6;
         addMod(v, 'atkSlow', 6, -0.25, u.id);
       }
@@ -1223,7 +1241,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       const t = aimUnit(w, u, aim, 5);
       if (!t) return false;
       addMod(t, 'stun', 2.4, 0, u.id);
-      addMod(t, 'burn', 2.4, (220 + lvl(u) * 30) / 2.4, u.id);
+      addMod(t, 'burn', 2.4, (220 + lvl(u, 'nightmare') * 30) / 2.4, u.id);
       fx(w, t.x, t.z, 2.2, 0x4a2a80, 0.9, 0.8, 1);
       return true;
     },
@@ -1252,7 +1270,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         period: 0.5,
         src: u.id,
         team: u.team,
-        v: 30 + lvl(u) * 5,
+        v: 30 + lvl(u, 'totem') * 5,
       });
       return true;
     },
@@ -1305,7 +1323,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     cast(w, u) {
       for (const v of alliesIn(w, u, u.x, u.z, 12)) {
         const m = addMod(v, 'shield', 4, 0, u.id);
-        m.v = Math.max(m.v, (220 + lvl(u) * 30) * amp(u));
+        m.v = Math.max(m.v, (220 + lvl(u, 'ancestors') * 30) * amp(u));
         m.t = 4;
         addMod(v, 'haste', 4, 0.25, u.id);
         fx(w, v.x, v.z, 1.4, 0xc0fff0, 1, 0.5, 1.4);
@@ -1330,7 +1348,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       const z1 = u.z + dz * 7;
       for (let k = 1; k <= 4; k++) fx(w, u.x + dx * k * 1.7, u.z + dz * k * 1.7, 1, 0xffc0e0, 0.5 + k * 0.2, 0.35, 1.4);
       for (const v of lineHit(w, u, u.x, u.z, x1, z1, 2)) {
-        damage(w, v, (80 + lvl(u) * 12) * amp(u), u, 'magical');
+        damage(w, v, (80 + lvl(u, 'chord') * 12) * amp(u), u, 'magical');
         if (v.alive) knock(w, v, u.x, u.z, 2);
       }
       resolveCollisions(w);
@@ -1398,7 +1416,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       const t = aimUnit(w, u, aim, 11);
       if (!t) return false;
       fx(w, t.x, t.z, 2, 0xfff4b0, 0.6, 0.4, 0.8);
-      const d = damage(w, t, (90 + lvl(u) * 14) * amp(u), u, 'magical');
+      const d = damage(w, t, (90 + lvl(u, 'smite') * 14) * amp(u), u, 'magical');
       heal(w, u, d * 0.5);
       return true;
     },
@@ -1420,7 +1438,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       if (!list.length) list.push(u);
       for (const v of list) {
         dispel(v);
-        heal(w, v, (90 + lvl(u) * 14) * amp(u));
+        heal(w, v, (90 + lvl(u, 'purify') * 14) * amp(u));
       }
       return true;
     },
@@ -1458,9 +1476,9 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
           if (!v.alive) {
             reviveHero(w, v, u.x + Math.sin(k) * 2, u.z + Math.cos(k) * 2, 0.5);
             k += 2.1;
-          } else if (dist(u, v) < 12) heal(w, v, (250 + lvl(u) * 30) * amp(u));
+          } else if (dist(u, v) < 12) heal(w, v, (250 + lvl(u, 'dawn') * 30) * amp(u));
         }
-      heal(w, u, (250 + lvl(u) * 30) * amp(u) * 0.5);
+      heal(w, u, (250 + lvl(u, 'dawn') * 30) * amp(u) * 0.5);
       resolveCollisions(w);
     },
   },
@@ -1484,7 +1502,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         u.x,
         u.z,
         3.5,
-        90 + lvl(u) * 14,
+        90 + lvl(u, 'cleave') * 14,
         'physical',
         (v) => !isBuilding(v) && (v.x - u.x) * f.dx + (v.z - u.z) * f.dz > -0.5,
       );
@@ -1558,7 +1576,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         );
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
       fx(w, t.x, t.z, 1.2, 0xffd8a0, 0.6, 0.25, 1.8);
-      damage(w, t, 75 + lvl(u) * 12, u, 'physical');
+      damage(w, t, 75 + lvl(u, 'palm') * 12, u, 'physical');
       chi(u);
       return true;
     },
@@ -1574,7 +1592,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
     ai: { kind: 'aoe', range: 2.8, creeps: 3, radius: 3 },
     cast(w, u) {
       fx(w, u.x, u.z, 1, 0xffc890, 1.4, 0.3, 1.6);
-      for (const v of aoe(w, u, u.x, u.z, 3, 70 + lvl(u) * 11, 'physical', (v) => !isBuilding(v)))
+      for (const v of aoe(w, u, u.x, u.z, 3, 70 + lvl(u, 'spinkick') * 11, 'physical', (v) => !isBuilding(v)))
         if (v.alive) knock(w, v, u.x, u.z, 2);
       resolveCollisions(w);
       chi(u);
@@ -1638,7 +1656,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         }
         src.atkTick = w.tick;
         fx(w, t.x + Math.sin(w.tick) * 0.5, t.z + Math.cos(w.tick) * 0.5, 1.3, 0xffe0b0, 0.4, 0.2, 1.6);
-        damage(w, t, 45 + lvl(src) * 7, src, 'physical');
+        damage(w, t, 45 + lvl(src, 'thousandfists') * 7, src, 'physical');
       },
     },
   },
@@ -1675,7 +1693,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       const k = getMod(u, 'wolfform') ? 2 : 1;
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
       fx(w, t.x, t.z, 1.2, 0xe08070, 0.7, 0.3, 1.8);
-      damage(w, t, (80 + lvl(u) * 12) * k, u, 'physical');
+      damage(w, t, (80 + lvl(u, 'maul') * 12) * k, u, 'physical');
       if (t.alive) addMod(t, 'bleed', 4, 20 * k, u.id);
       return true;
     },
@@ -1726,7 +1744,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       const t = aimUnit(w, u, aim, 10);
       if (!t) return false;
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
-      launchAt(w, u, 'hammer', t, 24, 85 + lvl(u) * 13, 0xfff0b0, 0.8);
+      launchAt(w, u, 'hammer', t, 24, 85 + lvl(u, 'hammer') * 13, 0xfff0b0, 0.8);
       return true;
     },
     onProjectileEnd(w, p, hit) {
@@ -1756,7 +1774,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         period: 0.5,
         src: u.id,
         team: u.team,
-        v: 20 + lvl(u) * 4,
+        v: 20 + lvl(u, 'consecrate') * 4,
       });
       return true;
     },
@@ -1784,7 +1802,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       if (h.stacks) return dmg;
       fx(w, t.x, t.z, 1, 0xffe8a0, 1.2, 0.35, 1.8);
       heal(w, u, 60);
-      aoe(w, u, t.x, t.z, 2.5, 50 + lvl(u) * 8, 'magical', (v) => !isBuilding(v));
+      aoe(w, u, t.x, t.z, 2.5, 50 + lvl(u, 'retribution') * 8, 'magical', (v) => !isBuilding(v));
       return dmg;
     },
   },
@@ -1812,7 +1830,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
       addMod(u, 'immune', 1.5, 0, u.id);
       fx(w, t.x, t.z, 2.5, 0xfffad0, 0.6, 0.5, 0.8);
-      const dmg = 200 + lvl(u) * 28;
+      const dmg = 200 + lvl(u, 'judgement') * 28;
       damage(w, t, dmg, u, 'magical');
       aoe(w, u, t.x, t.z, 3, dmg * 0.5, 'magical', (v) => v !== t && !isBuilding(v));
       resolveCollisions(w);

@@ -53,13 +53,16 @@ describe('каждое умение каждого героя', () => {
       w.nextWave = 1e9;
       const me = heroOf(w, 0)!;
       const foe = heroOf(w, 1)!;
-      me.hero!.level = 6;
+      me.hero!.level = 15;
+      // Все умения изучены
+      me.hero!.skill = [4, 4, 4, 3];
+      me.hero!.charges = me.hero!.charges.map((c, i) => ABILITIES[h.abilities[i]].charges ?? c);
       me.hero!.gold = 0;
       for (let t = 0; t < TICK_RATE; t++) step(w);
       const setup = () => {
         Object.assign(me, { x: 0, z: 0, alive: true, hp: me.maxHp, mods: [] });
         Object.assign(foe, { x: 2.4, z: 0, alive: true, hp: foe.maxHp, mods: [] });
-        const c = w.units.find((u) => u.kind === 'creep' && u.team === 1 && u.alive) as Unit | undefined;
+        const c = w.units.find((u) => u.kind === 'creep' && !u.owner && u.team === 1 && u.alive) as Unit | undefined;
         if (c) Object.assign(c, { x: -2, z: 1.5 });
         me.hero!.order = null;
         me.hero!.casting = null;
@@ -68,6 +71,7 @@ describe('каждое умение каждого героя', () => {
         const a = ABILITIES[h.abilities[slot]];
         setup();
         me.hero!.cd[slot] = 0;
+        me.hero!.mana = 9999;
         if (a.passive) {
           // Пассивка: просто бьём рядом стоящего врага пару секунд
           queueCommand(w, 0, { c: 'attack', id: foe.id });
@@ -75,7 +79,8 @@ describe('каждое умение каждого героя', () => {
           expect(finite(w), `${a.id}: мир цел`).toBe(true);
           continue;
         }
-        const target = a.id === 'devour' ? w.units.find((u) => u.kind === 'creep' && u.team === 1 && u.alive)! : foe;
+        const target =
+          a.id === 'devour' ? w.units.find((u) => u.kind === 'creep' && !u.owner && u.team === 1 && u.alive)! : foe;
         queueCommand(w, 0, { c: 'cast', slot, x: target.x, z: target.z, id: target.id });
         let cast = false;
         for (let t = 0; t < TICK_RATE * 2.5; t++) {

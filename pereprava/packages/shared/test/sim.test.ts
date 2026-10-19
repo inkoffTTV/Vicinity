@@ -25,7 +25,7 @@ const FOUNTAIN0 = getMap('1v1').fountains[0];
 
 /** Два человека без ботов — никто не вмешивается в проверку */
 function world(setup: Partial<MatchSetup> = {}): World {
-  return createWorld({
+  const w = createWorld({
     seed: 7,
     players: [
       { name: 'А', team: 0, hero: 'mage', bot: null },
@@ -33,6 +33,14 @@ function world(setup: Partial<MatchSetup> = {}): World {
     ],
     ...setup,
   });
+  // Умения изучены (ультимейт — нет: его открывает 6 уровень), маны с запасом
+  for (const p of w.players) {
+    const h = heroOf(w, p.slot)!.hero!;
+    if (p.bot) continue;
+    h.skill = [1, 1, 1, 0];
+    h.mana = h.maxMana = 9999;
+  }
+  return w;
 }
 
 const hero = (w: World, slot: number) => heroOf(w, slot)!;
@@ -128,7 +136,7 @@ describe('вышка', () => {
 describe('волны крипов', () => {
   it('первая волна на 1-й секунде, дальше каждые 25 с, по 4 крипа на сторону', () => {
     const w = world();
-    const creeps = () => w.units.filter((u) => u.kind === 'creep');
+    const creeps = () => w.units.filter((u) => u.kind === 'creep' && !u.owner);
     expect(creeps()).toHaveLength(0);
     while (w.time < 1.05) step(w);
     expect(creeps()).toHaveLength(8);
@@ -136,17 +144,22 @@ describe('волны крипов', () => {
     const born = w.nextWave;
     expect(born).toBeCloseTo(1 + WAVE_INTERVAL);
     while (w.time < born + 0.05) step(w);
-    expect(w.units.filter((u) => u.kind === 'creep').length).toBeGreaterThanOrEqual(12);
+    expect(w.units.filter((u) => u.kind === 'creep' && !u.owner).length).toBeGreaterThanOrEqual(12);
   });
 });
 
 describe('лавка', () => {
-  it('покупка только у своего фонтана и при достатке золота', () => {
+  it('у фонтана — в инвентарь, вдали — в тайник для курьера; нужен достаток золота', () => {
     const w = world();
     const h = hero(w, 0);
-    h.hero!.gold = 500;
+    h.hero!.gold = 400;
     put(h, 0, 0);
-    expect(buyItem(w, h, 'boots')).toBe(false);
+    expect(buyItem(w, h, 'boots')).toBe(true);
+    expect(h.hero!.stash.map((s) => s.id)).toEqual(['boots']);
+    expect(h.hero!.items).not.toContain('boots');
+    // Дошёл до лавки — тайник сам перекладывается в инвентарь
+    h.hero!.gold = 500;
+    h.hero!.stash = [];
     put(h, FOUNTAIN0.x + 2, FOUNTAIN0.z);
     expect(buyItem(w, h, 'boots')).toBe(true);
     expect(h.hero!.gold).toBe(500 - ITEM.boots.price);
@@ -177,7 +190,7 @@ describe('лавка', () => {
     const hp = h.maxHp;
     h.hero!.gold = 1000;
     buyItem(w, h, 'cloak');
-    expect(h.maxHp).toBe(hp + 180);
+    expect(h.maxHp).toBe(hp + 180 + 4 * 12);
   });
 
   it('продажа через команду возвращает половину цены', () => {
@@ -233,40 +246,12 @@ describe('детерминизм полного матча', () => {
   });
 });
 
-describe('умения всех героев', () => {
-  for (const id of ['mage', 'brute', 'ranger', 'keeper', 'shade']) {
-    it(`${id}: каждое умение применяется и не ломает мир`, () => {
-      const w = createWorld({
-        seed: 3,
-        players: [
-          { name: 'А', team: 0, hero: id, bot: null },
-          { name: 'Б', team: 1, hero: 'brute', bot: null },
-        ],
-      });
-      const me = hero(w, 0);
-      const foe = hero(w, 1);
-      me.hero!.level = 6;
-      put(me, 0, 0);
-      put(foe, 3, 0);
-      const hp = foe.hp;
-      for (let slot = 0; slot < 4; slot++) {
-        me.hero!.cd[slot] = 0;
-        queueCommand(w, 0, { c: 'cast', slot, x: foe.x, z: foe.z, id: foe.id });
-        for (let t = 0; t < 45; t++) step(w);
-      }
-      expect(Number.isFinite(me.x) && Number.isFinite(foe.hp)).toBe(true);
-      expect(foe.hp).toBeLessThan(hp + 1);
-      expect(me.hero!.cd.some((c) => c > 0)).toBe(true);
-    });
-  }
-});
-
 describe('нажатие умения всегда даёт результат', () => {
-  const duel = (hero: string) =>
-    createWorld({
+  const duel = (h: string) =>
+    world({
       seed: 5,
       players: [
-        { name: 'А', team: 0, hero, bot: null },
+        { name: 'А', team: 0, hero: h, bot: null },
         { name: 'Б', team: 1, hero: 'brute', bot: null },
       ],
     });

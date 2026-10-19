@@ -80,7 +80,7 @@ describe('карты', () => {
           step(w);
           if (t % 10) continue;
           for (const u of w.units)
-            if (u.kind === 'creep' && u.alive) {
+            if (u.kind === 'creep' && !u.owner && u.alive) {
               const l = u.lane ?? 0;
               expect(dLane(m, u.x, u.z)).toBeLessThan(8);
               best[l][u.team] = Math.max(best[l][u.team], laneProgress(m, l, u.team, u.x, u.z));
