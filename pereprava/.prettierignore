@@ -1,5 +1,6 @@
 legacy/
 dist/
+dist-demo/
 node_modules/
 package-lock.json
 # Стили и разметка — в компактном виде «правило в строку», как в прототипе

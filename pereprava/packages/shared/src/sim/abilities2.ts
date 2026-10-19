@@ -209,8 +209,8 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
   chain: {
     id: 'chain',
     name: 'Цепная молния',
-    desc: 'Молния бьёт цель и перескакивает ещё на 3 врага рядом: 100 урона, +15 за уровень, каждый скачок на 15% слабее.',
-    cd: 8,
+    desc: 'Молния бьёт цель и перескакивает ещё на 3 врага рядом: 75 урона, +11 за уровень, каждый скачок на 20% слабее.',
+    cd: 10,
     target: 'unit',
     range: 12,
     colors: C('#c8d8ff', '#eef2ff', '#6a8aff', '#22307a'),
@@ -219,7 +219,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       let t: Unit | undefined = aimUnit(w, u, aim, 12) ?? undefined;
       if (!t) return false;
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
-      let dmg = (100 + lvl(u) * 15) * amp(u);
+      let dmg = (75 + lvl(u) * 11) * amp(u);
       const hit = new Set<number>();
       let from: Unit = u;
       for (let k = 0; k < 4 && t; k++) {
@@ -227,7 +227,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         for (let s = 0; s <= 3; s++)
           fx(w, from.x + ((t.x - from.x) * s) / 3, from.z + ((t.z - from.z) * s) / 3, 1.6, 0xc8d8ff, 0.3, 0.2, 0.8);
         damage(w, t, dmg, u, 'magical');
-        dmg *= 0.85;
+        dmg *= 0.8;
         from = t;
         const prev: Unit = t;
         t = w.units
@@ -242,9 +242,9 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
   static: {
     id: 'static',
     name: 'Искра',
-    desc: 'Три заряда: самонаводящаяся искра, 55 урона, +8 за уровень. Заряд копится за 5 с.',
-    cd: 5,
-    charges: 3,
+    desc: 'Два заряда: самонаводящаяся искра, 40 урона, +6 за уровень. Заряд копится за 7 с.',
+    cd: 7,
+    charges: 2,
     target: 'unit',
     range: 13,
     colors: C('#fff6a0', '#fffbe0', '#e8d040', '#6a5a10'),
@@ -253,7 +253,7 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
       const t = aimUnit(w, u, aim, 13);
       if (!t) return false;
       u.rot = Math.atan2(t.x - u.x, t.z - u.z);
-      launchAt(w, u, 'static', t, 34, (55 + lvl(u) * 8) * amp(u), 0xfff6a0, 0.5);
+      launchAt(w, u, 'static', t, 34, (40 + lvl(u) * 6) * amp(u), 0xfff6a0, 0.5);
       return true;
     },
     onProjectileEnd(w, p, hit) {
@@ -1739,8 +1739,8 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
   consecrate: {
     id: 'consecrate',
     name: 'Освящение',
-    desc: 'Земля вокруг 5 с светится в 4 м: врагам 35 урона, +6 за уровень, каждые 0,5 с, союзникам — столько же лечения.',
-    cd: 15,
+    desc: 'Земля вокруг 4 с светится в 4 м: врагам 20 урона, +4 за уровень, каждые 0,5 с, союзникам — столько же лечения.',
+    cd: 18,
     target: 'none',
     range: 4,
     colors: C('#fff6c0', '#fffcec', '#e8c860', '#6a5214'),
@@ -1751,12 +1751,12 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         x: u.x,
         z: u.z,
         r: 4,
-        t: 5,
+        t: 4,
         delay: 0,
         period: 0.5,
         src: u.id,
         team: u.team,
-        v: 35 + lvl(u) * 6,
+        v: 20 + lvl(u) * 4,
       });
       return true;
     },

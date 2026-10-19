@@ -5,6 +5,8 @@ import { createWorld, step, HEROES, TICK_RATE, type PlayerSetup, type Team } fro
 const [n = '6', mode = '1v1', diff = 'normal', jungle = '1'] = process.argv.slice(2);
 const per = mode === '3v3' ? 3 : mode === '2v2' ? 2 : 1;
 const ids = HEROES.map((h) => h.id);
+// Цель по длительности для режима
+const [lo, hi] = mode === '3v3' ? [18, 25] : mode === '2v2' ? [15, 22] : [12, 18];
 const rows: string[] = [];
 let total = 0;
 const wins = [0, 0];
@@ -32,5 +34,5 @@ for (let i = 0; i < +n; i++) {
 const mins = rows.map((r) => parseFloat(/ (\d+\.\d) мин/.exec(r)![1])).sort((a, b) => a - b);
 console.log(rows.join('\n'));
 console.log(
-  `среднее: ${(total / +n).toFixed(1)} мин, медиана ${mins[Math.floor(mins.length / 2)]}, от ${mins[0]} до ${mins[mins.length - 1]}, в 12–18 мин: ${mins.filter((m) => m >= 12 && m <= 18).length}/${mins.length}, победы ${wins[0]}:${wins[1]}`,
+  `среднее: ${(total / +n).toFixed(1)} мин, медиана ${mins[Math.floor(mins.length / 2)]}, от ${mins[0]} до ${mins[mins.length - 1]}, в ${lo}–${hi} мин: ${mins.filter((m) => m >= lo && m <= hi).length}/${mins.length}, победы ${wins[0]}:${wins[1]}`,
 );

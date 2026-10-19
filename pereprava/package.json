@@ -13,6 +13,7 @@
     "dev": "npm run dev -w @pereprava/client",
     "dev:server": "npm run dev -w @pereprava/server",
     "build": "npm run build -w @pereprava/client && npm run build -w @pereprava/server",
+    "build:demo": "vite build --config packages/client/vite.config.ts packages/client --mode demo --base ./ --outDir dist-demo --emptyOutDir",
     "test": "vitest run",
     "e2e": "playwright test",
     "typecheck": "tsc -p packages/shared && tsc -p packages/client && tsc -p packages/server",

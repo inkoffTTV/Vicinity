@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-demo/
 test-results/
 playwright-report/
 .env
@@ -8,3 +9,5 @@ playwright-report/
 data/
 # корневой .gitignore Vicinity прячет .env.example — у Переправы он нужен
 !.env.example
+# Демо-сборка: в файле нет секретов, только VITE_OFFLINE=1
+!packages/client/.env.demo

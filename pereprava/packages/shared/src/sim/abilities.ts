@@ -85,8 +85,8 @@ export const ABILITIES: Record<string, AbilityDef> = {
   fireball: {
     id: 'fireball',
     name: 'Огненный шар',
-    desc: 'Снаряд взрывается по площади: 110 урона, +15 за уровень.',
-    cd: 5,
+    desc: 'Снаряд взрывается по площади: 80 урона, +11 за уровень.',
+    cd: 7,
     target: 'point',
     range: 24,
     colors: ['#ffb35c', '#ffcf7a', '#ff7a1f', '#a83a0c'],
@@ -108,7 +108,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
       fx(w, p.x, p.z, 1.8, 0xff7a1f, 1.1, 0.4, 2.4);
       fx(w, p.x, p.z, 1.8, 0xffd27a, 0.6, 0.25, 2);
       if (!u?.hero) return;
-      aoe(w, u, p.x, p.z, 3.2, (110 + lvl(u) * 15) * amp(u), 'magical');
+      aoe(w, u, p.x, p.z, 3.2, (80 + lvl(u) * 11) * amp(u), 'magical');
     },
   },
   blink: {
@@ -190,7 +190,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   meteor: {
     id: 'meteor',
     name: 'Метеор',
-    desc: 'Через 1 с падает в точку: 220 урона, +30 за уровень, оглушение 1 с, потом земля горит 3 с.',
+    desc: 'Через 1 с падает в точку: 170 урона, +24 за уровень, оглушение 1 с, потом земля горит 3 с.',
     cd: 55,
     target: 'point',
     range: 16,
@@ -209,7 +209,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
         period: 0.5,
         src: u.id,
         team: u.team,
-        v: (220 + lvl(u) * 30) * amp(u),
+        v: (170 + lvl(u) * 24) * amp(u),
       });
       return true;
     },

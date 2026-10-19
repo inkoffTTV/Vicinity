@@ -3,6 +3,7 @@ import {
   addMod,
   armorMult,
   BALANCE,
+  MODE_PACE,
   buyItem,
   createWorld,
   damage,
@@ -78,7 +79,7 @@ describe('урон', () => {
     const tw = towerOf(w, 1)!;
     tw.armor = 0;
     // без героя-источника защита от «прокрадывания» не действует
-    expect(damage(w, tw, 100, null, 'pure')).toBeCloseTo(100 * (1 - BALANCE.fortify));
+    expect(damage(w, tw, 100, null, 'pure')).toBeCloseTo(100 * MODE_PACE[w.mapId].bld * (1 - BALANCE.fortify));
   });
 });
 

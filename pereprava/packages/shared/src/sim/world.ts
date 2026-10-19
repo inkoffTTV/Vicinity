@@ -61,17 +61,24 @@ export const BALANCE = {
   ancientArmor: 6,
   /** Рост здоровья и урона крипов за минуту матча, доля */
   creepGrowth: 0.05,
-  /** «Укрепления»: первые минуты здания получают меньше урона */
-  fortifyUntil: 10 * 60,
+  /** «Укрепления»: первые минуты здания получают меньше урона (сколько минут — MODE_PACE) */
   fortify: 0.5,
   /** Каждая разрушенная вражеская вышка усиливает свои волны */
   creepPerTower: 0.25,
-  /** После этой минуты здания с каждой минутой получают больше урона (затяжные матчи заканчиваются) */
-  decayFrom: 20,
-  decayPerMin: 0.08,
   /** Возрождение: база + за уровень, с (прототип: 4 + 1,2 за уровень) */
   respawnBase: 4,
   respawnLvl: 2,
+};
+
+/** Темп матча по картам: когда кончаются «укрепления» зданий и с какой минуты здания слабеют.
+ *  Цель по длительности: 1v1 — 12–18 мин, 2v2 — 15–22, 3v3 — 18–25 (см. DECISIONS.md) */
+export const MODE_PACE: Record<
+  MapId,
+  { fortifyUntil: number; decayFrom: number; decayPerMin: number; /** Множитель урона по зданиям */ bld: number }
+> = {
+  '1v1': { fortifyUntil: 7 * 60, decayFrom: 13, decayPerMin: 0.12, bld: 1.35 },
+  '2v2': { fortifyUntil: 8 * 60, decayFrom: 15, decayPerMin: 0.12, bld: 1.45 },
+  '3v3': { fortifyUntil: 9 * 60, decayFrom: 17, decayPerMin: 0.12, bld: 1.6 },
 };
 
 export interface PlayerSetup {
@@ -577,9 +584,11 @@ export function damage(w: World, t: Unit, amt: number, src: Unit | null, type: D
   amt *= 1 + modValue(t, 'vuln');
   amt *= 1 - Math.min(0.8, modValue(t, 'resist'));
   if (t.kind === 'tower' || t.kind === 'ancient') {
-    if (w.time < BALANCE.fortifyUntil) amt *= 1 - BALANCE.fortify;
-    const late = w.time / 60 - BALANCE.decayFrom;
-    if (late > 0) amt *= 1 + BALANCE.decayPerMin * late;
+    const pace = MODE_PACE[w.mapId];
+    amt *= pace.bld;
+    if (w.time < pace.fortifyUntil) amt *= 1 - BALANCE.fortify;
+    const late = w.time / 60 - pace.decayFrom;
+    if (late > 0) amt *= 1 + pace.decayPerMin * late;
   }
   // Здания без своих вражеских крипов рядом получают меньше урона (защита от «прокрадывания»)
   if (
