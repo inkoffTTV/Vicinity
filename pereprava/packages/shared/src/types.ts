@@ -56,6 +56,10 @@ export interface HeroState {
   bonusArmor: number;
   bonusAtkSpeed: number;
   lifesteal: number;
+  /** Сокращение перезарядки способностей, доля */
+  cdr: number;
+  /** Счётчик для пассивок («каждый 4-й выстрел») */
+  stacks: number;
 }
 
 export interface Unit {
@@ -94,6 +98,8 @@ export interface Unit {
   model: string;
   mods: Modifier[];
   hero?: HeroState;
+  /** Ярус вышки: 1 — внешняя, 2 — внутренняя */
+  tier?: number;
   /** Лесной лагерь, к которому привязан нейтрал */
   camp?: number;
   homeX?: number;
@@ -119,6 +125,28 @@ export interface Projectile {
   dmg: number;
   color: number;
   size: number;
+  /** Пробивает насквозь: в кого уже попал */
+  pierce?: boolean;
+  hits?: number[];
+}
+
+/** Область на земле: метеор, град стрел, купол… Поведение — в ABILITIES[kind].zone */
+export interface Zone {
+  id: number;
+  kind: string;
+  x: number;
+  z: number;
+  r: number;
+  /** Сколько ещё действует, с */
+  t: number;
+  /** Задержка до срабатывания, с */
+  delay: number;
+  /** Период импульсов, с; 0 — каждый тик */
+  period: number;
+  next: number;
+  src: number;
+  team: Side;
+  v: number;
 }
 
 /** Приказы игрока. Приходят между тиками и применяются в начале следующего */
@@ -143,7 +171,7 @@ export type SimEvent =
   | { e: 'gold'; player: number; amt: number; x: number; z: number }
   | { e: 'level'; id: number; player: number; level: number }
   | { e: 'respawn'; id: number; player: number }
-  | { e: 'tower'; team: Team }
+  | { e: 'tower'; team: Team; tier: number }
   | { e: 'buy'; player: number; item: string }
   | { e: 'rune'; x: number; z: number; rune: string; taker?: number }
   | { e: 'ping'; player: number; team: Team; x: number; z: number; kind: string }

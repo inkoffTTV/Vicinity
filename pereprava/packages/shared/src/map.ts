@@ -17,10 +17,15 @@ export const ANCIENTS: readonly P2[] = [
   { x: -46, z: 46 },
   { x: 46, z: -46 },
 ];
-/** Вышки на линии */
+/** Внешние вышки на линии (как в прототипе) */
 export const TOWERS: readonly P2[] = [
   { x: -20, z: 20 },
   { x: 20, z: -20 },
+];
+/** Внутренние вышки у базы: закрывают кристалл, пока стоят */
+export const INNER_TOWERS: readonly P2[] = [
+  { x: -34, z: 34 },
+  { x: 34, z: -34 },
 ];
 export const FOUNTAINS: readonly P2[] = [
   { x: -54, z: 54 },
@@ -30,6 +35,20 @@ export const SPAWNS: readonly P2[] = [
   { x: -51, z: 51 },
   { x: 51, z: -51 },
 ];
+
+/** Лесные лагеря: по два с каждой стороны реки (у каждой команды — малый и большой) */
+export const CAMPS: readonly (P2 & { type: 'small' | 'big'; side: 0 | 1 })[] = [
+  { x: -30, z: -10, type: 'big', side: 0 },
+  { x: -10, z: 30, type: 'small', side: 0 },
+  { x: 30, z: 10, type: 'big', side: 1 },
+  { x: 10, z: -30, type: 'small', side: 1 },
+];
+/** Где появляется руна — в реке по обе стороны от линии */
+export const RUNE_SPOTS: readonly P2[] = [
+  { x: -17, z: -17 },
+  { x: 17, z: 17 },
+];
+const CAMP_CLEAR = 6.5;
 
 export const dLane = (x: number, z: number) => Math.abs(x + z) / S2;
 export const dRiver = (x: number, z: number) => Math.abs(x - z) / S2;
@@ -120,11 +139,18 @@ export class TreeGrid {
   }
 }
 
+let cachedAll: Tree[] | null = null;
 let cachedTrees: Tree[] | null = null;
 let cachedGrid: TreeGrid | null = null;
-export function mapTrees(): Tree[] {
-  return (cachedTrees ??= generateTrees());
+/** Все деревья прототипа (клиент проходит по ним, чтобы цвета крон совпали с прототипом) */
+export function mapTreesAll(): Tree[] {
+  return (cachedAll ??= generateTrees());
 }
+/** Деревья на карте: прототип без деревьев на полянах лесных лагерей */
+export function mapTrees(): Tree[] {
+  return (cachedTrees ??= mapTreesAll().filter((t) => !treeCleared(t)));
+}
+export const treeCleared = (t: Tree) => CAMPS.some((c) => Math.hypot(t.x - c.x, t.z - c.z) < CAMP_CLEAR);
 export function treeGrid(): TreeGrid {
   return (cachedGrid ??= new TreeGrid(mapTrees()));
 }

@@ -2,11 +2,11 @@
 // что модификатор делает, описано здесь: флаги (стан, сайленс…), вклад в характеристики,
 // поведение каждый тик.
 import type { Modifier, Unit } from '../types';
-import { DT, damage, unitById, type World } from './world';
+import { DT, damage, recallHome, unitById, type World } from './world';
 
 export type ModFlag = 'stun' | 'silence' | 'root' | 'disarm' | 'invisible';
 /** Характеристики, в которые модификаторы добавляют значение v (или своё число) */
-export type ModStat = 'armor' | 'slow' | 'haste' | 'heal' | 'atkSpeed' | 'dmgAmp' | 'vuln';
+export type ModStat = 'armor' | 'slow' | 'haste' | 'heal' | 'atkSpeed' | 'dmgAmp' | 'vuln' | 'resist';
 
 export interface ModifierDef {
   name: string;
@@ -17,6 +17,8 @@ export interface ModifierDef {
   stats?: Partial<Record<ModStat, number | 'v'>>;
   /** Каждый тик (урон со временем и т. п.) */
   tick?(w: World, u: Unit, m: Modifier): void;
+  /** Время вышло (не вызывается при снятии) */
+  expire?(w: World, u: Unit, m: Modifier): void;
 }
 
 export const MODIFIERS: Record<string, ModifierDef> = {
@@ -33,6 +35,23 @@ export const MODIFIERS: Record<string, ModifierDef> = {
   regen: { name: 'Восстановление', buff: true, stats: { heal: 'v' } },
   dmgAmp: { name: 'Двойной урон', buff: true, stats: { dmgAmp: 'v' } },
   vuln: { name: 'Уязвимость', buff: false, stats: { vuln: 'v' } },
+  invisible: { name: 'Невидимость', buff: true, flags: ['invisible'] },
+  resist: { name: 'Защита купола', buff: true, stats: { resist: 'v' } },
+  keeperAura: { name: 'Аура стойкости', buff: true, stats: { armor: 3, heal: 3 } },
+  runeHaste: { name: 'Руна скорости', buff: true, stats: { haste: 0.4 } },
+  runeDamage: { name: 'Руна силы', buff: true, stats: { dmgAmp: 0.6 } },
+  runeRegen: { name: 'Руна восстановления', buff: true, stats: { heal: 'v' } },
+  recall: {
+    name: 'Возвращение',
+    buff: true,
+    tick(_w, u, m) {
+      // Урон сбивает возвращение
+      if (u.hurtTick > m.v) m.t = -2;
+    },
+    expire(w, u) {
+      recallHome(w, u);
+    },
+  },
   burn: {
     name: 'Горение',
     buff: false,
@@ -84,9 +103,15 @@ export function dispel(u: Unit, strong = false) {
 }
 
 export function tickModifiers(w: World, u: Unit) {
+  const expired: Modifier[] = [];
   for (const m of u.mods) {
     MODIFIERS[m.id]?.tick?.(w, u, m);
-    if (m.t > 0) m.t = Math.max(0, m.t - DT);
+    if (m.t > 0) {
+      m.t = Math.max(0, m.t - DT);
+      if (m.t === 0) expired.push(m);
+    }
   }
-  if (u.mods.some((m) => m.t === 0)) u.mods = u.mods.filter((m) => m.t !== 0);
+  // t = -2 — снят досрочно (без срабатывания expire)
+  if (u.mods.some((m) => m.t === 0 || m.t === -2)) u.mods = u.mods.filter((m) => m.t !== 0 && m.t !== -2);
+  for (const m of expired) MODIFIERS[m.id]?.expire?.(w, u, m);
 }

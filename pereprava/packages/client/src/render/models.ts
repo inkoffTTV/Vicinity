@@ -170,5 +170,112 @@ export function makeModel(model: string, team: number): Rig {
   }
 }
 
-/** Модели героев, добавленных позже (фаза 3), регистрируются здесь */
-export const HERO_MODELS: Record<string, () => Rig> = {};
+export function makeRanger(): Rig {
+  const r = rig();
+  const b = r.body;
+  part(b, geo('rng-legs', () => new THREE.CylinderGeometry(0.3, 0.45, 0.9, 6)), mat(0x5a4632), 0, 0.45, 0);
+  part(b, geo('rng-torso', () => new THREE.CylinderGeometry(0.42, 0.34, 1, 6)), mat(0x4f8a3a), 0, 1.35, 0);
+  part(b, geo('rng-cape', () => new THREE.ConeGeometry(0.62, 1.5, 6, 1, true)), mat(0x2f5a2a, { side: THREE.DoubleSide }), 0, 1.35, -0.12);
+  part(b, geo('rng-head', () => new THREE.IcosahedronGeometry(0.36, 0)), mat(0xf0c9a0), 0, 2.08, 0);
+  const hood = part(b, geo('rng-hood', () => new THREE.ConeGeometry(0.46, 0.75, 6)), mat(0x3d7a32), 0, 2.4, -0.05);
+  hood.rotation.x = -0.25;
+  const bow = new THREE.Group();
+  bow.position.set(-0.55, 1.45, 0.25);
+  const arc = part(bow, geo('rng-bow', () => new THREE.TorusGeometry(0.75, 0.05, 5, 12, Math.PI)), mat(0x8a5a2a), 0, 0, 0);
+  arc.rotation.z = Math.PI / 2;
+  part(bow, geo('rng-string', () => new THREE.CylinderGeometry(0.01, 0.01, 1.5, 3)), mat(0xe8e2d2), 0, 0, 0);
+  b.add(bow);
+  r.weapon = bow;
+  part(b, geo('rng-quiver', () => new THREE.CylinderGeometry(0.14, 0.12, 0.9, 5)), mat(0x6b4b2e), 0.25, 1.6, -0.35).rotation.z = 0.3;
+  addShield(r, 1.5);
+  return r;
+}
+
+export function makeKeeper(): Rig {
+  const r = rig();
+  const b = r.body;
+  part(b, geo('kpr-robe', () => new THREE.CylinderGeometry(0.32, 0.9, 1.8, 8)), mat(0xf2ead8), 0, 0.9, 0);
+  part(b, geo('kpr-sash', () => new THREE.CylinderGeometry(0.4, 0.42, 0.18, 8)), mat(0xd4a63a), 0, 1.35, 0);
+  part(b, geo('kpr-head', () => new THREE.IcosahedronGeometry(0.38, 0)), mat(0xf0c9a0), 0, 2.05, 0);
+  part(b, geo('kpr-hair', () => new THREE.ConeGeometry(0.42, 0.9, 7)), mat(0xc98a3a), 0, 1.95, -0.12);
+  const halo = part(b, geo('kpr-halo', () => new THREE.TorusGeometry(0.42, 0.04, 4, 16)), mat(0xffe08a, { emissive: 0xffc94a, emissiveIntensity: 1 }), 0, 2.6, 0);
+  halo.rotation.x = Math.PI / 2;
+  const staff = new THREE.Group();
+  staff.position.set(0.7, 1.15, 0.1);
+  part(staff, geo('kpr-staff', () => new THREE.CylinderGeometry(0.05, 0.05, 2.3, 5)), mat(0xd9c8a0), 0, 0, 0);
+  part(staff, geo('kpr-crystal', () => new THREE.OctahedronGeometry(0.26, 0)), mat(0xa8ffd0, { emissive: 0x3cd08a, emissiveIntensity: 1 }), 0, 1.3, 0);
+  b.add(staff);
+  r.weapon = staff;
+  addShield(r, 1.6);
+  return r;
+}
+
+export function makeShade(): Rig {
+  const r = rig();
+  const b = r.body;
+  part(b, geo('shd-legs', () => new THREE.CylinderGeometry(0.3, 0.4, 0.9, 6)), mat(0x24222e), 0, 0.45, 0);
+  part(b, geo('shd-cloak', () => new THREE.CylinderGeometry(0.3, 0.75, 1.5, 7)), mat(0x3a3250), 0, 1.25, 0);
+  part(b, geo('shd-head', () => new THREE.IcosahedronGeometry(0.34, 0)), mat(0xd8b898), 0, 2.05, 0);
+  part(b, geo('shd-hood', () => new THREE.ConeGeometry(0.45, 0.8, 6)), mat(0x2a2440), 0, 2.3, -0.05);
+  part(b, geo('shd-mask', () => new THREE.BoxGeometry(0.42, 0.14, 0.12)), mat(0x9a2a3a), 0, 2.0, 0.3);
+  const blades = new THREE.Group();
+  blades.position.set(0, 1.25, 0.2);
+  for (const sx of [-1, 1]) {
+    const d = part(blades, geo('shd-blade', () => new THREE.BoxGeometry(0.08, 0.08, 0.8)), mat(0xd8dce8, { metalness: 0.5 }), sx * 0.55, 0, 0.3);
+    d.rotation.y = sx * 0.2;
+  }
+  b.add(blades);
+  r.weapon = blades;
+  addShield(r, 1.5);
+  return r;
+}
+
+export function makeNeutral(big: boolean): Rig {
+  const r = rig(big ? 1.5 : 1);
+  const b = r.body;
+  const fur = mat(big ? 0x7a6a4a : 0x8a7a5a);
+  const body = part(b, geo('n-body', () => new THREE.DodecahedronGeometry(0.6, 0)), fur, 0, 0.65, 0);
+  body.scale.set(1.1, 0.9, 1.3);
+  part(b, geo('n-head', () => new THREE.IcosahedronGeometry(0.34, 0)), fur, 0, 0.95, 0.65);
+  for (const sx of [-1, 1]) {
+    const h = part(b, geo('n-horn', () => new THREE.ConeGeometry(0.08, 0.35, 4)), mat(0xe8dcc0), sx * 0.2, 1.25, 0.65);
+    h.rotation.z = -sx * 0.4;
+  }
+  part(b, geo('n-eyes', () => new THREE.BoxGeometry(0.3, 0.06, 0.06)), mat(0xffd27a, { emissive: 0xffa040, emissiveIntensity: 0.8 }), 0, 1.0, 0.95);
+  r.weapon = b.children[1];
+  return r;
+}
+
+/** Модели по id из снимка, кроме базовых */
+export const HERO_MODELS: Record<string, () => Rig> = {
+  ranger: makeRanger,
+  keeper: makeKeeper,
+  shade: makeShade,
+  n_small: () => makeNeutral(false),
+  n_big: () => makeNeutral(true),
+};
+
+/** Невидимость своего/союзного героя: полупрозрачные копии материалов */
+export function setGhost(r: Rig, on: boolean) {
+  const ud = r.root.userData as { ghost?: boolean; orig?: Map<THREE.Mesh, THREE.Material> };
+  if (!!ud.ghost === on) return;
+  ud.ghost = on;
+  ud.orig ??= new Map();
+  r.body.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    if (on) {
+      ud.orig!.set(m, m.material as THREE.Material);
+      const c = (m.material as THREE.Material).clone();
+      c.transparent = true;
+      c.opacity = 0.38;
+      m.material = c;
+    } else {
+      const orig = ud.orig!.get(m);
+      if (orig) {
+        (m.material as THREE.Material).dispose();
+        m.material = orig;
+      }
+    }
+  });
+}

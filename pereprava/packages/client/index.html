@@ -51,6 +51,7 @@
       <section class="pane" data-pane="home">
         <aside class="news panel">
           <h3>Что нового</h3>
+          <article><b>Версия 0.4</b>Игра с другом по сети 1 на 1 и 2 на 2, пять героев с ультимейтами, лесные лагеря и руна, 14 предметов, звук.</article>
           <article><b>Версия 0.3</b>Главное меню, профиль со статистикой матчей, три уровня сложности бота, настройки графики.</article>
           <article><b>Версия 0.2</b>Громила, скачок и щит, лавка с шестью предметами, вышки защищают своих героев.</article>
           <article><b>Версия 0.1</b>Карта с рекой, маг с огненным шаром, вышки, кристаллы и волны крипов.</article>
@@ -58,23 +59,7 @@
         <div class="heroTag" id="heroTag"><span class="role">Ваш герой</span><h2>Маг</h2><p>Дальний бой. Огненный шар, скачок и щит.</p></div>
       </section>
       <section class="pane" data-pane="heroes" hidden>
-        <div class="cards">
-          <article class="card2 panel">
-            <span class="role">Ваш герой</span><h3>Маг</h3>
-            <dl class="stats"><dt>Здоровье</dt><dd>600, +70 за уровень</dd><dt>Урон</dt><dd>42, +6 за уровень</dd><dt>Атака</dt><dd>дальняя, 6,5 м</dd><dt>Скорость</dt><dd>9</dd></dl>
-            <div class="skill"><kbd style="--k:#e0661c">Q</kbd><div><b>Огненный шар.</b> <span>Снаряд взрывается по площади: 110 урона, +15 за уровень. Перезарядка 5 с.</span></div></div>
-            <div class="skill"><kbd style="--k:#7a52e0">W</kbd><div><b>Скачок.</b> <span>Телепорт на 10 м. Перезарядка 10 с.</span></div></div>
-            <div class="skill"><kbd style="--k:#2a93ba">E</kbd><div><b>Щит.</b> <span>Поглощает 150 урона, +25 за уровень, 4 с. Перезарядка 14 с.</span></div></div>
-            <button class="ghost" data-focus="hero">Показать на сцене</button>
-          </article>
-          <article class="card2 panel">
-            <span class="role">Противник</span><h3>Громила</h3>
-            <dl class="stats"><dt>Здоровье</dt><dd>700, +80 за уровень</dd><dt>Урон</dt><dd>36, +6 за уровень</dd><dt>Атака</dt><dd>ближняя</dd><dt>Скорость</dt><dd>8,6</dd></dl>
-            <div class="skill"><kbd style="--k:#b0392c">R</kbd><div><b>Удар по земле.</b> <span>Замах 0,6 с, потом 90 урона по площади, +14 за уровень. Перезарядка 8 с.</span></div></div>
-            <div class="skill"><kbd style="--k:#555">?</kbd><div><b>Повадки.</b> <span>Добивает слабых крипов, бросается на героя с низким здоровьем, под вышку без крипов не лезет.</span></div></div>
-            <button class="ghost" data-focus="bot">Показать на сцене</button>
-          </article>
-        </div>
+        <div class="cards" id="heroCards"></div>
       </section>
       <section class="pane" data-pane="profile" hidden>
         <div class="pcard panel">
@@ -89,6 +74,12 @@
           <h3>Графика</h3>
           <div class="setrow">Качество картинки<div class="seg" role="radiogroup" aria-label="Качество" id="qSeg"><button data-v="low">Низкое</button><button data-v="mid">Среднее</button><button data-v="high">Высокое</button></div></div>
           <div class="setrow">Тени<div class="seg" style="--n:2" role="radiogroup" aria-label="Тени" id="shSeg"><button data-v="on">Включены</button><button data-v="off">Выключены</button></div></div>
+        </div>
+        <div class="pcard panel">
+          <h3>Звук</h3>
+          <label class="setrow">Общая громкость<input type="range" id="volMaster" min="0" max="1" step="0.05"></label>
+          <label class="setrow">Эффекты<input type="range" id="volSfx" min="0" max="1" step="0.05"></label>
+          <label class="setrow">Фон: ветер, река, птицы<input type="range" id="volAmb" min="0" max="1" step="0.05"></label>
         </div>
         <div class="pcard panel">
           <h3>Данные</h3>
@@ -113,6 +104,14 @@
       <div class="accbtns"><button class="ghost" id="declineBtn">Отклонить</button><button class="go" id="acceptBtn">Принять</button></div>
     </div>
   </div>
+  <div id="pick" hidden>
+    <div class="pickbox panel" role="dialog" aria-label="Выбор героя">
+      <header><h2>Выбор героя</h2><span class="pickT num" id="pickT">20</span></header>
+      <div class="pickgrid" id="pickGrid"></div>
+      <div class="pickfoot"><p id="pickInfo"></p><button class="go" id="pickGo">В бой</button></div>
+    </div>
+  </div>
+  <div id="board" class="panel" hidden role="dialog" aria-label="Счёт матча"></div>
   <div id="loading" hidden>
     <div class="vsbox">
       <div class="vs"><div class="side a"><small id="ldName">Игрок</small><b>Маг</b></div><i>VS</i><div class="side e"><small id="ldDiff">Бот, обычный</small><b>Громила</b></div></div>

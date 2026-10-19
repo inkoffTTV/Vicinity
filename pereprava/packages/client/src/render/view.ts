@@ -1,8 +1,8 @@
 // Отображение мира по снимкам. Клиент ничего не решает: позиции берёт из двух последних снимков
 // (интерполяция), анимации — из тиков атаки/урона/каста, эффекты — из событий.
 import * as THREE from 'three';
-import { ABILITIES, DT, groundH, unitY, type ProjSnap, type SimEvent, type Snapshot, type UnitSnap } from '@pereprava/shared';
-import { makeModel, type Rig } from './models';
+import { ABILITIES, DT, groundH, unitY, type ProjSnap, type SimEvent, type Snapshot, type UnitSnap, type ZoneSnap } from '@pereprava/shared';
+import { makeModel, setGhost, type Rig } from './models';
 import type { SceneKit } from './scene';
 import { animateRig } from './anim';
 
@@ -23,7 +23,20 @@ interface VUnit {
   y: number;
   seen: number;
   ring?: THREE.Mesh;
+  stun?: THREE.Mesh;
+  root?: THREE.Mesh;
 }
+
+interface VZone {
+  snap: ZoneSnap;
+  group: THREE.Group;
+  disc: THREE.Mesh;
+  edge: THREE.Mesh;
+  dome?: THREE.Mesh;
+}
+
+const ZONE_COLORS: Record<string, number> = { meteor: 0xff6a1f, volley: 0xc8f08a, dome: 0xffe08a };
+const RUNE_COLORS: Record<string, number> = { haste: 0xff4a4a, damage: 0x4a8aff, regen: 0x4aff8a, shield: 0xf1c453 };
 
 interface VProj {
   mesh: THREE.Mesh;
@@ -59,6 +72,9 @@ export class GameView {
   private freePuffs: Puff[] = [];
   private projMats = new Map<number, THREE.MeshBasicMaterial>();
   private marker: THREE.Mesh;
+  private zones = new Map<number, VZone>();
+  private rune: THREE.Mesh;
+  private runeKind = '';
   private markerT = 0;
   /** Тик, на котором сейчас отрисовка (дробный) */
   renderTick = 0;
@@ -89,6 +105,9 @@ export class GameView {
       new THREE.MeshBasicMaterial({ color: 0x7dff9a, transparent: true, opacity: 0, depthWrite: false }),
     );
     kit.scene.add(this.marker);
+    this.rune = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.7, flatShading: true }));
+    this.rune.visible = false;
+    kit.scene.add(this.rune);
   }
 
   get scene() {
@@ -125,6 +144,55 @@ export class GameView {
         this.scene.remove(p.mesh);
         this.projs.delete(id);
       }
+    const seenZ = new Set<number>();
+    for (const z of s.zones ?? []) {
+      seenZ.add(z.id);
+      const v = this.zones.get(z.id) ?? this.addZone(z);
+      v.snap = z;
+    }
+    for (const [id, v] of this.zones)
+      if (!seenZ.has(id)) {
+        this.scene.remove(v.group);
+        this.zones.delete(id);
+      }
+    if (s.rune) {
+      this.rune.visible = true;
+      this.rune.position.set(s.rune.x, unitY(s.rune.x, s.rune.z) + 1, s.rune.z);
+      if (this.runeKind !== s.rune.kind) {
+        this.runeKind = s.rune.kind;
+        const m = this.rune.material as THREE.MeshStandardMaterial;
+        m.color.setHex(RUNE_COLORS[s.rune.kind] ?? 0xffffff);
+        m.emissive.setHex(RUNE_COLORS[s.rune.kind] ?? 0xffffff);
+      }
+    } else this.rune.visible = false;
+  }
+
+  private addZone(z: ZoneSnap): VZone {
+    const color = ZONE_COLORS[z.k] ?? 0xffffff;
+    const group = new THREE.Group();
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, depthWrite: false }),
+    );
+    const edge = new THREE.Mesh(
+      new THREE.RingGeometry(0.94, 1, 48).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false }),
+    );
+    group.add(disc, edge);
+    let dome: THREE.Mesh | undefined;
+    if (z.k === 'dome') {
+      dome = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
+      );
+      group.add(dome);
+    }
+    group.scale.setScalar(z.r);
+    group.position.set(z.x, Math.max(groundH(z.x, z.z), -0.4) + 0.1, z.z);
+    this.scene.add(group);
+    const v: VZone = { snap: z, group, disc, edge, dome };
+    this.zones.set(z.id, v);
+    return v;
   }
 
   private addUnit(us: UnitSnap): VUnit {
@@ -272,8 +340,22 @@ export class GameView {
         if (s.k === 'ancient') v.rig.gem.position.y = 5 + Math.sin(time * 1.5) * 0.25;
       }
       this.updateCastRing(v, s);
+      this.updateStatus(v, s, time);
     }
     for (const p of this.projs.values()) this.frameProj(p, a, dt);
+    for (const z of this.zones.values()) {
+      const pending = z.snap.d > 0;
+      const dm = z.disc.material as THREE.MeshBasicMaterial;
+      const em = z.edge.material as THREE.MeshBasicMaterial;
+      // Метеор до падения: красный круг-предупреждение, мигает
+      dm.opacity = pending ? 0.12 + 0.1 * Math.abs(Math.sin(time * 10)) : z.snap.k === 'dome' ? 0.08 : 0.2 + 0.08 * Math.sin(time * 6);
+      em.opacity = pending ? 0.9 : 0.55;
+      if (z.dome) z.dome.rotation.y += dt * 0.6;
+    }
+    if (this.rune.visible) {
+      this.rune.rotation.y += dt * 2;
+      this.rune.position.y += Math.sin(time * 3) * 0.004;
+    }
     this.updatePuffs(dt);
     this.markerT = Math.max(0, this.markerT - dt);
     const mm = this.marker.material as THREE.MeshBasicMaterial;
@@ -302,6 +384,30 @@ export class GameView {
     (v.ring.material as THREE.MeshBasicMaterial).opacity = 0.15 + 0.35 * k;
   }
 
+  /** Значки состояний: оглушение (кольцо над головой), корни (у ног), невидимость (полупрозрачность) */
+  private updateStatus(v: VUnit, s: UnitSnap, time: number) {
+    const fxs = s.fx ?? [];
+    const stun = fxs.includes('stun');
+    const root = fxs.includes('root');
+    if (stun && !v.stun) {
+      v.stun = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.07, 4, 12), new THREE.MeshBasicMaterial({ color: 0xffe066 }));
+      v.stun.rotation.x = Math.PI / 2;
+      v.rig.root.add(v.stun);
+    }
+    if (v.stun) {
+      v.stun.visible = stun;
+      v.stun.position.y = s.bh - 0.2;
+      v.stun.rotation.z = time * 6;
+    }
+    if (root && !v.root) {
+      v.root = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.85, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x8a5ce0, transparent: true, opacity: 0.7, depthWrite: false }));
+      v.rig.root.add(v.root);
+      v.root.position.y = 0.08;
+    }
+    if (v.root) v.root.visible = root;
+    if (s.k === 'hero') setGhost(v.rig, fxs.includes('invisible'));
+  }
+
   private frameProj(p: VProj, a: number, dt: number) {
     const s = p.snap;
     const q = p.prev ?? s;
@@ -317,13 +423,17 @@ export class GameView {
       }
       p.mesh.position.set(x, p.y, z);
     } else {
+      if (s.tid) {
+        const t = this.units.get(s.tid);
+        if (t) p.y += (t.y + hitY(t.snap.k) - p.y) * Math.min(1, dt * 6);
+      }
       p.mesh.position.set(x, p.y, z);
       p.mesh.rotation.x += dt * 8;
       p.mesh.rotation.y += dt * 6;
       p.trail -= dt;
       if (p.trail <= 0) {
         p.trail = 0.035;
-        this.puff(x, p.y, z, 0xff7a1f, 0.35, 0.35, 1.2);
+        this.puff(x, p.y, z, s.k === 'fireball' ? 0xff7a1f : s.c, 0.35 * Math.max(0.6, s.s), 0.35, 1.2);
       }
     }
   }
@@ -481,6 +591,9 @@ export class GameView {
   /** Убрать всё (выход в меню) */
   clear() {
     for (const id of [...this.units.keys()]) this.removeUnit(id);
+    for (const z of this.zones.values()) this.scene.remove(z.group);
+    this.zones.clear();
+    this.rune.visible = false;
     for (const p of this.projs.values()) this.scene.remove(p.mesh);
     this.projs.clear();
     for (const f of this.puffs) this.scene.remove(f.mesh);

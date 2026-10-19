@@ -18,6 +18,8 @@ export interface ItemDef {
   /** Скорость атаки, доля */
   atkSpeed?: number;
   lifesteal?: number;
+  /** Сокращение перезарядки способностей, доля */
+  cdr?: number;
   /** Одна штука на героя */
   unique?: boolean;
   /** Расходуется при использовании */
@@ -86,6 +88,91 @@ export const ITEMS: ItemDef[] = [
     spellAmp: 0.4,
     color: '#ff9a3d',
     icon: '<path d="M12 3c1 4 5 5.5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-4 2.5-5 .5 2 1.5 3 2.5 3 0-3-1-5 0-8z"/>',
+  },
+  {
+    id: 'gloves',
+    name: 'Перчатки ловкости',
+    desc: '+25% к скорости атаки',
+    price: 350,
+    atkSpeed: 0.25,
+    color: '#ffb0d8',
+    icon: '<path d="M7 21v-8l-2-4 2-1 2 3V4a1.5 1.5 0 0 1 3 0v6-7a1.5 1.5 0 0 1 3 0v7-5a1.5 1.5 0 0 1 3 0v10l-2 6z"/>',
+  },
+  {
+    id: 'mail',
+    name: 'Кольчуга',
+    desc: '+5 к броне (меньше физического урона)',
+    price: 400,
+    armor: 5,
+    color: '#b8c4d4',
+    icon: '<path d="M6 4h12l2 5-3 2v9H7v-9L4 9z"/><path d="M9 12h6M9 15h6"/>',
+  },
+  {
+    id: 'fang',
+    name: 'Клык вампира',
+    desc: 'Удары лечат на 12% урона',
+    price: 450,
+    lifesteal: 0.12,
+    color: '#ff6a7a',
+    icon: '<path d="M6 4c4 1 8 1 12 0-1 6-3 12-6 16-3-4-5-10-6-16z"/>',
+  },
+  {
+    id: 'stone',
+    name: 'Камень странника',
+    desc: 'Мгновенный перенос на 9 м к прицелу. Перезарядка 14 с',
+    price: 750,
+    active: true,
+    cooldown: 14,
+    unique: true,
+    color: '#b89aff',
+    icon: '<path d="M12 3l6 6-6 12L6 9z"/><path d="M6 9h12"/>',
+  },
+  {
+    id: 'recall',
+    name: 'Свиток возвращения',
+    desc: 'Через 3 с переносит к фонтану. Урон или приказ «идти» прерывают',
+    price: 60,
+    active: true,
+    consumable: true,
+    color: '#f1c453',
+    icon: '<path d="M6 4h10a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h10"/><path d="M15 13l3 3-3 3"/>',
+  },
+  {
+    id: 'warblade',
+    name: 'Боевой клинок',
+    desc: 'Собирается из посоха силы и перчаток: +30 к урону, +35% к скорости атаки, удары лечат на 8%',
+    price: 1250,
+    parts: ['staff', 'gloves'],
+    dmg: 30,
+    atkSpeed: 0.35,
+    lifesteal: 0.08,
+    color: '#ffcf5a',
+    icon: '<path d="M14 4l6 0 0 6-9 9-3-3z"/><path d="M5 16l3 3M4 20l2-2"/>',
+  },
+  {
+    id: 'archstaff',
+    name: 'Посох архимага',
+    desc: 'Собирается из сердца пламени и кольца жизни: +60% к урону способностей, +6 здоровья в секунду, перезарядка способностей на 15% короче',
+    price: 1500,
+    parts: ['flame', 'ring'],
+    spellAmp: 0.6,
+    regen: 6,
+    cdr: 0.15,
+    color: '#ff8a5a',
+    icon: '<path d="M7 21L16 8"/><path d="M16 3l2 3 3 1-2 3-3 1-1-3-3-2 3-1z"/>',
+  },
+  {
+    id: 'bulwark',
+    name: 'Оплот',
+    desc: 'Собирается из плаща стража и кольчуги: +260 к здоровью, +8 к броне. Применение: снимает замедления и корни, 3 с на 40% меньше урона. Перезарядка 30 с',
+    price: 1350,
+    parts: ['cloak', 'mail'],
+    hp: 260,
+    armor: 8,
+    active: true,
+    cooldown: 30,
+    color: '#7fc8ff',
+    icon: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M12 8v8M8 12h8"/>',
   },
 ];
 

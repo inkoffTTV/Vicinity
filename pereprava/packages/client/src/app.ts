@@ -5,6 +5,8 @@ import { LocalSession } from './game/local';
 import { NetSession } from './game/net';
 import { Connection } from './net/connection';
 import { Lobby } from './ui/lobby';
+import { Sound, type Volumes } from './audio/sound';
+import { renderHeroCards, renderPickGrid, scoreTable } from './ui/screens';
 import type { Session } from './game/session';
 import { attachInput } from './game/input';
 import { applyQuality, createScene, type Quality } from './render/scene';
@@ -15,7 +17,7 @@ import { store } from './ui/store';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-type State = 'menu' | 'search' | 'accept' | 'loading' | 'play' | 'over';
+type State = 'menu' | 'search' | 'accept' | 'pick' | 'loading' | 'play' | 'over';
 
 interface Profile {
   name: string;
@@ -27,6 +29,8 @@ interface Settings {
   diff: string;
   quality: Quality;
   shadows: boolean;
+  hero: string;
+  vol: Volumes;
 }
 
 const TIPS = [
@@ -52,8 +56,14 @@ export class App {
     diff: 'normal',
     quality: matchMedia('(pointer: coarse)').matches ? 'mid' : 'high',
     shadows: true,
+    hero: 'mage',
+    vol: { master: 0.8, sfx: 0.9, ambient: 0.5 },
     ...store.get<Partial<Settings>>('settings', {}),
   };
+  readonly sound = new Sound(this.settings.vol);
+  /** Герой бота в одиночной игре (случайный другой) */
+  private enemyHero = 'brute';
+  private pickT = 0;
   speed = /x4/.test(location.hash) ? 4 : 1;
   readonly conn = new Connection(() => this.playerName());
   readonly lobby: Lobby;
@@ -125,14 +135,23 @@ export class App {
 
   // ── Сессии ──
 
-  private makeLocal(): LocalSession {
+  private makeLocal(seed = 20261019): LocalSession {
+    const hero = HERO[this.settings.hero] ? this.settings.hero : 'mage';
+    if (this.enemyHero === hero) this.enemyHero = hero === 'brute' ? 'mage' : 'brute';
     return new LocalSession({
-      seed: 20261019,
+      seed,
+      jungle: true,
       players: [
-        { name: this.playerName(), team: 0, hero: 'mage', bot: null },
-        { name: 'Громила', team: 1, hero: 'brute', bot: this.settings.diff },
+        { name: this.playerName(), team: 0, hero, bot: null },
+        { name: HERO[this.enemyHero].name, team: 1, hero: this.enemyHero, bot: this.settings.diff },
       ],
     });
+  }
+
+  /** Случайный противник для одиночной игры — не тот же герой */
+  private rollEnemy() {
+    const ids = Object.keys(HERO).filter((h) => h !== this.settings.hero);
+    this.enemyHero = ids[Math.floor(Math.random() * ids.length)];
   }
 
   private showPreview() {
@@ -151,7 +170,22 @@ export class App {
 
   private cast(slot: number, aim: { x: number; z: number } | null) {
     if (this.state !== 'play' || !this.snap?.me?.alive) return;
-    this.send(aim ? { c: 'cast', slot, x: aim.x, z: aim.z } : { c: 'cast', slot });
+    if (!aim) return this.send({ c: 'cast', slot });
+    // Способности «в цель»: враг рядом с прицелом
+    let id = 0;
+    let bd = 2.5;
+    for (const v of this.view.units.values())
+      if (!v.snap.dead && v.snap.tm !== this.view.myTeam && Math.hypot(v.x - aim.x, v.z - aim.z) < bd) {
+        bd = Math.hypot(v.x - aim.x, v.z - aim.z);
+        id = v.id;
+      }
+    this.send({ c: 'cast', slot, x: aim.x, z: aim.z, id: id || undefined });
+  }
+
+  /** Пинг на карте: союзники видят метку и слышат сигнал */
+  ping(x: number, z: number, kind: 'look' | 'danger' | 'go' = 'look') {
+    if (this.state !== 'play') return;
+    this.send({ c: 'ping', x, z, kind });
   }
 
   private useItem(slot: number, aim: { x: number; z: number } | null) {
@@ -198,7 +232,9 @@ export class App {
     this.view.menuFocus = null;
     this.snap = null;
     this.lobby.close();
-    for (const id of ['menu', 'loading', 'accept', 'screen']) $(id).hidden = true;
+    this.sound.night = this.kit.night;
+    this.sound.startAmbient();
+    for (const id of ['menu', 'loading', 'accept', 'screen', 'pick']) $(id).hidden = true;
     this.setState('play');
     this.hud.toast('Матч начался. Крипы выходят на линию');
   }
@@ -206,7 +242,9 @@ export class App {
   // ── Матч ──
 
   startGame() {
-    const local = this.makeLocal();
+    const local = this.makeLocal((Date.now() % 2147483646) + 1);
+    this.sound.night = this.kit.night;
+    this.sound.startAmbient();
     local.speed = this.speed;
     this.session = local;
     this.view.clear();
@@ -225,7 +263,7 @@ export class App {
     $('accept').hidden = true;
     $('screen').hidden = true;
     this.setState('play');
-    this.hud.toast('Бот: ' + difficulty(this.settings.diff).name + '. Крипы выходят на линию');
+    this.hud.toast(`Против вас ${HERO[this.enemyHero].name}, бот ${difficulty(this.settings.diff).name}. Крипы выходят на линию`);
   }
 
   private endGame(s: Snapshot) {
@@ -242,9 +280,13 @@ export class App {
     p.history.unshift({ w: win, t: Math.round(s.time), k: s.kills[this.view.myTeam], d: s.kills[1 - this.view.myTeam], diff: online ? 'net' : this.settings.diff, lh: mine.lastHits, hero: me.hero });
     p.history = p.history.slice(0, 8);
     store.set('profile', p);
+    this.sound.play(win ? 'win' : 'lose');
+    $('board').hidden = true;
+    $('card').classList.add('wide');
     $('card').innerHTML = `<h1>${win ? 'Победа' : 'Поражение'}</h1>
       <p>${win ? 'Кристалл врага разрушен.' : 'Наш кристалл пал.'} ${online ? 'Сетевой матч.' : 'Бот: ' + difficulty(this.settings.diff).name + '.'}</p>
       <dl class="keys"><dt>${fmt(s.time)}</dt><dd>длительность матча</dd><dt>${s.kills[this.view.myTeam]} : ${s.kills[1 - this.view.myTeam]}</dt><dd>убийства героев</dd><dt>${mine.lastHits}</dt><dd>добито крипов</dd><dt>${mine.gold}</dt><dd>заработано золота</dd><dt>${me.level}</dt><dd>уровень героя</dd></dl>
+      ${scoreTable(s, this.view.myTeam, me.slot)}
       <div class="actions"><button class="go alt" id="toMenu">В меню</button><button class="go" id="again">${online ? 'В лобби' : 'Реванш'}</button></div>`;
     $('screen').hidden = false;
     $('again').addEventListener('click', () => (online ? this.conn.send({ t: 'start' }) : this.startGame()));
@@ -260,7 +302,7 @@ export class App {
   private setState(s: State) {
     this.state = s;
     this.app.classList.toggle('inmenu', s !== 'play' && s !== 'over');
-    if (s === 'menu' || s === 'search' || s === 'accept' || s === 'loading') this.updateMenuFocus();
+    if (s === 'menu' || s === 'search' || s === 'accept' || s === 'pick' || s === 'loading') this.updateMenuFocus();
   }
 
   private playerName() {
@@ -353,20 +395,103 @@ export class App {
     $('declineBtn').addEventListener('click', () => this.backToMenu('Вы отклонили игру'));
     $('acceptBtn').addEventListener('click', () => {
       if (this.state !== 'accept') return;
-      this.setState('loading');
-      this.loadT = 0;
+      this.sound.play('ui');
+      this.setState('pick');
+      this.pickT = 20;
       $('accept').hidden = true;
-      $('loading').hidden = false;
-      $('ldDiff').textContent = 'Бот, ' + difficulty(this.settings.diff).name;
-      $('ldTip').textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
+      $('pick').hidden = false;
+      this.rollEnemy();
+      renderPickGrid($('pickGrid'), this.settings.hero, (id) => {
+        this.pickHero(id);
+        this.sound.play('ui');
+      });
+      this.updatePickInfo();
+      $('pickGo').focus();
     });
+    $('pickGo').addEventListener('click', () => this.toLoading());
+    // Звук
+    const vol = (id: string, key: keyof Volumes) => {
+      const el = $<HTMLInputElement>(id);
+      el.value = String(this.settings.vol[key]);
+      el.addEventListener('input', () => {
+        this.settings.vol = { ...this.settings.vol, [key]: +el.value };
+        store.set('settings', this.settings);
+        this.sound.setVolumes(this.settings.vol);
+      });
+      el.addEventListener('change', () => this.sound.play('ui'));
+    };
+    vol('volMaster', 'master');
+    vol('volSfx', 'sfx');
+    vol('volAmb', 'ambient');
+    this.renderHeroes();
+    // Таблица счёта: Tab на компьютере, касание счёта на телефоне
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Tab' && this.state === 'play') {
+        e.preventDefault();
+        this.showBoard(true);
+      }
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Tab') this.showBoard(false);
+    });
+    $('score').style.pointerEvents = 'auto';
+    $('score').addEventListener('click', () => this.showBoard($('board').hidden));
+    $('board').addEventListener('click', () => this.showBoard(false));
     this.renderName();
     this.setFocus('hero');
   }
 
+  private pickHero(id: string) {
+    if (!HERO[id]) return;
+    this.settings.hero = id;
+    store.set('settings', this.settings);
+    if (this.enemyHero === id) this.rollEnemy();
+    this.updatePickInfo();
+    this.renderHeroes();
+    if (this.state === 'menu' || this.state === 'pick') {
+      this.preview = this.makeLocal();
+      this.showPreview();
+      this.setFocus('hero');
+    }
+  }
+
+  private updatePickInfo() {
+    $('pickInfo').textContent = `Вы: ${HERO[this.settings.hero].name}. Противник: ${HERO[this.enemyHero].name}, бот ${difficulty(this.settings.diff).name}.`;
+  }
+
+  private renderHeroes() {
+    renderHeroCards($('heroCards'), this.settings.hero, (id) => {
+      this.pickHero(id);
+      this.sound.play('ui');
+    });
+  }
+
+  private toLoading() {
+    if (this.state !== 'pick') return;
+    this.setState('loading');
+    this.loadT = 0;
+    $('pick').hidden = true;
+    $('loading').hidden = false;
+    const ld = document.querySelectorAll('#loading .side b');
+    ld[0].textContent = HERO[this.settings.hero].name;
+    ld[1].textContent = HERO[this.enemyHero].name;
+    $('ldDiff').textContent = 'Бот, ' + difficulty(this.settings.diff).name;
+    $('ldTip').textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
+  }
+
+  showBoard(on: boolean) {
+    const s = this.hud.snap;
+    if (!on || !s?.me || this.state !== 'play') {
+      $('board').hidden = true;
+      return;
+    }
+    $('board').innerHTML = scoreTable(s, this.view.myTeam, s.me.slot);
+    $('board').hidden = false;
+  }
+
   private setFocus(k: 'hero' | 'bot') {
     this.menuFocusBot = k === 'bot';
-    const def = HERO[k === 'bot' ? 'brute' : 'mage'];
+    const def = HERO[k === 'bot' ? this.enemyHero : this.settings.hero];
     const tag = $('heroTag');
     tag.children[0].textContent = k === 'bot' ? 'Противник' : 'Ваш герой';
     tag.children[1].textContent = def.name;
@@ -401,6 +526,8 @@ export class App {
     this.session = null;
     this.snap = null;
     $('screen').hidden = true;
+    $('pick').hidden = true;
+    $('board').hidden = true;
     $('menu').hidden = false;
     this.preview = this.makeLocal();
     this.showPreview();
@@ -428,6 +555,10 @@ export class App {
       $('accRing').style.setProperty('--p', Math.max(0, this.acceptT / 10).toFixed(3));
       $('accT').textContent = String(Math.max(0, Math.ceil(this.acceptT)));
       if (this.acceptT <= 0) this.backToMenu('Время на принятие вышло');
+    } else if (this.state === 'pick') {
+      this.pickT -= dt;
+      $('pickT').textContent = String(Math.max(0, Math.ceil(this.pickT)));
+      if (this.pickT <= 0) this.toLoading();
     } else if (this.state === 'loading') {
       this.loadT += dt;
       $('ldBar').style.width = Math.min(100, (this.loadT / 1.8) * 100) + '%';
@@ -466,6 +597,7 @@ export class App {
           this.view.handleEvents(s.events, this.session.slot);
           this.snap = s;
           this.hud.events(s.events);
+          this.sound.events(s.events, s, { x: this.view.camT.x, z: this.view.camT.z }, this.view.myUnit, this.session.slot);
           if (s.winner !== -1) this.endGame(s);
         }
       // Интерфейс в сети — по самому свежему снимку (золото, перезарядки без задержки интерполяции)
@@ -494,6 +626,8 @@ export class App {
     this.kit.renderer.render(this.kit.scene, this.kit.camera);
     this.view.updateBars();
     if (this.state === 'play' || this.state === 'over') this.hud.update(dt);
+    if (!$('board').hidden) this.showBoard(true);
+    this.sound.tick(dt);
     this.mmT -= dt;
     if (this.mmT <= 0) {
       this.mmT = 0.1;

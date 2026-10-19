@@ -6,7 +6,7 @@
 import { difficulty } from '../data/difficulty';
 import { HERO } from '../data/heroes';
 import { ITEM } from '../data/items';
-import { ANCIENTS, FOUNTAINS, laneDir, MAP_LIMIT, SPAWNS, TOWERS, treeGrid, type P2, type Tree } from '../map';
+import { ANCIENTS, FOUNTAINS, INNER_TOWERS, laneDir, MAP_LIMIT, SPAWNS, TOWERS, treeGrid, type P2, type Tree } from '../map';
 import { RNG_MOD, rngNext } from '../rng';
 import type {
   Camp,
@@ -22,11 +22,12 @@ import type {
   Team,
   Unit,
   UnitKind,
+  Zone,
 } from '../types';
 import { ABILITIES, castAbility, fireCasting } from './abilities';
 import { botThink } from './ai';
-import { updateCamps, updateNeutral, setupCamps, updateRunes } from './jungle';
-import { hasFlag, modValue, tickModifiers } from './modifiers';
+import { aggroNeutral, updateCamps, updateNeutral, setupCamps, updateRunes } from './jungle';
+import { addMod, hasFlag, modValue, removeMod, tickModifiers } from './modifiers';
 import { useItem } from './items';
 
 export const TICK_RATE = 30;
@@ -37,6 +38,28 @@ export const MAX_LEVEL = 10;
 export const ULT_LEVEL = 6;
 export const INVENTORY = 6;
 export const TEAM_COLORS = [0x3ec7a1, 0xe2504a] as const;
+
+/** Числа баланса зданий и крипов (подбирались прогонами бот против бота: npm run balance) */
+export const BALANCE = {
+  towerHp: 2600,
+  towerDmg: 95,
+  towerArmor: 6,
+  ancientHp: 5500,
+  ancientArmor: 6,
+  /** Рост здоровья и урона крипов за минуту матча, доля */
+  creepGrowth: 0.05,
+  /** «Укрепления»: первые минуты здания получают меньше урона */
+  fortifyUntil: 10 * 60,
+  fortify: 0.5,
+  /** Каждая разрушенная вражеская вышка усиливает свои волны */
+  creepPerTower: 0.25,
+  /** После этой минуты здания с каждой минутой получают больше урона (затяжные матчи заканчиваются) */
+  decayFrom: 20,
+  decayPerMin: 0.08,
+  /** Возрождение: база + за уровень, с (прототип: 4 + 1,2 за уровень) */
+  respawnBase: 4,
+  respawnLvl: 2,
+};
 
 export interface PlayerSetup {
   name: string;
@@ -70,6 +93,7 @@ export interface World {
   rune: Rune | null;
   nextRune: number;
   jungle: boolean;
+  zones: Zone[];
 }
 
 // Индекс юнитов по id — вне состояния (его можно пересобрать в любой момент)
@@ -149,6 +173,7 @@ export function recalc(u: Unit) {
   let armor = def.armor;
   let atkSpeed = 0;
   let lifesteal = 0;
+  let cdr = 0;
   for (const id of h.items) {
     if (!id) continue;
     const it = ITEM[id];
@@ -160,6 +185,7 @@ export function recalc(u: Unit) {
     armor += it.armor ?? 0;
     atkSpeed += it.atkSpeed ?? 0;
     lifesteal += it.lifesteal ?? 0;
+    cdr += it.cdr ?? 0;
   }
   u.maxHp = hp;
   u.dmg = dmg;
@@ -170,6 +196,7 @@ export function recalc(u: Unit) {
   h.spellAmp = amp;
   h.bonusAtkSpeed = atkSpeed;
   h.lifesteal = lifesteal;
+  h.cdr = Math.min(0.4, cdr);
   if (old) u.hp = Math.min(u.maxHp, u.hp + Math.max(0, u.maxHp - old));
 }
 
@@ -198,8 +225,9 @@ export function createWorld(setup: MatchSetup): World {
     pending: [],
     camps: [],
     rune: null,
-    nextRune: 0,
+    nextRune: 90,
     jungle: !!setup.jungle,
+    zones: [],
   };
   const perTeam = [0, 0];
   setup.players.forEach((ps, slot) => {
@@ -240,6 +268,8 @@ export function createWorld(setup: MatchSetup): World {
       bonusArmor: 0,
       bonusAtkSpeed: 0,
       lifesteal: 0,
+      cdr: 0,
+      stacks: 0,
     };
     recalc(u);
     u.hp = u.maxHp;
@@ -256,20 +286,28 @@ export function createWorld(setup: MatchSetup): World {
     });
   });
   for (const t of [0, 1] as Team[])
-    addUnit(w, {
-      kind: 'tower',
-      team: t,
-      model: 'tower',
-      x: TOWERS[t].x,
-      z: TOWERS[t].z,
-      maxHp: 1300,
-      dmg: 70,
-      range: 12,
-      atkInt: 1.2,
-      ranged: true,
-      radius: 2.2,
-      barH: 8.4,
-    });
+    for (const [tier, pos] of [
+      [1, TOWERS[t]],
+      [2, INNER_TOWERS[t]],
+    ] as const)
+      addUnit(w, {
+        kind: 'tower',
+        team: t,
+        model: 'tower',
+        tier,
+        x: pos.x,
+        z: pos.z,
+        maxHp: BALANCE.towerHp,
+        dmg: BALANCE.towerDmg,
+        armor: BALANCE.towerArmor,
+        range: 12,
+        atkInt: 1.2,
+        ranged: true,
+        radius: 2.2,
+        barH: 8.4,
+        // Внутренняя вышка неуязвима, пока стоит внешняя
+        invuln: tier === 2,
+      });
   for (const t of [0, 1] as Team[])
     addUnit(w, {
       kind: 'ancient',
@@ -277,7 +315,8 @@ export function createWorld(setup: MatchSetup): World {
       model: 'ancient',
       x: ANCIENTS[t].x,
       z: ANCIENTS[t].z,
-      maxHp: 2500,
+      maxHp: BALANCE.ancientHp,
+      armor: BALANCE.ancientArmor,
       radius: 3.6,
       barH: 8.6,
       invuln: true,
@@ -291,7 +330,11 @@ export function createWorld(setup: MatchSetup): World {
 export const heroOf = (w: World, slot: number) => unitById(w, w.players[slot]?.unit ?? 0);
 export const playerOf = (w: World, u: Unit) => (u.hero ? w.players[u.hero.player] : undefined);
 export const heroes = (w: World) => w.units.filter((u) => u.kind === 'hero');
-export const towerOf = (w: World, team: number) => w.units.find((u) => u.kind === 'tower' && u.team === team);
+/** Передняя вышка команды: живая с наименьшим ярусом (или последняя павшая, если живых нет) */
+export const towerOf = (w: World, team: number) => {
+  const ts = w.units.filter((u) => u.kind === 'tower' && u.team === team).sort((a, b) => (a.tier ?? 1) - (b.tier ?? 1));
+  return ts.find((u) => u.alive) ?? ts[ts.length - 1];
+};
 export const ancientOf = (w: World, team: number) => w.units.find((u) => u.kind === 'ancient' && u.team === team);
 export const nearShop = (u: Unit) =>
   u.alive && u.team !== 2 && Math.hypot(u.x - FOUNTAINS[u.team].x, u.z - FOUNTAINS[u.team].z) < SHOP_RADIUS;
@@ -301,7 +344,7 @@ export function nearestEnemy(w: World, u: Unit, r: number, filter?: (v: Unit) =>
   let best: Unit | null = null;
   let bd = 1e9;
   for (const v of w.units) {
-    if (!v.alive || v.team === u.team || v.team === 2 || v.invuln || (filter && !filter(v))) continue;
+    if (!v.alive || v.team === u.team || v.team === 2 || v.invuln || hasFlag(v, 'invisible') || (filter && !filter(v))) continue;
     const d = dist(u, v) - v.radius;
     if (d < r && d < bd) {
       bd = d;
@@ -337,6 +380,7 @@ function applyCommand(w: World, slot: number, cmd: Command) {
     case 'move':
       if (!u.alive || !okNum(cmd.x) || !okNum(cmd.z)) return;
       cancelCast(u);
+      removeMod(u, 'recall');
       h.order = { type: 'move', x: clamp(cmd.x, -58, 58), z: clamp(cmd.z, -58, 58), st: 0, best: Infinity };
       return;
     case 'attack': {
@@ -458,6 +502,15 @@ export function damage(w: World, t: Unit, amt: number, src: Unit | null, type: D
   if (type === 'physical') amt *= armorMult(t.armor + modValue(t, 'armor'));
   else if (type === 'magical') amt *= 1 - t.magicRes;
   amt *= 1 + modValue(t, 'vuln');
+  amt *= 1 - Math.min(0.8, modValue(t, 'resist'));
+  if (t.kind === 'tower' || t.kind === 'ancient') {
+    if (w.time < BALANCE.fortifyUntil) amt *= 1 - BALANCE.fortify;
+    const late = w.time / 60 - BALANCE.decayFrom;
+    if (late > 0) amt *= 1 + BALANCE.decayPerMin * late;
+  }
+  // Здания без своих вражеских крипов рядом получают меньше урона (защита от «прокрадывания»)
+  if ((t.kind === 'tower' || t.kind === 'ancient') && src?.kind === 'hero' && !w.units.some((c) => c.alive && c.kind === 'creep' && c.team === src.team && dist(c, t) < 14))
+    amt *= 1 - BACKDOOR;
   // Щит поглощает урон первым
   let shielded = false;
   for (const m of t.mods)
@@ -474,6 +527,7 @@ export function damage(w: World, t: Unit, amt: number, src: Unit | null, type: D
   }
   t.hp -= amt;
   t.hurtTick = w.tick;
+  if (t.kind === 'neutral' && src) aggroNeutral(w, t, src);
   emit(w, { e: 'hit', id: t.id, src: src?.id ?? 0, amt, shield: shielded });
   if (src?.hero && t.kind === 'hero') {
     const sp = w.players[src.hero.player];
@@ -517,7 +571,7 @@ function kill(w: World, t: Unit, src: Unit | null) {
     h.order = null;
     h.casting = null;
     t.mods = [];
-    h.respawn = 4 + h.level * 1.2;
+    h.respawn = BALANCE.respawnBase + h.level * BALANCE.respawnLvl;
     const team = t.team as Team;
     w.kills[1 - team]++;
     fx(w, t.x, t.z, 1, team ? 0xff6a5a : 0x8f95ff, 1, 0.6, 2);
@@ -565,11 +619,15 @@ function kill(w: World, t: Unit, src: Unit | null) {
     return;
   }
   if (t.kind === 'tower') {
-    const an = ancientOf(w, t.team);
-    if (an) an.invuln = false;
+    const inner = w.units.find((u) => u.kind === 'tower' && u.team === t.team && u.alive && (u.tier ?? 1) > (t.tier ?? 1));
+    if (inner) inner.invuln = false;
+    else {
+      const an = ancientOf(w, t.team);
+      if (an) an.invuln = false;
+    }
     fx(w, t.x, t.z, 5, 0x9c9484, 2, 0.9, 2.5);
     for (const v of w.units) if (v.kind === 'hero' && v.team !== t.team) addGold(w, v, 150, v === src ? t : undefined);
-    emit(w, { e: 'tower', team: t.team as Team });
+    emit(w, { e: 'tower', team: t.team as Team, tier: t.tier ?? 1 });
     return;
   }
   if (t.kind === 'ancient') {
@@ -580,6 +638,16 @@ function kill(w: World, t: Unit, src: Unit | null) {
 }
 
 const neutralBounty = (t: Unit) => (t.model === 'n_big' ? 62 : 38);
+
+/** Насколько здания без крипов рядом защищены от героев */
+export const BACKDOOR = 0.5;
+
+/** Лечение (не выше максимума) */
+export function heal(w: World, u: Unit, amt: number) {
+  if (!u.alive || amt <= 0) return;
+  u.hp = Math.min(u.maxHp, u.hp + amt);
+  fx(w, u.x, u.z, 1.2, 0x7dff9a, 0.6, 0.45, 1.8);
+}
 
 // ── Движение и атака ──
 
@@ -608,7 +676,19 @@ export function tryAttack(w: World, u: Unit, t: Unit) {
   u.atkTimer = u.atkInt / (1 + modValue(u, 'atkSpeed'));
   u.atkTick = w.tick;
   emit(w, { e: 'attack', id: u.id, target: t.id, ranged: u.ranged });
-  const dmg = u.dmg * (1 + modValue(u, 'dmgAmp'));
+  let dmg = u.dmg * (1 + modValue(u, 'dmgAmp'));
+  if (u.hero) {
+    // Выход из невидимости — с усиленным первым ударом
+    const veil = u.mods.find((m) => m.id === 'invisible');
+    if (veil) {
+      dmg += veil.v;
+      removeMod(u, 'invisible');
+    }
+    for (const id of HERO[u.hero.def].abilities) {
+      const on = ABILITIES[id]?.onAttack;
+      if (on) dmg = on(w, u, t, dmg);
+    }
+  }
   if (u.ranged) shoot(w, u, t, dmg);
   else damage(w, t, dmg, u, 'physical');
 }
@@ -692,6 +772,19 @@ function doOrder(w: World, u: Unit) {
 
 // ── Герои ──
 
+/** Свиток возвращения: к своему фонтану */
+export function recallHome(w: World, u: Unit) {
+  if (!u.alive || !u.hero) return;
+  const p = w.players[u.hero.player];
+  const idx = w.players.filter((q) => q.team === p.team && q.slot < p.slot).length;
+  const s = heroSpot(SPAWNS[u.team as Team], u.team as Team, idx);
+  fx(w, u.x, u.z, 1.2, 0xf1c453, 0.9, 0.5, 2);
+  u.x = s.x;
+  u.z = s.z;
+  u.hero.order = null;
+  fx(w, u.x, u.z, 1.2, 0xf1c453, 0.9, 0.5, 2);
+}
+
 function respawn(w: World, u: Unit) {
   const h = u.hero!;
   const p = w.players[h.player];
@@ -743,6 +836,7 @@ function heroUpdate(w: World, u: Unit) {
   const h = u.hero!;
   const p = w.players[h.player];
   if (!heroTick(w, u)) return;
+  applyAuras(w, u);
   if (hasFlag(u, 'stun')) {
     cancelCast(u);
     return;
@@ -769,7 +863,7 @@ function pickCreepTarget(w: World, u: Unit, r: number): Unit | null {
   let best: Unit | null = null;
   let bs = 1e9;
   for (const v of w.units) {
-    if (!v.alive || v.team === u.team || v.team === 2 || v.invuln) continue;
+    if (!v.alive || v.team === u.team || v.team === 2 || v.invuln || hasFlag(v, 'invisible')) continue;
     const d = dist(u, v) - v.radius;
     if (d > r) continue;
     const s = d + (v.kind === 'hero' ? 3 : v.kind === 'creep' ? 0 : 5);
@@ -809,7 +903,7 @@ function updateCreep(w: World, u: Unit) {
 function updateTower(w: World, u: Unit) {
   u.forced = Math.max(0, u.forced - DT);
   let t = unitById(w, u.target);
-  if (t && (!t.alive || dist(u, t) > u.range + t.radius)) {
+  if (t && (!t.alive || dist(u, t) > u.range + t.radius || hasFlag(t, 'invisible'))) {
     u.target = 0;
     t = undefined;
   }
@@ -831,7 +925,9 @@ export function spawnWave(w: World) {
       const ranged = i === 3;
       const along = ranged ? 7 : 9.5;
       const lat = ranged ? 0 : (i - 1) * 1.5;
-      addUnit(w, {
+      const fallen = w.units.filter((u) => u.kind === 'tower' && u.team !== team && !u.alive).length;
+      const g = (1 + BALANCE.creepGrowth * Math.floor(w.time / 60)) * (1 + BALANCE.creepPerTower * fallen);
+      const u = addUnit(w, {
         kind: 'creep',
         team,
         model: ranged ? 'ranged' : 'melee',
@@ -844,6 +940,8 @@ export function spawnWave(w: World) {
           ? { maxHp: 90, dmg: 18, range: 5, atkInt: 1.3, ranged: true, barH: 2.3 }
           : { maxHp: 120, dmg: 12, range: 1.2, atkInt: 1, barH: 1.9 }),
       });
+      u.maxHp = u.hp = Math.round(u.maxHp * g);
+      u.dmg *= g;
     }
   }
   emit(w, { e: 'wave' });
@@ -906,7 +1004,8 @@ export function resolveCollisions(w: World) {
 function updateProjectiles(w: World) {
   for (let i = w.projs.length - 1; i >= 0; i--) {
     const p = w.projs[i];
-    if (p.kind === 'attack') {
+    if (p.target) {
+      // Самонаводящийся: атака или способность в цель
       const t = unitById(w, p.target);
       if (!t?.alive) {
         w.projs.splice(i, 1);
@@ -917,9 +1016,11 @@ function updateProjectiles(w: World) {
       const L = Math.hypot(dx, dz);
       const s = p.speed * DT;
       if (L <= s + 0.2) {
-        damage(w, t, p.dmg, unitById(w, p.src) ?? null, 'physical');
-        fx(w, t.x, t.z, t.kind === 'creep' ? 0.8 : t.kind === 'hero' ? 1.4 : 4, p.color, 0.25, 0.2, 2);
         w.projs.splice(i, 1);
+        if (p.kind === 'attack') {
+          damage(w, t, p.dmg, unitById(w, p.src) ?? null, 'physical');
+          fx(w, t.x, t.z, t.kind === 'creep' || t.kind === 'neutral' ? 0.8 : t.kind === 'hero' ? 1.4 : 4, p.color, 0.25, 0.2, 2);
+        } else ABILITIES[p.kind]?.onProjectileEnd?.(w, p, t);
       } else {
         p.x += (dx / L) * s;
         p.z += (dz / L) * s;
@@ -933,6 +1034,12 @@ function updateProjectiles(w: World) {
     let hit: Unit | null = null;
     for (const v of w.units)
       if (v.alive && v.team !== p.team && !v.invuln && Math.hypot(v.x - p.x, v.z - p.z) < v.radius + 0.8) {
+        if (p.pierce) {
+          if (p.hits?.includes(v.id)) continue;
+          (p.hits ??= []).push(v.id);
+          ABILITIES[p.kind]?.onProjectileHit?.(w, p, v);
+          continue;
+        }
         hit = v;
         break;
       }
@@ -940,6 +1047,46 @@ function updateProjectiles(w: World) {
       w.projs.splice(i, 1);
       ABILITIES[p.kind]?.onProjectileEnd?.(w, p, hit);
     }
+  }
+}
+
+/** Области на земле: задержка, импульсы, окончание */
+function updateZones(w: World) {
+  for (let i = w.zones.length - 1; i >= 0; i--) {
+    const z = w.zones[i];
+    const def = ABILITIES[z.kind]?.zone;
+    const src = unitById(w, z.src) ?? null;
+    if (z.delay > 0) {
+      z.delay -= DT;
+      if (z.delay <= 0) def?.start?.(w, z, src);
+      continue;
+    }
+    z.t -= DT;
+    z.next -= DT;
+    if (z.next <= 0) {
+      z.next = z.period;
+      def?.pulse?.(w, z, src);
+    }
+    if (z.t <= 0) {
+      w.zones.splice(i, 1);
+      def?.end?.(w, z, src);
+    }
+  }
+}
+
+export function addZone(w: World, o: Omit<Zone, 'id' | 'next'> & { next?: number }): Zone {
+  const z: Zone = { next: 0, ...o, id: w.nextId++ };
+  w.zones.push(z);
+  return z;
+}
+
+/** Ауры героев: каждый тик обновляют короткий модификатор союзникам рядом */
+function applyAuras(w: World, u: Unit) {
+  for (const id of HERO[u.hero!.def].abilities) {
+    const aura = ABILITIES[id]?.aura;
+    if (!aura) continue;
+    for (const v of w.units)
+      if (v.alive && v.team === u.team && (v.kind === 'hero' || v.kind === 'creep') && dist(v, u) < aura.radius) addMod(v, aura.mod, 0.25, aura.v, u.id);
   }
 }
 
@@ -975,6 +1122,7 @@ export function step(w: World) {
   }
   resolveCollisions(w);
   updateProjectiles(w);
+  updateZones(w);
   if (w.jungle) {
     updateCamps(w);
     updateRunes(w);

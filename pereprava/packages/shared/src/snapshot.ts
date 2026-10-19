@@ -3,7 +3,7 @@
 // Тот же код работает и в одиночной игре — клиент рисует только снимки, как в сетевой.
 import { ABILITIES, abilityAt } from './sim/abilities';
 import { HERO } from './data/heroes';
-import { modValue } from './sim/modifiers';
+import { hasFlag, modValue } from './sim/modifiers';
 import { nearShop, unitById, xpNeed, type World } from './sim/world';
 import type { SimEvent, Side, Team, Unit, UnitKind } from './types';
 
@@ -48,6 +48,17 @@ export interface ProjSnap {
   tid: number;
   c: number;
   s: number;
+}
+
+export interface ZoneSnap {
+  id: number;
+  k: string;
+  x: number;
+  z: number;
+  r: number;
+  t: number;
+  d: number;
+  tm: number;
 }
 
 export interface MeSnap {
@@ -98,6 +109,7 @@ export interface Snapshot {
   nextWave: number;
   units: UnitSnap[];
   projs: ProjSnap[];
+  zones: ZoneSnap[];
   players: PlayerSnap[];
   events: SimEvent[];
   me: MeSnap | null;
@@ -125,7 +137,7 @@ export function visibleIds(w: World, team: Team | -1): Set<number> {
       out.add(u.id);
       continue;
     }
-    if (!u.alive) continue;
+    if (!u.alive || hasFlag(u, 'invisible')) continue;
     for (const e of eyes)
       if (Math.hypot(e.x - u.x, e.z - u.z) < VISION[e.kind] + u.radius) {
         out.add(u.id);
@@ -221,6 +233,9 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; even
   for (const pr of w.projs)
     if (pr.team === team || pointVisible(w, team, pr.x, pr.z))
       projs.push({ id: pr.id, k: pr.kind, x: r2(pr.x), z: r2(pr.z), y0: pr.y0, tid: pr.target, c: pr.color, s: pr.size });
+  const zones: ZoneSnap[] = [];
+  for (const z of w.zones)
+    if (z.team === team || pointVisible(w, team, z.x, z.z)) zones.push({ id: z.id, k: z.kind, x: r2(z.x), z: r2(z.z), r: z.r, t: r2(z.t), d: r2(z.delay), tm: z.team });
   let me: MeSnap | null = null;
   const mu = p && unitById(w, p.unit);
   if (mu?.hero) {
@@ -272,6 +287,7 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; even
     nextWave: w.nextWave,
     units,
     projs,
+    zones,
     players,
     events: opts.events ?? w.events.filter((e) => eventVisible(w, e, team, slot, vis)),
     me,
