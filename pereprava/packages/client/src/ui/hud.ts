@@ -148,9 +148,11 @@ export class Hud {
 
   toggleShop(open?: boolean) {
     const el = $('shop');
+    const had = el.contains(document.activeElement);
     el.hidden = open === undefined ? !el.hidden : !open;
     this.refreshShop();
     if (!el.hidden) $('shopClose').focus();
+    else if (had) $('shopBtn').focus();
   }
 
   private refreshShop() {

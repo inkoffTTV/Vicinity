@@ -1,7 +1,7 @@
 {
   "name": "@pereprava/shared",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "Детерминированная симуляция Переправы: без three.js и DOM, тик 30 Гц",
   "exports": { ".": "./src/index.ts" }

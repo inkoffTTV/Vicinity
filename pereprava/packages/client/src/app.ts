@@ -31,6 +31,8 @@ interface Settings {
   shadows: boolean;
   hero: string;
   vol: Volumes;
+  /** Оформление: как в системе, день или ночь */
+  theme: 'auto' | 'day' | 'night';
 }
 
 const TIPS = [
@@ -58,6 +60,7 @@ export class App {
     shadows: true,
     hero: 'mage',
     vol: { master: 0.8, sfx: 0.9, ambient: 0.5 },
+    theme: 'auto',
     ...store.get<Partial<Settings>>('settings', {}),
   };
   readonly sound = new Sound(this.settings.vol);
@@ -301,10 +304,10 @@ export class App {
     this.sound.play(win ? 'win' : 'lose');
     $('board').hidden = true;
     $('card').classList.add('wide');
-    $('card').innerHTML = `<h1>${win ? 'Победа' : 'Поражение'}</h1>
+    $('card').innerHTML = `<h1 class="${win ? 'win' : 'lose'}">${win ? 'Победа' : 'Поражение'}</h1>
       <p>${win ? 'Кристалл врага разрушен.' : 'Наш кристалл пал.'} ${online ? 'Сетевой матч.' : 'Бот: ' + difficulty(this.settings.diff).name + '.'}</p>
-      <dl class="keys"><dt>${fmt(s.time)}</dt><dd>длительность матча</dd><dt>${s.kills[this.view.myTeam]} : ${s.kills[1 - this.view.myTeam]}</dt><dd>убийства героев</dd><dt>${mine.lastHits}</dt><dd>добито крипов</dd><dt>${mine.gold}</dt><dd>заработано золота</dd><dt>${me.level}</dt><dd>уровень героя</dd></dl>
-      ${scoreTable(s, this.view.myTeam, me.slot)}
+      <div class="res"><div><b>${fmt(s.time)}</b><small>длительность</small></div><div><b>${s.kills[this.view.myTeam]} : ${s.kills[1 - this.view.myTeam]}</b><small>убийства героев</small></div><div><b>${mine.lastHits}</b><small>добито крипов</small></div><div><b>${mine.gold}</b><small>золото</small></div><div><b>${me.level}</b><small>уровень</small></div></div>
+      <div class="tablewrap">${scoreTable(s, this.view.myTeam, me.slot)}</div>
       <div class="actions"><button class="go alt" id="toMenu">В меню</button><button class="go" id="again">${online ? 'В лобби' : 'Реванш'}</button></div>`;
     $('screen').hidden = false;
     $('again').addEventListener('click', () => (online ? this.conn.send({ t: 'start' }) : this.startGame()));
@@ -356,6 +359,12 @@ export class App {
       store.set('settings', this.settings);
       applyQuality(this.kit, this.settings.quality, this.settings.shadows);
       this.resize();
+    });
+    this.segInit('themeSeg', this.settings.theme, (v) => {
+      this.settings.theme = v as Settings['theme'];
+      store.set('settings', this.settings);
+      // Свет и небо сцены задаются при создании — перезапускаем страницу (мы в меню, матч не идёт)
+      location.reload();
     });
     this.segInit('shSeg', this.settings.shadows ? 'on' : 'off', (v) => {
       this.settings.shadows = v === 'on';
@@ -454,6 +463,15 @@ export class App {
     });
     $('score').style.pointerEvents = 'auto';
     $('score').addEventListener('click', () => this.showBoard($('board').hidden));
+    $('score').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.showBoard($('board').hidden);
+      }
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('board').hidden) this.showBoard(false);
+    });
     $('board').addEventListener('click', () => this.showBoard(false));
     this.renderName();
     this.setFocus('hero');

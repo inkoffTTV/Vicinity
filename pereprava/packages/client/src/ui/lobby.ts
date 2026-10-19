@@ -5,6 +5,15 @@ import type { Connection } from '../net/connection';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
+/** Селектор, по которому элемент найдётся после перерисовки */
+function focusKey(el: HTMLElement): string {
+  if (el instanceof HTMLInputElement && el.name) return `input[name="${el.name}"]`;
+  const act = el.dataset.act;
+  if (!act) return el.tagName === 'INPUT' ? 'input' : '';
+  const extra = el.dataset.v ? `[data-v="${el.dataset.v}"]` : el.dataset.hero ? `[data-hero="${el.dataset.hero}"]` : el.dataset.mode ? `[data-mode="${el.dataset.mode}"]` : el.dataset.team ? `[data-team="${el.dataset.team}"]` : '';
+  return `[data-act="${act}"]${extra}`;
+}
+
 export class Lobby {
   room: RoomInfo | null = null;
   private el: HTMLElement;
@@ -84,6 +93,14 @@ export class Lobby {
 
   render() {
     if (this.el.hidden) return;
+    // Перерисовка заменяет разметку — запоминаем, на какой кнопке был фокус, и возвращаем его
+    const a = document.activeElement as HTMLElement | null;
+    const key = a && this.el.contains(a) ? focusKey(a) : '';
+    this.draw();
+    if (key) (this.el.querySelector<HTMLElement>(key) ?? this.el.querySelector<HTMLElement>('[data-act]'))?.focus();
+  }
+
+  private draw() {
     const st = this.conn.status;
     const status =
       st === 'online' ? '' : st === 'connecting' ? 'Подключаемся к серверу…' : st === 'offline' ? 'Нет связи с сервером — пробуем снова…' : '';
