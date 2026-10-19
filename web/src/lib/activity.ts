@@ -25,6 +25,13 @@ export const ACTIVITY_GAMES: ActivityGame[] = [
     cover: ['#1d2b53', '#e43b44'],
   },
   {
+    id: 'pereprava',
+    name: 'Переправа',
+    description: 'MOBA через реку: пять героев, вышки, лес и руны. 1 на 1 или 2 на 2, пустые места займут боты. Матч ~15 минут',
+    players: '1–4',
+    cover: ['#14324a', '#e0a83a'],
+  },
+  {
     id: 'hookduel',
     name: 'Хук-дуэль',
     description: 'Двое мясников через речку: ходьба на WASD, хук на Q. Кто первым наберёт 5',

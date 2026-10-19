@@ -23,7 +23,12 @@ export class Connection {
   get url() {
     const env = import.meta.env.VITE_SERVER_URL as string | undefined;
     if (env) return env;
-    return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+    // ws рядом со страницей: /ws на своём сайте, /activities/pereprava/ws — внутри звонка Vicinity
+    const u = new URL('ws', location.href);
+    u.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    u.search = '';
+    u.hash = '';
+    return u.toString();
   }
 
   on(fn: Listener) {

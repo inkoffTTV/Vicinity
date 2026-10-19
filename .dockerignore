@@ -15,3 +15,11 @@ web/dist
 web/e2e
 web/playwright-report
 web/test-results
+
+# «Переправа» собирается в Dockerfile.web из исходников — зависимости и сборки не нужны
+pereprava/**/node_modules
+pereprava/**/dist
+pereprava/legacy
+pereprava/e2e
+pereprava/test-results
+pereprava/playwright-report
