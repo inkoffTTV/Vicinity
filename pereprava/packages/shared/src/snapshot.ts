@@ -203,6 +203,7 @@ function eventVisible(w: World, e: SimEvent, team: Team | -1, slot: number, vis:
       return e.team === team || pointVisible(w, team, e.x, e.z);
     case 'gold':
     case 'buy':
+    case 'castFail':
       return e.player === slot;
     case 'level':
     case 'respawn':

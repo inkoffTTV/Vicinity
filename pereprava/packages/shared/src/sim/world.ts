@@ -35,7 +35,7 @@ import type {
   UnitKind,
   Zone,
 } from '../types';
-import { ABILITIES, castAbility, fireCasting } from './abilities';
+import { ABILITIES, abilityAt, castAbility, fireCasting } from './abilities';
 import { botThink } from './ai';
 import { aggroNeutral, updateCamps, updateNeutral, setupCamps, updateRunes } from './jungle';
 import { addMod, hasFlag, modValue, removeMod, tickModifiers } from './modifiers';
@@ -274,6 +274,7 @@ export function createWorld(setup: MatchSetup): World {
       respawn: 0,
       order: null,
       casting: null,
+      queued: null,
       // Сложность усиливает только героя бота (как в прототипе)
       baseHp: def.baseHp * (ps.bot ? diff.hp : 1),
       baseDmg: def.baseDmg * (ps.bot ? diff.dmg : 1),
@@ -379,6 +380,7 @@ const okNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 
 /** Сбитый замах не тратит перезарядку */
 export function cancelCast(u: Unit) {
+  if (u.hero) u.hero.queued = null;
   const c = u.hero?.casting;
   if (!c) return;
   const slot = HERO[u.hero!.def].abilities.indexOf(c.ability);
@@ -793,6 +795,18 @@ function doOrder(w: World, u: Unit) {
       o.best = d;
       o.st = 0;
     }
+  } else if (o.type === 'cast') {
+    // Подходим к цели умения, на дальности — применяем
+    const t = unitById(w, o.id);
+    const a = abilityAt(u, o.slot);
+    if (!t?.alive || t.invuln || !a || hasFlag(t, 'invisible')) {
+      h.order = null;
+      return;
+    }
+    if (dist(u, t) <= a.range + t.radius) {
+      h.order = null;
+      castAbility(w, u, o.slot, { x: t.x, z: t.z, id: t.id });
+    } else moveToward(u, t.x, t.z);
   } else {
     const t = unitById(w, o.id);
     if (!t?.alive || t.invuln) {
@@ -877,7 +891,13 @@ function heroUpdate(w: World, u: Unit) {
   }
   if (h.casting) {
     h.casting.t -= DT;
-    if (h.casting.t <= 0) fireCasting(w, u);
+    if (h.casting.t <= 0) {
+      fireCasting(w, u);
+      // Нажатое во время замаха — сразу следом
+      const q = h.queued;
+      h.queued = null;
+      if (q) castAbility(w, u, q.slot, q.aim);
+    }
     return;
   }
   if (p.bot) {

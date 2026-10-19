@@ -136,6 +136,11 @@ export class Sound {
       case 'ui':
         this.tone(1200, 0.06, 'square', 0.06 * v);
         break;
+      case 'deny':
+        // Короткое двойное «нет»: умение не сработало
+        this.tone(220, 0.07, 'square', 0.07 * v);
+        setTimeout(() => this.tone(180, 0.08, 'square', 0.07 * v), 90);
+        break;
       case 'buy':
         this.tone(1320, 0.08, 'triangle', 0.18 * v);
         this.tone(1760, 0.14, 'triangle', 0.18 * v, undefined, 0.07);
@@ -334,6 +339,9 @@ export class Sound {
           break;
         case 'wave':
           this.play('wave', 0.4);
+          break;
+        case 'castFail':
+          if (e.player === mySlot) this.play('deny');
           break;
       }
     }

@@ -270,12 +270,32 @@ export class Hud {
         if (!e.taker) this.toast('В реке появилась ' + (RUNE_NAMES[e.rune] ?? 'руна').toLowerCase());
         else if (e.taker === me.unit) this.toast('Вы взяли: ' + (RUNE_NAMES[e.rune] ?? 'руна').toLowerCase());
       } else if (e.e === 'ping' && e.team === myTeam) this.addPing(e.x, e.z, e.kind);
+      else if (e.e === 'castFail' && e.player === me.slot) this.castFailed(e.slot, e.reason);
       else if (e.e === 'level' && e.player === me.slot) this.toast('Новый уровень: ' + e.level);
       else if (e.e === 'respawn' && e.player === me.slot) {
         const h = HERO[me.hero];
         this.toast(`${h.name} ${h.fem ? 'вернулась' : 'вернулся'} в бой`);
       } else if (e.e === 'buy' && e.player === me.slot && e.item) this.toast('Куплено: ' + ITEM[e.item].name);
     }
+  }
+
+  /** Умение не сработало: тряхнуть кнопку и сказать почему */
+  private castFailed(slot: number, reason: string) {
+    const b = this.skillBtns[slot];
+    if (b) {
+      b.classList.remove('deny');
+      void b.offsetWidth; // перезапуск анимации
+      b.classList.add('deny');
+      b.addEventListener('animationend', () => b.classList.remove('deny'), { once: true });
+    }
+    const text: Record<string, string> = {
+      target: 'Нет цели рядом',
+      cd: 'Умение перезаряжается',
+      stun: 'Герой оглушён',
+      silence: 'Умения заблокированы',
+      level: `Ультимейт откроется на ${ULT_LEVEL} уровне`,
+    };
+    this.toast(text[reason] ?? 'Не получилось');
   }
 
   // ── Миникарта ──

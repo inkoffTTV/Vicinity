@@ -682,13 +682,53 @@ export function canCast(u: Unit, slot: number): boolean {
   return !hasFlag(u, 'stun') && !hasFlag(u, 'silence');
 }
 
-export function castAbility(w: World, u: Unit, slot: number, aim: Aim | null): boolean {
-  if (!canCast(u, slot)) return false;
-  const a = abilityAt(u, slot)!;
+/** Насколько дальше дальности умения герой сам подойдёт к цели, чтобы применить его */
+const APPROACH = 12;
+
+/** Почему умение не сработало — показываем только живому игроку */
+function castFail(w: World, u: Unit, slot: number, reason: 'target' | 'cd' | 'stun' | 'silence' | 'level'): false {
   const h = u.hero!;
+  if (!w.players[h.player]?.bot) emit(w, { e: 'castFail', player: h.player, slot, reason });
+  return false;
+}
+
+export function castAbility(w: World, u: Unit, slot: number, aim: Aim | null): boolean {
+  const h = u.hero;
+  const a = h && abilityAt(u, slot);
+  if (!h || !a || a.passive || !u.alive) return false;
+  if (a.ult && h.level < ULT_LEVEL) return castFail(w, u, slot, 'level');
+  if (h.cd[slot] > 0) return castFail(w, u, slot, 'cd');
+  if (hasFlag(u, 'stun')) return castFail(w, u, slot, 'stun');
+  if (hasFlag(u, 'silence')) return castFail(w, u, slot, 'silence');
+  // Идёт замах другого умения — запоминаем нажатие, сработает следом
+  if (h.casting) {
+    h.queued = { slot, aim: aim ? { x: aim.x, z: aim.z, id: aim.id ?? 0 } : null };
+    return true;
+  }
+  // Умение в цель: выбранная цель или ближайший враг дальше дальности, но недалеко — подходим и применяем
+  if (a.target === 'unit') {
+    const chosen = aim?.id ? unitById(w, aim.id) : undefined;
+    if (
+      chosen?.alive &&
+      chosen.team !== u.team &&
+      !chosen.invuln &&
+      dist(u, chosen) > a.range + chosen.radius + 1 &&
+      dist(u, chosen) <= a.range + APPROACH
+    ) {
+      h.order = { type: 'cast', slot, id: chosen.id };
+      return true;
+    }
+  }
+  if (a.target === 'unit' && !aimUnit(w, u, aim, a.range)) {
+    const t = aimUnit(w, u, aim, a.range + APPROACH);
+    if (!t) return castFail(w, u, slot, 'target');
+    h.order = { type: 'cast', slot, id: t.id };
+    return true;
+  }
+  if (!canCast(u, slot)) return false;
   if (a.castTime) {
     // Замах: способность сработает позже; движение и атака на это время останавливаются
-    if (!a.cast(w, u, aim)) return false;
+    if (!a.cast(w, u, aim)) return castFail(w, u, slot, 'target');
     h.casting = {
       ability: a.id,
       t: a.castTime,
@@ -702,7 +742,7 @@ export function castAbility(w: World, u: Unit, slot: number, aim: Aim | null): b
     emit(w, { e: 'cast', id: u.id, ability: a.id, x: h.casting.x, z: h.casting.z });
     return true;
   }
-  if (!a.cast(w, u, aim)) return false;
+  if (!a.cast(w, u, aim)) return castFail(w, u, slot, 'target');
   h.cd[slot] = a.cd * (1 - h.cdr);
   u.castTick = w.tick;
   if (a.id !== 'veil') removeMod(u, 'invisible');

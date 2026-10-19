@@ -257,3 +257,51 @@ describe('умения всех героев', () => {
     });
   }
 });
+
+describe('нажатие умения всегда даёт результат', () => {
+  const duel = (hero: string) =>
+    createWorld({
+      seed: 5,
+      players: [
+        { name: 'А', team: 0, hero, bot: null },
+        { name: 'Б', team: 1, hero: 'brute', bot: null },
+      ],
+    });
+
+  it('цель чуть дальше дальности — герой подходит и применяет', () => {
+    const w = duel('shade');
+    const me = hero(w, 0);
+    const foe = hero(w, 1);
+    put(me, 0, 0);
+    put(foe, 15, 0); // кинжал бьёт на 10 м
+    queueCommand(w, 0, { c: 'cast', slot: 0, x: foe.x, z: foe.z, id: foe.id });
+    step(w);
+    expect(me.hero!.order?.type).toBe('cast');
+    for (let t = 0; t < 60 && me.hero!.cd[0] === 0; t++) step(w);
+    expect(me.hero!.cd[0]).toBeGreaterThan(0);
+  });
+
+  it('целей нет совсем — игрок получает объяснение', () => {
+    const w = duel('shade');
+    put(hero(w, 0), 0, 0);
+    put(hero(w, 1), 40, -40);
+    queueCommand(w, 0, { c: 'cast', slot: 0 });
+    step(w);
+    expect(w.events).toContainEqual({ e: 'castFail', player: 0, slot: 0, reason: 'target' });
+    queueCommand(w, 0, { c: 'cast', slot: 3 });
+    step(w);
+    expect(w.events).toContainEqual({ e: 'castFail', player: 0, slot: 3, reason: 'level' });
+  });
+
+  it('нажатие во время замаха срабатывает следом', () => {
+    const w = duel('brute');
+    const me = hero(w, 0);
+    put(me, 0, 0);
+    queueCommand(w, 0, { c: 'cast', slot: 0 }); // удар по земле с замахом
+    step(w);
+    expect(me.hero!.casting).not.toBeNull();
+    queueCommand(w, 0, { c: 'cast', slot: 1, x: 6, z: 0 }); // рывок во время замаха
+    for (let t = 0; t < 30; t++) step(w);
+    expect(me.hero!.cd[1]).toBeGreaterThan(0);
+  });
+});

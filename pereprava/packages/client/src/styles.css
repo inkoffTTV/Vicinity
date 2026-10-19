@@ -180,6 +180,9 @@ button.go{width:100%;padding:var(--s3) var(--s4);min-height:44px;border:0;border
 #skR{right:84px;bottom:84px;width:54px;height:54px;font-size:var(--fs-l)}
 #skills .sk:only-child{right:0;bottom:0;width:78px;height:78px;font-size:var(--fs-xl)}
 .sk.locked{filter:grayscale(.85) brightness(.7)}
+/* Умение не сработало: короткая тряска и красный обод */
+.sk.deny{animation:deny .32s;border-color:var(--enemy)}
+@keyframes deny{20%{translate:-4px 0}40%{translate:4px 0}60%{translate:-3px 0}80%{translate:2px 0}}
 .sk.passive{cursor:default;opacity:.85}
 .sk.passive span{font-size:var(--fs-s)}
 

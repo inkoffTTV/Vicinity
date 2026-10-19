@@ -1,4 +1,4 @@
-import { Gamepad2, LogOut, Play, Rocket, Users, X } from 'lucide-react';
+import { Gamepad2, LogOut, Maximize2, Minimize2, Play, Rocket, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ACTIVITY_GAMES, ActivityGame, gameById, onFrameMessage, peerInfo, sendFromFrame, useActivity } from '../lib/activity';
 import { api, ApiError } from '../lib/api';
@@ -103,7 +103,33 @@ export function ActivityFrame() {
   const leave = useActivity((s) => s.leave);
   const me = useStore((s) => s.me);
   const ref = useRef<HTMLIFrameElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
   const game = session ? gameById(session.game) : undefined;
+  // На весь экран: настоящий полноэкранный режим, а где браузер его не даёт (iPhone, встроенный WebView) —
+  // окно игры растягивается на всё окно приложения. На телефоне игра сразу открывается развёрнутой.
+  const phone = () => window.matchMedia('(max-width: 700px)').matches;
+  const canFs = typeof document.documentElement.requestFullscreen === 'function';
+  const [fs, setFs] = useState(false);
+  const [max, setMax] = useState(phone);
+  useEffect(() => {
+    const onChange = () => {
+      setFs(!!document.fullscreenElement);
+      if (!document.fullscreenElement) setMax(phone());
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  const toggleFull = () => {
+    if (fs) document.exitFullscreen().catch(() => undefined);
+    else if (canFs) {
+      setMax(true);
+      layerRef.current?.requestFullscreen().catch(() => undefined);
+    } else setMax((m) => !m);
+    // Клавиши снова в игру
+    setTimeout(() => ref.current?.focus(), 60);
+  };
+  const isFull = fs || max;
+  const shrink = fs || (!canFs && max);
 
   useEffect(() => {
     if (!session) return;
@@ -151,9 +177,9 @@ export function ActivityFrame() {
 
   if (!session || !game) return null;
   return (
-    <div className="act-layer" role="dialog" aria-label={`Игра «${game.name}»`}>
+    <div ref={layerRef} className={`act-layer${isFull ? ' full' : ''}`} role="dialog" aria-label={`Игра «${game.name}»`}>
       <div className="act-window">
-        <header className="act-head">
+        <header className="act-head" onDoubleClick={toggleFull}>
           <Cover game={game} size="sm" />
           <strong>{game.name}</strong>
           <span className="act-peers">
@@ -166,6 +192,16 @@ export function ActivityFrame() {
           </span>
           <span className="muted small">{session.peerId ? `Игроков: ${session.peers.length + 1}` : 'Подключение…'}</span>
           <span className="grow" />
+          <button
+            type="button"
+            className="btn small"
+            onClick={toggleFull}
+            aria-pressed={shrink}
+            title={shrink ? 'Свернуть в окно' : 'На весь экран'}
+            aria-label={shrink ? 'Свернуть в окно' : 'На весь экран'}
+          >
+            <Icon icon={shrink ? Minimize2 : Maximize2} size={14} />
+          </button>
           <button type="button" className="btn small" onClick={leave}>
             <Icon icon={LogOut} size={14} /> Выйти из игры
           </button>

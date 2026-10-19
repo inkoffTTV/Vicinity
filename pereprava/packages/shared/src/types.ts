@@ -21,7 +21,9 @@ export interface Modifier {
 
 export type Order =
   | { type: 'move'; x: number; z: number; st: number; best: number }
-  | { type: 'attack'; id: number; auto: boolean };
+  | { type: 'attack'; id: number; auto: boolean }
+  /** Подойти к цели на дальность умения и применить его */
+  | { type: 'cast'; slot: number; id: number };
 
 /** Замах перед применением (каст-пойнт): способность сработает, когда t дойдёт до нуля */
 export interface Casting {
@@ -47,6 +49,8 @@ export interface HeroState {
   respawn: number;
   order: Order | null;
   casting: Casting | null;
+  /** Умение, нажатое во время замаха другого: сработает сразу после него */
+  queued: { slot: number; aim: { x: number; z: number; id: number } | null } | null;
   // Бонусы от предметов и уровня (пересчитываются в recalc)
   baseHp: number;
   baseDmg: number;
@@ -166,6 +170,8 @@ export type SimEvent =
   | { e: 'hit'; id: number; src: number; amt: number; shield: boolean }
   | { e: 'attack'; id: number; target: number; ranged: boolean }
   | { e: 'cast'; id: number; ability: string; x: number; z: number }
+  /** Умение не сработало — игроку объясняем почему */
+  | { e: 'castFail'; player: number; slot: number; reason: 'target' | 'cd' | 'stun' | 'silence' | 'level' }
   | { e: 'death'; id: number; kind: UnitKind; team: Side; killer: number; x: number; z: number }
   | { e: 'heroKill'; victim: number; killer: number; victimTeam: Team }
   | { e: 'gold'; player: number; amt: number; x: number; z: number }
