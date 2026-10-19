@@ -123,7 +123,8 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
   window.addEventListener('keydown', (e) => {
     if (e.repeat || !act.playing()) return;
     const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    // В поле ввода (поиск в лавке) работает только Esc — закрыть
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') && e.code !== 'Escape') return;
     if (e.code in SKILL) act.skillKey(SKILL[e.code]);
     else if (/^Digit[1-6]$/.test(e.code)) act.useItem(+e.code.slice(5) - 1, mouseAim());
     else if (e.code === 'KeyA') act.armAttackMove();

@@ -20,6 +20,7 @@ import {
 } from '../map';
 import { findPath } from '../nav';
 import { disengage, engage, freeSlot } from './engage';
+import { ALL_SLOTS, canAfford, INVENTORY, itemCostFor, sellValue } from './shop';
 import { RNG_MOD, rngNext } from '../rng';
 import type {
   Camp,
@@ -49,7 +50,6 @@ export const WAVE_INTERVAL = 25;
 export const SHOP_RADIUS = 14;
 export const MAX_LEVEL = 10;
 export const ULT_LEVEL = 6;
-export const INVENTORY = 6;
 export const TEAM_COLORS = [0x3ec7a1, 0xe2504a] as const;
 
 /** Числа баланса зданий и крипов (подбирались прогонами бот против бота: npm run balance) */
@@ -194,7 +194,8 @@ export function recalc(u: Unit) {
   let atkSpeed = 0;
   let lifesteal = 0;
   let cdr = 0;
-  for (const id of h.items) {
+  // Прибавки дают только основные слоты, рюкзак — нет
+  for (const id of h.items.slice(0, INVENTORY)) {
     if (!id) continue;
     const it = ITEM[id];
     hp += it.hp ?? 0;
@@ -281,9 +282,11 @@ export function createWorld(setup: MatchSetup): World {
       level: 1,
       xp: 0,
       gold: 0,
-      items: Array(INVENTORY).fill(null),
+      items: Array(ALL_SLOTS).fill(null),
       cd: [0, 0, 0, 0],
-      itemCd: Array(INVENTORY).fill(0),
+      itemCd: Array(ALL_SLOTS).fill(0),
+      itemT: Array(ALL_SLOTS).fill(-99),
+      itemPaid: Array(ALL_SLOTS).fill(0),
       respawn: 0,
       order: null,
       casting: null,
@@ -453,6 +456,14 @@ function applyCommand(w: World, slot: number, cmd: Command) {
     case 'sell':
       sellItem(w, u, cmd.slot);
       return;
+    case 'swap': {
+      const { a, b } = cmd;
+      if (!Number.isInteger(a) || !Number.isInteger(b) || a === b) return;
+      if (a < 0 || b < 0 || a >= ALL_SLOTS || b >= ALL_SLOTS) return;
+      for (const arr of [h.items, h.itemCd, h.itemT, h.itemPaid] as unknown[][]) [arr[a], arr[b]] = [arr[b], arr[a]];
+      recalc(u);
+      return;
+    }
     case 'use':
       if (!Number.isInteger(cmd.slot)) return;
       useItem(w, u, cmd.slot, okNum(cmd.x) && okNum(cmd.z) ? { x: cmd.x, z: cmd.z } : null);
@@ -476,34 +487,7 @@ function applyCommand(w: World, slot: number, cmd: Command) {
 // ── Лавка ──
 
 /** Цена с учётом компонентов, которые уже лежат в инвентаре (клиент считает так же) */
-export function itemCostFor(items: readonly (string | null)[], id: string): { cost: number; consume: number[] } {
-  const it = ITEM[id];
-  const consume: number[] = [];
-  let cost = it.price;
-  if (it.parts) {
-    const used = new Set<number>();
-    for (const part of it.parts) {
-      const i = items.findIndex((x, j) => x === part && !used.has(j));
-      if (i >= 0) {
-        used.add(i);
-        consume.push(i);
-        cost -= ITEM[part].price;
-      }
-    }
-  }
-  return { cost: Math.max(0, cost), consume };
-}
 export const itemCost = (u: Unit, id: string) => itemCostFor(u.hero!.items, id);
-
-/** Можно ли купить, если известны только золото и инвентарь (для интерфейса) */
-export function canAfford(items: readonly (string | null)[], gold: number, id: string): boolean {
-  const it = ITEM[id];
-  if (!it) return false;
-  const { cost, consume } = itemCostFor(items, id);
-  if (gold < cost) return false;
-  if (items.filter((x) => !x).length + consume.length < 1) return false;
-  return !(it.unique && items.includes(id));
-}
 
 export function canBuy(w: World, u: Unit, id: string): boolean {
   return !!u.hero && nearShop(w, u) && canAfford(u.hero.items, u.hero.gold, id);
@@ -514,12 +498,23 @@ export function buyItem(w: World, u: Unit, id: string, force = false): boolean {
   const h = u.hero!;
   const { cost, consume } = itemCost(u, id);
   if (h.gold < cost) return false;
-  for (const i of consume) h.items[i] = null;
-  const slot = h.items.indexOf(null);
+  // Возврат в первые 10 с: уплаченное золото плюс то, что вернули бы за ушедшие в рецепт части,
+  // — так «купил части давно, собрал и сразу продал» не даёт полной цены
+  let paid = cost;
+  for (const i of consume) {
+    paid += sellValue(h.items[i]!, h.itemT[i], h.itemPaid[i], w.time);
+    h.items[i] = null;
+    h.itemCd[i] = 0;
+  }
+  // В основной слот, если есть место, иначе в рюкзак
+  let slot = h.items.slice(0, INVENTORY).indexOf(null);
+  if (slot < 0) slot = h.items.indexOf(null);
   if (slot < 0) return false;
   h.gold -= cost;
   h.items[slot] = id;
   h.itemCd[slot] = 0;
+  h.itemT[slot] = w.time;
+  h.itemPaid[slot] = paid;
   recalc(u);
   emit(w, { e: 'buy', player: h.player, item: id });
   return true;
@@ -530,8 +525,10 @@ function sellItem(w: World, u: Unit, slot: number) {
   if (!h || !nearShop(w, u) || !Number.isInteger(slot)) return;
   const id = h.items[slot];
   if (!id) return;
+  h.gold += sellValue(id, h.itemT[slot], h.itemPaid[slot], w.time);
   h.items[slot] = null;
-  h.gold += Math.floor(ITEM[id].price / 2);
+  h.itemCd[slot] = 0;
+  h.itemPaid[slot] = 0;
   recalc(u);
   emit(w, { e: 'buy', player: h.player, item: '' });
 }

@@ -2,11 +2,10 @@
 // всплывающие сообщения и миникарта. Всё читается из снимка (me) — интерфейс ничего не решает сам.
 import {
   ABILITIES,
-  canAfford,
   getMap,
   HERO,
+  INVENTORY,
   ITEM,
-  ITEMS,
   mapTrees,
   RUNE_NAMES,
   ULT_LEVEL,
@@ -16,6 +15,7 @@ import {
   type Snapshot,
 } from '@pereprava/shared';
 import type { GameView } from '../render/view';
+import { ShopUI } from './shop';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 export const fmt = (t: number) => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
@@ -51,6 +51,7 @@ export class Hud {
   private toastT = 0;
   private skillBtns: HTMLButtonElement[] = [];
   private skillHero = '';
+  readonly shopUi: ShopUI;
   private invKey = '';
   private shopRefresh = 0;
   private mm = $<HTMLCanvasElement>('minimap');
@@ -65,7 +66,11 @@ export class Hud {
   ) {
     $('shopBtn').addEventListener('click', () => this.toggleShop());
     $('shopClose').addEventListener('click', () => this.toggleShop(false));
-    this.buildShop();
+    this.shopUi = new ShopUI({
+      send: (c) => this.act.send(c),
+      toast: (t) => this.toast(t),
+      me: () => this.snap?.me ?? null,
+    });
   }
 
   private setText(key: string, el: HTMLElement, v: string) {
@@ -179,7 +184,8 @@ export class Hud {
   private renderInv(items: (string | null)[]) {
     const el = $('inv');
     el.innerHTML = '';
-    items.forEach((id, i) => {
+    // На панели героя — только основные слоты; рюкзак виден в лавке
+    items.slice(0, INVENTORY).forEach((id, i) => {
       const it = id ? ITEM[id] : null;
       const b = document.createElement('button');
       b.className = 'slot' + (it?.active ? ' use' : '');
@@ -202,19 +208,6 @@ export class Hud {
     });
   }
 
-  private buildShop() {
-    const list = $('shopList');
-    list.innerHTML = '';
-    for (const it of ITEMS) {
-      const row = document.createElement('div');
-      row.className = 'item';
-      const parts = it.parts ? `<small class="parts">Из: ${it.parts.map((p) => ITEM[p].name).join(' + ')}</small>` : '';
-      row.innerHTML = `<span class="ic" style="--ic:${it.color}"><svg viewBox="0 0 24 24">${it.icon}</svg></span><div><b>${it.name}</b><small>${it.desc}</small>${parts}</div><button class="buy" data-id="${it.id}">${it.price}</button>`;
-      row.querySelector('.buy')!.addEventListener('click', () => this.act.send({ c: 'buy', item: it.id }));
-      list.appendChild(row);
-    }
-  }
-
   get shopOpen() {
     return !$('shop').hidden;
   }
@@ -224,25 +217,16 @@ export class Hud {
     const had = el.contains(document.activeElement);
     el.hidden = open === undefined ? !el.hidden : !open;
     this.refreshShop();
-    if (!el.hidden) $('shopClose').focus();
-    else if (had) $('shopBtn').focus();
+    if (!el.hidden) {
+      this.shopUi.render();
+      // С клавиатуры сразу можно искать; на телефоне не открываем экранную клавиатуру
+      if (matchMedia('(pointer: fine)').matches) $('shopSearch').focus();
+      else $('shopClose').focus();
+    } else if (had) $('shopBtn').focus();
   }
 
   private refreshShop() {
-    const me = this.snap?.me;
-    if (this.shopOpen === false || !me) return;
-    const n = $('shopNote');
-    const here = me.nearShop && me.alive;
-    const full = me.items.every((x) => x);
-    n.className = here ? 'ok' : '';
-    n.textContent = here
-      ? full
-        ? 'Инвентарь полон'
-        : 'Вы у фонтана, можно покупать'
-      : 'Покупать можно только у своего фонтана';
-    $('shopList')
-      .querySelectorAll<HTMLButtonElement>('.buy')
-      .forEach((b) => (b.disabled = !here || !canAfford(me.items, me.gold, b.dataset.id!)));
+    this.shopUi.update(this.snap?.me ?? null);
   }
 
   // ── Кадр ──

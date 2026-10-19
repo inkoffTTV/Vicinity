@@ -19,6 +19,7 @@
   </div>
   <div id="gold" class="panel num">0</div>
   <button id="shopBtn" class="panel" title="Лавка (B)">Лавка</button>
+  <button id="quickBuy" class="panel" hidden type="button"></button>
   <div id="hero" class="panel">
     <div id="lvl" class="num">1</div>
     <div id="hp"><div id="hpFill"></div><div id="shFill"></div><div id="hpText">600 / 600</div></div>
@@ -32,9 +33,16 @@
     <button class="sk" id="skQ" data-k="q" aria-label="Огненный шар, клавиша Q" title="Огненный шар (Q)"><span>Q</span></button>
   </div>
   <div id="shop" class="panel" hidden role="dialog" aria-modal="true" aria-label="Лавка">
-    <header><h2>Лавка</h2><button id="shopClose" aria-label="Закрыть лавку">×</button></header>
+    <header><h2>Лавка</h2><span id="shopGold" class="num coin" aria-label="Золото"></span><button id="shopClose" aria-label="Закрыть лавку">×</button></header>
     <p id="shopNote"></p>
-    <div id="shopList"></div>
+    <button id="shopQuick" class="quick panel" hidden type="button"></button>
+    <input id="shopSearch" type="search" placeholder="Поиск по названию" aria-label="Поиск предмета" autocomplete="off" enterkeyhint="search">
+    <div id="shopTabs" role="tablist" aria-label="Разделы лавки"></div>
+    <div class="shop-body">
+      <div id="shopGrid" aria-label="Предметы"></div>
+      <section id="shopCard" aria-live="polite" aria-label="Карточка предмета"></section>
+    </div>
+    <div class="shop-inv"><div id="shopInv"></div><div id="shopInvAct"></div></div>
   </div>
   </div>
   <div id="menu">

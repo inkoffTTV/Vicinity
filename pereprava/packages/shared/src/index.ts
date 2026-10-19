@@ -10,6 +10,7 @@ export * from './sim/engage';
 export * from './sim/abilities';
 export * from './sim/modifiers';
 export * from './sim/items';
+export * from './sim/shop';
 export * from './snapshot';
 export * from './protocol';
 export * from './sim/jungle';

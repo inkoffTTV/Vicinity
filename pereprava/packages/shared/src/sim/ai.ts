@@ -3,11 +3,13 @@
 // Способности бот применяет по подсказкам ai из описания способности — так ИИ один на всех героев.
 import { difficulty } from '../data/difficulty';
 import { HERO } from '../data/heroes';
+import { itemContains } from '../data/items';
 import { laneAhead, laneProgress, lanePoints, type P2 } from '../map';
 import type { Player, Team, Unit } from '../types';
 import { abilityAt, castAbility, canCast } from './abilities';
 import { hasFlag } from './modifiers';
-import { ancientOf, buyItem, dist, mapOf, towerOf, unitById, type World } from './world';
+import { nextPart } from './shop';
+import { ancientOf, buyItem, dist, mapOf, nearShop, towerOf, unitById, type World } from './world';
 
 /** Вражеская вышка рядом с точкой */
 function towerThreat(w: World, x: number, z: number, team: Team): boolean {
@@ -59,11 +61,16 @@ function frontPos(w: World, b: Unit, lane: number): P2 {
   return p;
 }
 
-function botShop(w: World, b: Unit, p: Player) {
-  const plan = HERO[b.hero!.def].build;
-  while (p.ai.buyIdx < plan.length && b.hero!.items.some((x) => !x)) {
-    if (!buyItem(w, b, plan[p.ai.buyIdx], true)) break;
-    p.ai.buyIdx++;
+/** Закупка по рекомендациям героя: цель — первый предмет сборки, которого ещё нет (ни целиком, ни
+ *  внутри собранного), к ней — следующая часть, пока хватает золота */
+function botShop(w: World, b: Unit, _p: Player) {
+  const h = b.hero!;
+  const plan = HERO[h.def].build;
+  for (let guard = 0; guard < 8; guard++) {
+    const target = plan.find((id) => !h.items.some((x) => x && itemContains(x, id)));
+    if (!target) return;
+    const next = nextPart(h.items, h.gold, target);
+    if (!next?.ok || !buyItem(w, b, next.id, true)) return;
   }
 }
 
@@ -155,6 +162,8 @@ export function botThink(w: World, b: Unit, p: Player) {
   const an0 = ancientOf(w, team);
   const fl = an0 ? Math.hypot(an0.x - fo.x, an0.z - fo.z) || 1 : 1;
   const sp = an0 ? { x: fo.x + ((an0.x - fo.x) / fl) * 4, z: fo.z + ((an0.z - fo.z) / fl) * 4 } : fo;
+  // У фонтана (после возрождения или проходя мимо) — докупиться
+  if (nearShop(w, b)) botShop(w, b, p);
   // Ближайший живой вражеский герой
   let foe: Unit | null = null;
   for (const v of w.units)

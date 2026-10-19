@@ -26,6 +26,7 @@ export interface HeroDef {
   /** Способности по слотам Q W E R (R — ультимейт, открывается на 6 уровне) */
   abilities: string[];
   /** Закупка бота по порядку */
+  /** Рекомендуемые предметы по порядку: их показывает лавка и по ним закупается бот */
   build: string[];
   /** Цвет героя в интерфейсе */
   color: string;
@@ -50,7 +51,7 @@ export const HEROES: HeroDef[] = [
     barH: 3.6,
     armor: 0,
     abilities: ['fireball', 'blink', 'shield', 'meteor'],
-    build: ['boots', 'flame', 'ring', 'archstaff', 'cloak', 'mail', 'bulwark'],
+    build: ['boots', 'flame', 'archstaff', 'pathboots', 'sage', 'lifegem'],
     color: '#8f95ff',
   },
   {
@@ -71,7 +72,7 @@ export const HEROES: HeroDef[] = [
     barH: 3.9,
     armor: 0,
     abilities: ['slam', 'charge', 'stoneskin', 'quake'],
-    build: ['boots', 'staff', 'cloak', 'gloves', 'warblade', 'mail', 'bulwark'],
+    build: ['boots', 'vampblade', 'bulwark', 'pathboots', 'citadel', 'reaper'],
     color: '#ff8a6a',
   },
   {
@@ -93,7 +94,7 @@ export const HEROES: HeroDef[] = [
     barH: 3.3,
     armor: 1,
     abilities: ['pierce', 'sprint', 'sharpeye', 'volley'],
-    build: ['boots', 'gloves', 'staff', 'warblade', 'fang', 'cloak'],
+    build: ['boots', 'swiftboots', 'warblade', 'vampblade', 'stormblade', 'windwalker'],
     color: '#9be06a',
   },
   {
@@ -115,7 +116,7 @@ export const HEROES: HeroDef[] = [
     barH: 3.5,
     armor: 1,
     abilities: ['mend', 'bind', 'keeper', 'dome'],
-    build: ['boots', 'ring', 'cloak', 'mail', 'archstaff', 'bulwark'],
+    build: ['boots', 'pathboots', 'lifegem', 'flame', 'archstaff', 'citadel'],
     color: '#ffe08a',
   },
   {
@@ -137,7 +138,7 @@ export const HEROES: HeroDef[] = [
     barH: 3.4,
     armor: 2,
     abilities: ['dagger', 'veil', 'thirst', 'execute'],
-    build: ['boots', 'staff', 'fang', 'gloves', 'warblade', 'cloak'],
+    build: ['boots', 'blade', 'vampblade', 'swiftboots', 'reaper', 'windwalker'],
     color: '#a99ae0',
   },
 ];

@@ -54,8 +54,11 @@ export interface HeroState {
   items: (string | null)[];
   /** Перезарядка способностей по слотам Q W E R, секунды */
   cd: number[];
-  /** Перезарядка активных предметов по слотам инвентаря */
+  /** Перезарядка активных предметов по слотам инвентаря (0–5 — основные, 6–8 — рюкзак) */
   itemCd: number[];
+  /** Когда куплен предмет в слоте (время мира) и сколько за него заплачено — для возврата в первые 10 с */
+  itemT: number[];
+  itemPaid: number[];
   respawn: number;
   order: Order | null;
   casting: Casting | null;
@@ -179,6 +182,8 @@ export type Command =
   | { c: 'cast'; slot: number; x?: number; z?: number; id?: number }
   | { c: 'buy'; item: string }
   | { c: 'sell'; slot: number }
+  /** Поменять местами два слота (в том числе с рюкзаком) */
+  | { c: 'swap'; a: number; b: number }
   | { c: 'use'; slot: number; x?: number; z?: number }
   | { c: 'ping'; x: number; z: number; kind?: 'look' | 'danger' | 'go' };
 

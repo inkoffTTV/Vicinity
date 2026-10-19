@@ -1,6 +1,7 @@
 // Снимок мира для одного игрока. Туман войны считается здесь, на стороне симуляции:
 // враги вне видимости команды в снимок не попадают вовсе, поэтому клиент не может их «подсмотреть».
 // Тот же код работает и в одиночной игре — клиент рисует только снимки, как в сетевой.
+import { FULL_REFUND_TIME, sellValue } from './sim/shop';
 import { ABILITIES, abilityAt } from './sim/abilities';
 import { HERO } from './data/heroes';
 import { hasFlag, modValue } from './sim/modifiers';
@@ -72,6 +73,9 @@ export interface MeSnap {
   need: number;
   items: (string | null)[];
   itemCd: number[];
+  /** Сколько вернут за предмет в слоте сейчас и сколько ещё секунд действует полный возврат */
+  sell: number[];
+  full: number[];
   cd: number[];
   cdMax: number[];
   respawn: number;
@@ -262,6 +266,10 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; even
       need: xpNeed(h.level),
       items: [...h.items],
       itemCd: h.itemCd.map(r2),
+      sell: h.items.map((id, i) => (id ? sellValue(id, h.itemT[i], h.itemPaid[i], w.time) : 0)),
+      full: h.items.map((id, i) =>
+        id && h.itemPaid[i] > 0 ? r2(Math.max(0, FULL_REFUND_TIME - (w.time - h.itemT[i]))) : 0,
+      ),
       cd: h.cd.map(r2),
       cdMax: HERO[h.def].abilities.map((_, i) => abilityAt(mu, i)?.cd ?? 1),
       respawn: r2(h.respawn),
