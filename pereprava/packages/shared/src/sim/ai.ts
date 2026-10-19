@@ -11,7 +11,9 @@ import { ancientOf, buyItem, dist, towerOf, unitById, type World } from './world
 
 /** Вражеская вышка рядом с точкой */
 function towerThreat(w: World, x: number, z: number, team: Team): boolean {
-  return w.units.some((tw) => tw.kind === 'tower' && tw.alive && tw.team !== team && Math.hypot(x - tw.x, z - tw.z) < tw.range + 2);
+  return w.units.some(
+    (tw) => tw.kind === 'tower' && tw.alive && tw.team !== team && Math.hypot(x - tw.x, z - tw.z) < tw.range + 2,
+  );
 }
 
 /** Можно ли боту стоять в точке: под вражеской вышкой — только со своими крипами, к фонтану врага — нельзя */
@@ -19,7 +21,8 @@ function safeFor(w: World, b: Unit, x: number, z: number): boolean {
   const team = b.team as Team;
   for (const tw of w.units)
     if (tw.kind === 'tower' && tw.alive && tw.team !== team && Math.hypot(x - tw.x, z - tw.z) < tw.range + 2)
-      if (!w.units.some((v) => v.alive && v.kind === 'creep' && v.team === team && dist(v, tw) < tw.range)) return false;
+      if (!w.units.some((v) => v.alive && v.kind === 'creep' && v.team === team && dist(v, tw) < tw.range))
+        return false;
   const ef = FOUNTAINS[1 - team];
   return Math.hypot(x - ef.x, z - ef.z) >= 13;
 }
@@ -58,7 +61,8 @@ function botShop(w: World, b: Unit, p: Player) {
 
 function enemyCreepsNear(w: World, b: Unit, x: number, z: number, r: number): number {
   let n = 0;
-  for (const v of w.units) if (v.alive && v.kind === 'creep' && v.team !== b.team && Math.hypot(v.x - x, v.z - z) < r) n++;
+  for (const v of w.units)
+    if (v.alive && v.kind === 'creep' && v.team !== b.team && Math.hypot(v.x - x, v.z - z) < r) n++;
   return n;
 }
 
@@ -83,8 +87,14 @@ function useAbilities(w: World, b: Unit, foe: Unit | null, hpP: number, retreati
           return castAbility(w, b, slot, { x: foe.x, z: foe.z, id: foe.id });
         if (ai.kind === 'nuke' && !retreating && ai.creeps) {
           for (const v of w.units)
-            if (v.alive && v.kind === 'creep' && v.team !== b.team && dist(b, v) < (ai.range ?? 12) * 0.8 &&
-              enemyCreepsNear(w, b, v.x, v.z, ai.radius ?? 3) >= ai.creeps && safeFor(w, b, v.x, v.z))
+            if (
+              v.alive &&
+              v.kind === 'creep' &&
+              v.team !== b.team &&
+              dist(b, v) < (ai.range ?? 12) * 0.8 &&
+              enemyCreepsNear(w, b, v.x, v.z, ai.radius ?? 3) >= ai.creeps &&
+              safeFor(w, b, v.x, v.z)
+            )
               return castAbility(w, b, slot, { x: v.x, z: v.z, id: v.id });
         }
         break;
@@ -93,17 +103,27 @@ function useAbilities(w: World, b: Unit, foe: Unit | null, hpP: number, retreati
         if (foe && hpP < (ai.hp ?? 0.5) && df < (ai.range ?? 8)) return castAbility(w, b, slot, null);
         break;
       case 'buff':
-        if (foe && !retreating && df < (ai.range ?? 4)) return castAbility(w, b, slot, foe ? { x: foe.x, z: foe.z, id: foe.id } : null);
+        if (foe && !retreating && df < (ai.range ?? 4))
+          return castAbility(w, b, slot, foe ? { x: foe.x, z: foe.z, id: foe.id } : null);
         break;
       case 'heal': {
         let best: Unit | null = null;
         for (const v of w.units)
-          if (v.kind === 'hero' && v.alive && v.team === b.team && dist(b, v) < (ai.range ?? 10) && v.hp / v.maxHp < (ai.hp ?? 0.6) && (!best || v.hp / v.maxHp < best.hp / best.maxHp)) best = v;
+          if (
+            v.kind === 'hero' &&
+            v.alive &&
+            v.team === b.team &&
+            dist(b, v) < (ai.range ?? 10) &&
+            v.hp / v.maxHp < (ai.hp ?? 0.6) &&
+            (!best || v.hp / v.maxHp < best.hp / best.maxHp)
+          )
+            best = v;
         if (best) return castAbility(w, b, slot, { x: best.x, z: best.z, id: best.id });
         break;
       }
       case 'finish':
-        if (foe && df < (ai.range ?? 3.5) && foe.hp / foe.maxHp < (ai.hp ?? 0.4)) return castAbility(w, b, slot, { x: foe.x, z: foe.z, id: foe.id });
+        if (foe && df < (ai.range ?? 3.5) && foe.hp / foe.maxHp < (ai.hp ?? 0.4))
+          return castAbility(w, b, slot, { x: foe.x, z: foe.z, id: foe.id });
         break;
       case 'escape':
         if (retreating && foe && df < 9 && hpP < (ai.hp ?? 0.4)) {
@@ -126,7 +146,14 @@ export function botThink(w: World, b: Unit, p: Player) {
   // Ближайший живой вражеский герой
   let foe: Unit | null = null;
   for (const v of w.units)
-    if (v.kind === 'hero' && v.alive && v.team !== team && !hasFlag(v, 'invisible') && (!foe || dist(b, v) < dist(b, foe))) foe = v;
+    if (
+      v.kind === 'hero' &&
+      v.alive &&
+      v.team !== team &&
+      !hasFlag(v, 'invisible') &&
+      (!foe || dist(b, v) < dist(b, foe))
+    )
+      foe = v;
 
   if (p.ai.mode === 'retreat') {
     if (Math.hypot(b.x - sp.x, b.z - sp.z) < 4) {
@@ -156,7 +183,10 @@ export function botThink(w: World, b: Unit, p: Player) {
       s.alive &&
       !s.invuln &&
       s.team === team &&
-      w.units.some((v) => v.alive && v.team !== team && v.team !== 2 && (v.kind === 'creep' || v.kind === 'hero') && dist(v, s) < 13),
+      w.units.some(
+        (v) =>
+          v.alive && v.team !== team && v.team !== 2 && (v.kind === 'creep' || v.kind === 'hero') && dist(v, s) < 13,
+      ),
   );
   if (threatened && dist(b, threatened) > 16) {
     h.order = { type: 'move', x: threatened.x, z: threatened.z, st: 0, best: Infinity };
@@ -168,7 +198,13 @@ export function botThink(w: World, b: Unit, p: Player) {
     if (v.kind !== 'hero' || !v.alive || v.team === team || hasFlag(v, 'invisible')) continue;
     const d = dist(b, v);
     const hp2 = v.hp / v.maxHp;
-    if (d < 10 && !towerThreat(w, v.x, v.z, team) && !towerThreat(w, b.x, b.z, team) && safeFor(w, b, v.x, v.z) && (hp2 < hpP + D.aggr || d < 4))
+    if (
+      d < 10 &&
+      !towerThreat(w, v.x, v.z, team) &&
+      !towerThreat(w, b.x, b.z, team) &&
+      safeFor(w, b, v.x, v.z) &&
+      (hp2 < hpP + D.aggr || d < 4)
+    )
       if (!tgt || d < dist(b, tgt)) tgt = v;
   }
   if (!tgt) {
@@ -188,9 +224,25 @@ export function botThink(w: World, b: Unit, p: Player) {
     const tw = towerOf(w, 1 - team);
     const an = ancientOf(w, 1 - team);
     const twT = tw && unitById(w, tw.target);
-    const creepsAtTower = !!tw && w.units.filter((c) => c.alive && c.kind === 'creep' && c.team === team && dist(c, tw) < tw.range + 1).length >= 2;
-    if (tw?.alive && !tw.invuln && ((twT && twT.team === team && twT.kind === 'creep') || creepsAtTower) && dist(b, tw) < 18) tgt = tw;
-    else if (tw && !tw.alive && an && !an.invuln && dist(b, an) < 20 && w.units.some((c) => c.alive && c.kind === 'creep' && c.team === team && dist(c, an) < 14)) tgt = an;
+    const creepsAtTower =
+      !!tw &&
+      w.units.filter((c) => c.alive && c.kind === 'creep' && c.team === team && dist(c, tw) < tw.range + 1).length >= 2;
+    if (
+      tw?.alive &&
+      !tw.invuln &&
+      ((twT && twT.team === team && twT.kind === 'creep') || creepsAtTower) &&
+      dist(b, tw) < 18
+    )
+      tgt = tw;
+    else if (
+      tw &&
+      !tw.alive &&
+      an &&
+      !an.invuln &&
+      dist(b, an) < 20 &&
+      w.units.some((c) => c.alive && c.kind === 'creep' && c.team === team && dist(c, an) < 14)
+    )
+      tgt = an;
   }
   // Руна рядом и безопасно — забрать
   if (!tgt && w.rune && Math.hypot(w.rune.x - b.x, w.rune.z - b.z) < 22 && safeFor(w, b, w.rune.x, w.rune.z)) {
@@ -198,7 +250,9 @@ export function botThink(w: World, b: Unit, p: Player) {
     return;
   }
   // На линии делать нечего — лагерь на своей стороне реки (если на нашей половине нет вражеских крипов)
-  const laneSafe = !w.units.some((v) => v.alive && v.kind === 'creep' && v.team !== team && (team === 0 ? v.x - v.z < 0 : v.x - v.z > 0));
+  const laneSafe = !w.units.some(
+    (v) => v.alive && v.kind === 'creep' && v.team !== team && (team === 0 ? v.x - v.z < 0 : v.x - v.z > 0),
+  );
   if (!tgt && hpP > 0.6 && h.level >= 3 && laneSafe) {
     let bd = 26;
     for (const v of w.units)

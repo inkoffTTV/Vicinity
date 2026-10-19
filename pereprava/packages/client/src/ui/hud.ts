@@ -162,7 +162,11 @@ export class Hud {
     const here = me.nearShop && me.alive;
     const full = me.items.every((x) => x);
     n.className = here ? 'ok' : '';
-    n.textContent = here ? (full ? 'Инвентарь полон' : 'Вы у фонтана, можно покупать') : 'Покупать можно только у своего фонтана';
+    n.textContent = here
+      ? full
+        ? 'Инвентарь полон'
+        : 'Вы у фонтана, можно покупать'
+      : 'Покупать можно только у своего фонтана';
     $('shopList')
       .querySelectorAll<HTMLButtonElement>('.buy')
       .forEach((b) => (b.disabled = !here || !canAfford(me.items, me.gold, b.dataset.id!)));
@@ -197,7 +201,11 @@ export class Hud {
       const locked = !!ab?.ult && me.level < ULT_LEVEL;
       b.classList.toggle('locked', locked);
       b.style.setProperty('--cd', (locked ? 1 : me.cdMax[i] > 0 ? me.cd[i] / me.cdMax[i] : 0).toFixed(3));
-      this.setText('sk' + i, b.firstChild as HTMLElement, locked ? String(ULT_LEVEL) : me.cd[i] > 0 ? String(Math.ceil(me.cd[i])) : KEYS[i]);
+      this.setText(
+        'sk' + i,
+        b.firstChild as HTMLElement,
+        locked ? String(ULT_LEVEL) : me.cd[i] > 0 ? String(Math.ceil(me.cd[i])) : KEYS[i],
+      );
     });
     const key = me.items.join('|');
     if (key !== this.invKey) {
@@ -239,13 +247,25 @@ export class Hud {
         const killer = heroOfUnit(e.killer);
         if (!victim) continue;
         if (e.victim === me.unit)
-          this.toast(killer ? `${killer.name} ${killer.fem ? 'убила' : 'убил'} вашего ${victim.acc}` : `Ваш ${victim.name.toLowerCase()} погиб`);
+          this.toast(
+            killer
+              ? `${killer.name} ${killer.fem ? 'убила' : 'убил'} вашего ${victim.acc}`
+              : `Ваш ${victim.name.toLowerCase()} погиб`,
+          );
         else if (e.victimTeam !== myTeam) this.toast(`${victim.name} ${victim.fem ? 'повержена' : 'повержен'}`);
         else this.toast(`Союзник погиб: ${victim.name}`);
       } else if (e.e === 'tower') {
         const last = e.tier >= 2;
-        if (e.team !== myTeam) this.toast(last ? 'Внутренняя вышка врага пала. Их кристалл уязвим' : 'Вражеская вышка разрушена. Следующая — внутренняя');
-        else this.toast(last ? 'Наша внутренняя вышка пала. Защищайте кристалл' : 'Наша вышка разрушена. Держите внутреннюю');
+        if (e.team !== myTeam)
+          this.toast(
+            last
+              ? 'Внутренняя вышка врага пала. Их кристалл уязвим'
+              : 'Вражеская вышка разрушена. Следующая — внутренняя',
+          );
+        else
+          this.toast(
+            last ? 'Наша внутренняя вышка пала. Защищайте кристалл' : 'Наша вышка разрушена. Держите внутреннюю',
+          );
       } else if (e.e === 'rune') {
         if (!e.taker) this.toast('В реке появилась ' + (RUNE_NAMES[e.rune] ?? 'руна').toLowerCase());
         else if (e.taker === me.unit) this.toast('Вы взяли: ' + (RUNE_NAMES[e.rune] ?? 'руна').toLowerCase());

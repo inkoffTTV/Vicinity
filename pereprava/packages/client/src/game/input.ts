@@ -66,7 +66,12 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
       pinchD = d;
       return;
     }
-    if (pointers.size === 1 && act.playing() && Math.hypot(p.x - ptr.sx, p.y - ptr.sy) > 10 && performance.now() - dragT > 110) {
+    if (
+      pointers.size === 1 &&
+      act.playing() &&
+      Math.hypot(p.x - ptr.sx, p.y - ptr.sy) > 10 &&
+      performance.now() - dragT > 110
+    ) {
       dragT = performance.now();
       const g = view.groundAt(p.x, p.y);
       if (g) act.moveTo(g.x, g.z);

@@ -1,7 +1,19 @@
 // Земля, вода, деревья, камни и фонтаны — статичная часть карты. Геометрия и случайные отклонения
 // повторяют прототип 0.3 (тот же генератор и порядок вызовов), поэтому карта выглядит так же.
 import * as THREE from 'three';
-import { ANCIENTS, dLane, dRiver, FOUNTAINS, groundH, MAP_SEED, mapTreesAll, Rng, treeCleared, treesRngEnd, WATER } from '@pereprava/shared';
+import {
+  ANCIENTS,
+  dLane,
+  dRiver,
+  FOUNTAINS,
+  groundH,
+  MAP_SEED,
+  mapTreesAll,
+  Rng,
+  treeCleared,
+  treesRngEnd,
+  WATER,
+} from '@pereprava/shared';
 import { mat, TEAM_COLORS } from './models';
 
 const C = {
@@ -63,13 +75,22 @@ export function buildTerrain(night: boolean): Terrain {
   }
   ng.setAttribute('color', new THREE.BufferAttribute(col, 3));
   ng.computeVertexNormals();
-  const ground = new THREE.Mesh(ng, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 }));
+  const ground = new THREE.Mesh(
+    ng,
+    new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 }),
+  );
   ground.receiveShadow = true;
   ground.name = 'ground';
   group.add(ground);
   const water = new THREE.Mesh(
     new THREE.PlaneGeometry(150, 150).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: night ? 0x2a5f8a : 0x3a8fc7, transparent: true, opacity: 0.82, roughness: 0.2, metalness: 0.1 }),
+    new THREE.MeshStandardMaterial({
+      color: night ? 0x2a5f8a : 0x3a8fc7,
+      transparent: true,
+      opacity: 0.82,
+      roughness: 0.2,
+      metalness: 0.1,
+    }),
   );
   water.position.y = WATER;
   group.add(water);
@@ -79,8 +100,16 @@ export function buildTerrain(night: boolean): Terrain {
   const all = mapTreesAll();
   const trees = all.filter((t) => !treeCleared(t));
   rng.seed = treesRngEnd;
-  const crowns = new THREE.InstancedMesh(new THREE.ConeGeometry(1.25, 3.2, 6).translate(0, 2.7, 0), mat(0xffffff), trees.length);
-  const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.2, 0.28, 1.4, 5).translate(0, 0.7, 0), mat(0x6b4b2e), trees.length);
+  const crowns = new THREE.InstancedMesh(
+    new THREE.ConeGeometry(1.25, 3.2, 6).translate(0, 2.7, 0),
+    mat(0xffffff),
+    trees.length,
+  );
+  const trunks = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(0.2, 0.28, 1.4, 5).translate(0, 0.7, 0),
+    mat(0x6b4b2e),
+    trees.length,
+  );
   const dm = new THREE.Object3D();
   const greens = [0x2f6b35, 0x3b7a3a, 0x2a5a30, 0x4a7d3a];
   const dry = [0x4b5a35, 0x5d5b3a, 0x45502f];

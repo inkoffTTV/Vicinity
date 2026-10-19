@@ -63,7 +63,15 @@ export class Room {
     this.slots = [];
     for (const team of [0, 1] as Team[])
       for (let i = 0; i < per; i++)
-        this.slots.push({ team, client: 0, name: '', hero: HEROES[(i * 2 + team) % HEROES.length].id, ready: false, bot: true, online: false });
+        this.slots.push({
+          team,
+          client: 0,
+          name: '',
+          hero: HEROES[(i * 2 + team) % HEROES.length].id,
+          ready: false,
+          bot: true,
+          online: false,
+        });
     for (const h of humans) {
       const s = this.freeSlot(h.team) ?? this.freeSlot(h.team ? 0 : 1);
       if (s) Object.assign(s, { ...h, ready: false });
@@ -77,7 +85,14 @@ export class Room {
   }
 
   info(): RoomInfo {
-    return { code: this.code, mode: this.mode, host: this.host, slots: this.slots.map((s) => ({ ...s })), state: this.state, botDifficulty: this.difficulty };
+    return {
+      code: this.code,
+      mode: this.mode,
+      host: this.host,
+      slots: this.slots.map((s) => ({ ...s })),
+      state: this.state,
+      botDifficulty: this.difficulty,
+    };
   }
 
   broadcast(msg: ServerMsg) {
@@ -213,7 +228,12 @@ export class Room {
     void per;
     this.world = createWorld({
       seed: (Date.now() % 2147483646) + 1,
-      players: this.slots.map((s) => ({ name: s.name, team: s.team, hero: s.hero, bot: s.client ? null : this.difficulty })),
+      players: this.slots.map((s) => ({
+        name: s.name,
+        team: s.team,
+        hero: s.hero,
+        bot: s.client ? null : this.difficulty,
+      })),
       jungle: true,
     });
     this.state = 'game';

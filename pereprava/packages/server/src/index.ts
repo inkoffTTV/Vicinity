@@ -30,7 +30,9 @@ function newCode(): string {
 
 // Управляющие символы и угловые скобки из имени убираем
 // eslint-disable-next-line no-control-regex
-const cleanName = (v: unknown) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 16) : '') || 'Игрок';
+const BAD_NAME_CHARS = /[\u0000-\u001f<>]/g;
+const cleanName = (v: unknown) =>
+  (typeof v === 'string' ? v.replace(BAD_NAME_CHARS, '').trim().slice(0, 16) : '') || 'Игрок';
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const int = (v: unknown): v is number => Number.isInteger(v);
 
@@ -47,7 +49,9 @@ function cleanCommand(c: unknown): Command | null {
       return { c: 'stop' };
     case 'cast':
       if (!int(o.slot) || o.slot < 0 || o.slot > 3) return null;
-      return num(o.x) && num(o.z) ? { c: 'cast', slot: o.slot, x: o.x, z: o.z, id: int(o.id) ? o.id : undefined } : { c: 'cast', slot: o.slot };
+      return num(o.x) && num(o.z)
+        ? { c: 'cast', slot: o.slot, x: o.x, z: o.z, id: int(o.id) ? o.id : undefined }
+        : { c: 'cast', slot: o.slot };
     case 'buy':
       return typeof o.item === 'string' && o.item.length < 32 ? { c: 'buy', item: o.item } : null;
     case 'sell':
@@ -56,7 +60,9 @@ function cleanCommand(c: unknown): Command | null {
       if (!int(o.slot) || o.slot < 0 || o.slot > 5) return null;
       return num(o.x) && num(o.z) ? { c: 'use', slot: o.slot, x: o.x, z: o.z } : { c: 'use', slot: o.slot };
     case 'ping':
-      return num(o.x) && num(o.z) ? { c: 'ping', x: o.x, z: o.z, kind: o.kind === 'danger' || o.kind === 'go' ? o.kind : 'look' } : null;
+      return num(o.x) && num(o.z)
+        ? { c: 'ping', x: o.x, z: o.z, kind: o.kind === 'danger' || o.kind === 'go' ? o.kind : 'look' }
+        : null;
     default:
       return null;
   }
@@ -68,9 +74,11 @@ function handle(c: Client, m: ClientMsg) {
     case 'create': {
       if (!isMode(m.mode)) return;
       room?.leave(c);
-      if (rooms.size >= MAX_ROOMS) return c.send({ t: 'error', text: 'Сервер занят: все комнаты заняты, попробуйте позже' });
+      if (rooms.size >= MAX_ROOMS)
+        return c.send({ t: 'error', text: 'Сервер занят: все комнаты заняты, попробуйте позже' });
       const r = new Room(newCode(), m.mode, c, (x) => rooms.delete(x.code));
-      if (typeof m.difficulty === 'string') r.difficulty = m.difficulty in { easy: 1, normal: 1, hard: 1 } ? m.difficulty : 'normal';
+      if (typeof m.difficulty === 'string')
+        r.difficulty = m.difficulty in { easy: 1, normal: 1, hard: 1 } ? m.difficulty : 'normal';
       rooms.set(r.code, r);
       r.join(c);
       return;
@@ -192,7 +200,8 @@ server.on('upgrade', (req, socket, head) => {
 setInterval(() => {
   const now = Date.now();
   for (const [token, c] of byToken) if (!c.online && !c.room && now - c.lastSeen > 10 * 60_000) byToken.delete(token);
-  for (const r of rooms.values()) if (r.state !== 'game' && !r.humans && now - r.lastActive > 60_000) rooms.delete(r.code);
+  for (const r of rooms.values())
+    if (r.state !== 'game' && !r.humans && now - r.lastActive > 60_000) rooms.delete(r.code);
 }, 30_000).unref();
 
 server.listen(PORT, () => console.log(`Переправа: сервер на порту ${PORT}, комнат не больше ${MAX_ROOMS}`));

@@ -21,7 +21,18 @@ function spawnCamp(w: World, i: number) {
     const a = (k / kinds.length) * Math.PI * 2 + i;
     const x = c.x + Math.cos(a) * 1.6;
     const z = c.z + Math.sin(a) * 1.6;
-    addUnit(w, { kind: 'neutral', team: 2, model: m, x, z, rot: a + Math.PI, camp: i, homeX: x, homeZ: z, ...NEUTRALS[m] });
+    addUnit(w, {
+      kind: 'neutral',
+      team: 2,
+      model: m,
+      x,
+      z,
+      rot: a + Math.PI,
+      camp: i,
+      homeX: x,
+      homeZ: z,
+      ...NEUTRALS[m],
+    });
   });
 }
 
@@ -43,8 +54,7 @@ export function updateCamps(w: World) {
 /** Нейтрал получил урон — он и соседи по лагерю нападают на обидчика */
 export function aggroNeutral(w: World, t: Unit, src: Unit) {
   if (src.team === 2) return;
-  for (const u of w.units)
-    if (u.alive && u.kind === 'neutral' && u.camp === t.camp && !u.target) u.target = src.id;
+  for (const u of w.units) if (u.alive && u.kind === 'neutral' && u.camp === t.camp && !u.target) u.target = src.id;
 }
 
 export function updateNeutral(w: World, u: Unit) {
@@ -52,7 +62,13 @@ export function updateNeutral(w: World, u: Unit) {
   const hx = u.homeX ?? u.x;
   const hz = u.homeZ ?? u.z;
   let t = unitById(w, u.target);
-  if (t && (!t.alive || hasFlag(t, 'invisible') || Math.hypot(t.x - hx, t.z - hz) > LEASH || Math.hypot(u.x - hx, u.z - hz) > LEASH + 4)) {
+  if (
+    t &&
+    (!t.alive ||
+      hasFlag(t, 'invisible') ||
+      Math.hypot(t.x - hx, t.z - hz) > LEASH ||
+      Math.hypot(u.x - hx, u.z - hz) > LEASH + 4)
+  ) {
     u.target = 0;
     t = undefined;
   }
@@ -69,7 +85,12 @@ export function updateNeutral(w: World, u: Unit) {
 }
 
 const RUNES = ['haste', 'damage', 'regen', 'shield'] as const;
-export const RUNE_NAMES: Record<string, string> = { haste: 'Руна скорости', damage: 'Руна силы', regen: 'Руна восстановления', shield: 'Руна щита' };
+export const RUNE_NAMES: Record<string, string> = {
+  haste: 'Руна скорости',
+  damage: 'Руна силы',
+  regen: 'Руна восстановления',
+  shield: 'Руна щита',
+};
 
 export function updateRunes(w: World) {
   if (w.time >= w.nextRune) {

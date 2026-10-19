@@ -232,10 +232,20 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; even
   const projs: ProjSnap[] = [];
   for (const pr of w.projs)
     if (pr.team === team || pointVisible(w, team, pr.x, pr.z))
-      projs.push({ id: pr.id, k: pr.kind, x: r2(pr.x), z: r2(pr.z), y0: pr.y0, tid: pr.target, c: pr.color, s: pr.size });
+      projs.push({
+        id: pr.id,
+        k: pr.kind,
+        x: r2(pr.x),
+        z: r2(pr.z),
+        y0: pr.y0,
+        tid: pr.target,
+        c: pr.color,
+        s: pr.size,
+      });
   const zones: ZoneSnap[] = [];
   for (const z of w.zones)
-    if (z.team === team || pointVisible(w, team, z.x, z.z)) zones.push({ id: z.id, k: z.kind, x: r2(z.x), z: r2(z.z), r: z.r, t: r2(z.t), d: r2(z.delay), tm: z.team });
+    if (z.team === team || pointVisible(w, team, z.x, z.z))
+      zones.push({ id: z.id, k: z.kind, x: r2(z.x), z: r2(z.z), r: z.r, t: r2(z.t), d: r2(z.delay), tm: z.team });
   let me: MeSnap | null = null;
   const mu = p && unitById(w, p.unit);
   if (mu?.hero) {

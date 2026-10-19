@@ -94,10 +94,26 @@ function aimDir(u: Unit, aim: Aim | null, fallback: () => { dx: number; dz: numb
 const facing = (u: Unit) => ({ dx: Math.sin(u.rot), dz: Math.cos(u.rot) });
 
 /** Урон по площади всем врагам (кроме неуязвимых), filter — дополнительное условие */
-export function aoe(w: World, u: Unit, x: number, z: number, r: number, amt: number, type: 'physical' | 'magical' | 'pure', filter?: (v: Unit) => boolean): Unit[] {
+export function aoe(
+  w: World,
+  u: Unit,
+  x: number,
+  z: number,
+  r: number,
+  amt: number,
+  type: 'physical' | 'magical' | 'pure',
+  filter?: (v: Unit) => boolean,
+): Unit[] {
   const hit: Unit[] = [];
   for (const v of w.units)
-    if (v.alive && v.team !== u.team && !v.invuln && Math.hypot(v.x - x, v.z - z) < r + v.radius && (!filter || filter(v))) hit.push(v);
+    if (
+      v.alive &&
+      v.team !== u.team &&
+      !v.invuln &&
+      Math.hypot(v.x - x, v.z - z) < r + v.radius &&
+      (!filter || filter(v))
+    )
+      hit.push(v);
   for (const v of hit) damage(w, v, amt, u, type);
   return hit;
 }
@@ -133,13 +149,31 @@ function aimPoint(w: World, u: Unit, aim: Aim | null, range: number): { x: numbe
 /** Цель-юнит: выбранная, иначе ближайший вражеский герой, иначе любой враг в радиусе */
 function aimUnit(w: World, u: Unit, aim: Aim | null, range: number): Unit | null {
   const chosen = aim?.id ? unitById(w, aim.id) : undefined;
-  if (chosen?.alive && chosen.team !== u.team && !chosen.invuln && dist(u, chosen) <= range + chosen.radius + 1) return chosen;
+  if (chosen?.alive && chosen.team !== u.team && !chosen.invuln && dist(u, chosen) <= range + chosen.radius + 1)
+    return chosen;
   return nearestEnemy(w, u, range, (v) => v.kind === 'hero') ?? nearestEnemy(w, u, range);
 }
 
 /** Самонаводящийся снаряд способности */
 function launchAt(w: World, u: Unit, kind: string, t: Unit, speed: number, dmg: number, color: number, size = 0.7) {
-  w.projs.push({ id: w.nextId++, kind, x: u.x, z: u.z, y0: 1.8, dx: 0, dz: 0, speed, dist: 0, max: 1e9, target: t.id, src: u.id, team: u.team, dmg, color, size });
+  w.projs.push({
+    id: w.nextId++,
+    kind,
+    x: u.x,
+    z: u.z,
+    y0: 1.8,
+    dx: 0,
+    dz: 0,
+    speed,
+    dist: 0,
+    max: 1e9,
+    target: t.id,
+    src: u.id,
+    team: u.team,
+    dmg,
+    color,
+    size,
+  });
 }
 
 export const ABILITIES: Record<string, AbilityDef> = {
@@ -260,7 +294,18 @@ export const ABILITIES: Record<string, AbilityDef> = {
     ai: { kind: 'nuke', range: 15 },
     cast(w, u, aim) {
       const p = aimPoint(w, u, aim, 16);
-      addZone(w, { kind: 'meteor', x: p.x, z: p.z, r: 4.5, t: 3, delay: 1, period: 0.5, src: u.id, team: u.team, v: (220 + lvl(u) * 30) * amp(u) });
+      addZone(w, {
+        kind: 'meteor',
+        x: p.x,
+        z: p.z,
+        r: 4.5,
+        t: 3,
+        delay: 1,
+        period: 0.5,
+        src: u.id,
+        team: u.team,
+        v: (220 + lvl(u) * 30) * amp(u),
+      });
       return true;
     },
     zone: {
@@ -347,7 +392,8 @@ export const ABILITIES: Record<string, AbilityDef> = {
         const a = (k / 6) * Math.PI * 2;
         fx(w, u.x + Math.cos(a) * 3, u.z + Math.sin(a) * 3, 0.3, 0x9a7a52, 1.3, 0.6, 2);
       }
-      for (const v of aoe(w, u, u.x, u.z, 5.5, 180 + lvl(u) * 25, 'magical', (v) => v.kind !== 'tower')) if (v.alive) addMod(v, 'stun', 1.6, 0, u.id);
+      for (const v of aoe(w, u, u.x, u.z, 5.5, 180 + lvl(u) * 25, 'magical', (v) => v.kind !== 'tower'))
+        if (v.alive) addMod(v, 'stun', 1.6, 0, u.id);
     },
   },
   // ── Следопытка ──
@@ -424,14 +470,36 @@ export const ABILITIES: Record<string, AbilityDef> = {
     ai: { kind: 'nuke', range: 13 },
     cast(w, u, aim) {
       const p = aimPoint(w, u, aim, 14);
-      addZone(w, { kind: 'volley', x: p.x, z: p.z, r: 5, t: 3, delay: 0.25, period: 0.5, src: u.id, team: u.team, v: 35 + lvl(u) * 6 });
+      addZone(w, {
+        kind: 'volley',
+        x: p.x,
+        z: p.z,
+        r: 5,
+        t: 3,
+        delay: 0.25,
+        period: 0.5,
+        src: u.id,
+        team: u.team,
+        v: 35 + lvl(u) * 6,
+      });
       return true;
     },
     zone: {
       pulse(w, z, src) {
-        for (let k = 0; k < 3; k++) fx(w, z.x + Math.sin(w.tick + k * 2.1) * z.r * 0.6, z.z + Math.cos(w.tick * 1.3 + k) * z.r * 0.6, 0.4, 0xd7ffb0, 0.35, 0.3, 1.5);
+        for (let k = 0; k < 3; k++)
+          fx(
+            w,
+            z.x + Math.sin(w.tick + k * 2.1) * z.r * 0.6,
+            z.z + Math.cos(w.tick * 1.3 + k) * z.r * 0.6,
+            0.4,
+            0xd7ffb0,
+            0.35,
+            0.3,
+            1.5,
+          );
         if (!src) return;
-        for (const v of aoe(w, src, z.x, z.z, z.r, z.v, 'physical', (v) => v.kind !== 'tower' && v.kind !== 'ancient')) if (v.alive) addMod(v, 'slow', 0.6, 0.3, src.id);
+        for (const v of aoe(w, src, z.x, z.z, z.r, z.v, 'physical', (v) => v.kind !== 'tower' && v.kind !== 'ancient'))
+          if (v.alive) addMod(v, 'slow', 0.6, 0.3, src.id);
       },
     },
   },
@@ -450,7 +518,9 @@ export const ABILITIES: Record<string, AbilityDef> = {
       const z = aim ? aim.z : u.z;
       const amt = (110 + lvl(u) * 18) * amp(u);
       fx(w, x, z, 0.3, 0xa8ffb8, 2, 0.5, 1.6);
-      for (const v of w.units) if (v.alive && v.team === u.team && v.kind === 'hero' && Math.hypot(v.x - x, v.z - z) < 5 + v.radius) heal(w, v, amt);
+      for (const v of w.units)
+        if (v.alive && v.team === u.team && v.kind === 'hero' && Math.hypot(v.x - x, v.z - z) < 5 + v.radius)
+          heal(w, v, amt);
       if (Math.hypot(u.x - x, u.z - z) >= 5 + u.radius) heal(w, u, amt * 0.5);
       return true;
     },
@@ -512,7 +582,9 @@ export const ABILITIES: Record<string, AbilityDef> = {
     },
     zone: {
       pulse(w, z) {
-        for (const v of w.units) if (v.alive && v.team === z.team && Math.hypot(v.x - z.x, v.z - z.z) < z.r + v.radius) addMod(v, 'resist', DT * 2, z.v, z.src);
+        for (const v of w.units)
+          if (v.alive && v.team === z.team && Math.hypot(v.x - z.x, v.z - z.z) < z.r + v.radius)
+            addMod(v, 'resist', DT * 2, z.v, z.src);
       },
     },
   },
@@ -617,7 +689,14 @@ export function castAbility(w: World, u: Unit, slot: number, aim: Aim | null): b
   if (a.castTime) {
     // Замах: способность сработает позже; движение и атака на это время останавливаются
     if (!a.cast(w, u, aim)) return false;
-    h.casting = { ability: a.id, t: a.castTime, total: a.castTime, x: aim?.x ?? u.x, z: aim?.z ?? u.z, id: aim?.id ?? 0 };
+    h.casting = {
+      ability: a.id,
+      t: a.castTime,
+      total: a.castTime,
+      x: aim?.x ?? u.x,
+      z: aim?.z ?? u.z,
+      id: aim?.id ?? 0,
+    };
     h.order = null;
     h.cd[slot] = a.cd * (1 - h.cdr);
     emit(w, { e: 'cast', id: u.id, ability: a.id, x: h.casting.x, z: h.casting.z });

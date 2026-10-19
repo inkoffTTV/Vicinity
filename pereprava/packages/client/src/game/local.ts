@@ -1,5 +1,16 @@
 // Одиночная игра: та же симуляция, что на сервере, крутится прямо в браузере с шагом 1/30 с.
-import { createWorld, DT, makeSnapshot, queueCommand, step, type Command, type MatchSetup, type Snapshot, type Team, type World } from '@pereprava/shared';
+import {
+  createWorld,
+  DT,
+  makeSnapshot,
+  queueCommand,
+  step,
+  type Command,
+  type MatchSetup,
+  type Snapshot,
+  type Team,
+  type World,
+} from '@pereprava/shared';
 import type { Session } from './session';
 
 export class LocalSession implements Session {

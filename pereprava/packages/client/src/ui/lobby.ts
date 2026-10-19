@@ -3,14 +3,23 @@
 import { DIFFICULTIES, HERO, HEROES, type GameMode, type RoomInfo, type ServerMsg } from '@pereprava/shared';
 import type { Connection } from '../net/connection';
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+const esc = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 /** Селектор, по которому элемент найдётся после перерисовки */
 function focusKey(el: HTMLElement): string {
   if (el instanceof HTMLInputElement && el.name) return `input[name="${el.name}"]`;
   const act = el.dataset.act;
   if (!act) return el.tagName === 'INPUT' ? 'input' : '';
-  const extra = el.dataset.v ? `[data-v="${el.dataset.v}"]` : el.dataset.hero ? `[data-hero="${el.dataset.hero}"]` : el.dataset.mode ? `[data-mode="${el.dataset.mode}"]` : el.dataset.team ? `[data-team="${el.dataset.team}"]` : '';
+  const extra = el.dataset.v
+    ? `[data-v="${el.dataset.v}"]`
+    : el.dataset.hero
+      ? `[data-hero="${el.dataset.hero}"]`
+      : el.dataset.mode
+        ? `[data-mode="${el.dataset.mode}"]`
+        : el.dataset.team
+          ? `[data-team="${el.dataset.team}"]`
+          : '';
   return `[data-act="${act}"]${extra}`;
 }
 
@@ -103,7 +112,13 @@ export class Lobby {
   private draw() {
     const st = this.conn.status;
     const status =
-      st === 'online' ? '' : st === 'connecting' ? 'Подключаемся к серверу…' : st === 'offline' ? 'Нет связи с сервером — пробуем снова…' : '';
+      st === 'online'
+        ? ''
+        : st === 'connecting'
+          ? 'Подключаемся к серверу…'
+          : st === 'offline'
+            ? 'Нет связи с сервером — пробуем снова…'
+            : '';
     const r = this.room;
     if (!r) {
       this.el.innerHTML = `
@@ -130,8 +145,18 @@ export class Lobby {
         .filter(({ s }) => s.team === t)
         .map(({ s, i }) => {
           const who = s.client ? esc(s.name) : 'Бот';
-          const state = !s.client ? `<span class="tag bot">${DIFFICULTIES[r.botDifficulty]?.name ?? ''}</span>` : !s.online ? '<span class="tag off">нет связи</span>' : s.ready ? '<span class="tag ok">готов</span>' : '<span class="tag">выбирает</span>';
-          const hero = s.client ? esc(HERO[s.hero]?.name ?? '') : r.state === 'lobby' ? 'случайный герой' : esc(HERO[s.hero]?.name ?? '');
+          const state = !s.client
+            ? `<span class="tag bot">${DIFFICULTIES[r.botDifficulty]?.name ?? ''}</span>`
+            : !s.online
+              ? '<span class="tag off">нет связи</span>'
+              : s.ready
+                ? '<span class="tag ok">готов</span>'
+                : '<span class="tag">выбирает</span>';
+          const hero = s.client
+            ? esc(HERO[s.hero]?.name ?? '')
+            : r.state === 'lobby'
+              ? 'случайный герой'
+              : esc(HERO[s.hero]?.name ?? '');
           return `<li class="${i === me ? 'me' : ''}"><b>${who}</b><span>${hero}</span>${state}</li>`;
         })
         .join('');
@@ -142,14 +167,24 @@ export class Lobby {
     ).join('');
     const seg = (act: string, cur: string, opts: [string, string][]) =>
       `<div class="seg" role="radiogroup" style="--n:${opts.length}">${opts
-        .map(([v, n]) => `<button role="radio" aria-checked="${cur === v}" data-act="${act}" data-v="${v}" ${host && r.state === 'lobby' ? '' : 'disabled'}>${n}</button>`)
+        .map(
+          ([v, n]) =>
+            `<button role="radio" aria-checked="${cur === v}" data-act="${act}" data-v="${v}" ${host && r.state === 'lobby' ? '' : 'disabled'}>${n}</button>`,
+        )
         .join('')}</div>`;
     this.el.innerHTML = `
       <header class="lb-head"><h2>Комната <span class="code">${r.code}</span></h2><button class="icon-x" data-act="leave" aria-label="Выйти из комнаты">×</button></header>
       <div class="lb-share"><input readonly value="${esc(this.link())}" aria-label="Ссылка-приглашение"><button class="ghost" data-act="copy">Скопировать</button></div>
       <div class="lb-opts">
-        <div><p class="lbl">Режим</p>${seg('mode', r.mode, [['1v1', '1 на 1'], ['2v2', '2 на 2']])}</div>
-        <div><p class="lbl">Боты</p>${seg('diff', r.botDifficulty, Object.values(DIFFICULTIES).map((d) => [d.id, d.name[0].toUpperCase() + d.name.slice(1)] as [string, string]))}</div>
+        <div><p class="lbl">Режим</p>${seg('mode', r.mode, [
+          ['1v1', '1 на 1'],
+          ['2v2', '2 на 2'],
+        ])}</div>
+        <div><p class="lbl">Боты</p>${seg(
+          'diff',
+          r.botDifficulty,
+          Object.values(DIFFICULTIES).map((d) => [d.id, d.name[0].toUpperCase() + d.name.slice(1)] as [string, string]),
+        )}</div>
       </div>
       <div class="lb-teams">
         <div class="lb-team a"><h3>Свет</h3><ul>${team(0)}</ul>${mine && mine.team !== 0 && r.state === 'lobby' ? '<button class="ghost" data-act="team" data-team="0">Перейти сюда</button>' : ''}</div>

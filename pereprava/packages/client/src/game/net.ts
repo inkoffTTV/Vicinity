@@ -69,7 +69,10 @@ export class NetSession implements Session {
       this.prevC = skip[skip.length - 1];
     }
     if (this.prevC && this.curC && this.curC.tick > this.prevC.tick)
-      this.alpha = Math.max(0, Math.min(1, (this.renderT - this.prevC.tick * DT) / ((this.curC.tick - this.prevC.tick) * DT)));
+      this.alpha = Math.max(
+        0,
+        Math.min(1, (this.renderT - this.prevC.tick * DT) / ((this.curC.tick - this.prevC.tick) * DT)),
+      );
     else this.alpha = 1;
     return out;
   }

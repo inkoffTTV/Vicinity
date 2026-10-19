@@ -32,7 +32,8 @@ export class Sound {
 
   private init() {
     if (this.ctx) return;
-    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const Ctx =
+      window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctx) return;
     const ctx = new Ctx();
     this.ctx = ctx;
@@ -72,7 +73,15 @@ export class Sound {
 
   // ── Синтез ──
 
-  private tone(freq: number, dur: number, wave: Wave = 'sine', gain = 0.3, slideTo?: number, delay = 0, out?: AudioNode) {
+  private tone(
+    freq: number,
+    dur: number,
+    wave: Wave = 'sine',
+    gain = 0.3,
+    slideTo?: number,
+    delay = 0,
+    out?: AudioNode,
+  ) {
     const ctx = this.ctx!;
     const t = ctx.currentTime + delay;
     const o = ctx.createOscillator();
@@ -88,7 +97,15 @@ export class Sound {
     o.stop(t + dur + 0.05);
   }
 
-  private noise(dur: number, freq: number, q = 1, gain = 0.3, type: BiquadFilterType = 'bandpass', slideTo?: number, delay = 0) {
+  private noise(
+    dur: number,
+    freq: number,
+    q = 1,
+    gain = 0.3,
+    type: BiquadFilterType = 'bandpass',
+    slideTo?: number,
+    delay = 0,
+  ) {
     const ctx = this.ctx!;
     const t = ctx.currentTime + delay;
     const src = ctx.createBufferSource();
@@ -275,11 +292,25 @@ export class Sound {
           const v = u ? near(u.x, u.z) : 0.5;
           const a = ABILITIES[e.ability];
           const id = e.ability;
-          this.play(id === 'blink' || id === 'charge' ? 'blink' : id === 'shield' || id === 'stoneskin' || id === 'dome' ? 'shield' : id === 'mend' ? 'heal' : id === 'fireball' || id === 'meteor' ? 'fire' : a?.castTime ? 'stun' : 'cast', v);
+          this.play(
+            id === 'blink' || id === 'charge'
+              ? 'blink'
+              : id === 'shield' || id === 'stoneskin' || id === 'dome'
+                ? 'shield'
+                : id === 'mend'
+                  ? 'heal'
+                  : id === 'fireball' || id === 'meteor'
+                    ? 'fire'
+                    : a?.castTime
+                      ? 'stun'
+                      : 'cast',
+            v,
+          );
           break;
         }
         case 'fx':
-          if (e.size >= 1.1 && (e.color === 0xff7a1f || e.color === 0xb08a5a || e.color === 0x9a7a52)) this.play('boom', near(e.x, e.z));
+          if (e.size >= 1.1 && (e.color === 0xff7a1f || e.color === 0xb08a5a || e.color === 0x9a7a52))
+            this.play('boom', near(e.x, e.z));
           break;
         case 'death':
           if (e.kind === 'hero') this.play('death', 0.9);

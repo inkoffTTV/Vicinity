@@ -1,6 +1,14 @@
 // Клиент целиком: меню → поиск → «Игра найдена» → загрузка → матч → итоги. Логика меню повторяет
 // прототип 0.3; матч идёт через Session (одиночный — LocalSession на общей симуляции).
-import { difficulty, DIFFICULTIES, HERO, type Command, type ServerMsg, type Snapshot, type Team } from '@pereprava/shared';
+import {
+  difficulty,
+  DIFFICULTIES,
+  HERO,
+  type Command,
+  type ServerMsg,
+  type Snapshot,
+  type Team,
+} from '@pereprava/shared';
 import { LocalSession } from './game/local';
 import { NetSession } from './game/net';
 import { Connection } from './net/connection';
@@ -139,7 +147,8 @@ export class App {
     $('modeFriend').addEventListener('click', () => this.lobby.open());
     $('modeBot').addEventListener('click', () => this.lobby.close());
     // Ссылка-приглашение ?room=КОД или сохранённый токен (вернуться в идущий матч после перезагрузки)
-    const code = new URLSearchParams(location.search).get('room') ?? (/room=([A-Za-z0-9]+)/.exec(location.hash)?.[1] ?? '');
+    const code =
+      new URLSearchParams(location.search).get('room') ?? /room=([A-Za-z0-9]+)/.exec(location.hash)?.[1] ?? '';
     if (code) {
       this.pendingJoin = code.toUpperCase();
       this.lobby.open();
@@ -237,7 +246,12 @@ export class App {
       if (this.pendingJoin && !m.room) {
         this.conn.send({ t: 'join', code: this.pendingJoin });
         this.pendingJoin = '';
-      } else if (m.room && (m.room.state === 'lobby' || m.room.state === 'over') && !this.lobby.visible && this.state === 'menu')
+      } else if (
+        m.room &&
+        (m.room.state === 'lobby' || m.room.state === 'over') &&
+        !this.lobby.visible &&
+        this.state === 'menu'
+      )
         this.lobby.open();
     } else if (m.t === 'start') this.startNet(m.slot, m.players[m.slot]?.team ?? 0);
   }
@@ -284,7 +298,9 @@ export class App {
     $('accept').hidden = true;
     $('screen').hidden = true;
     this.setState('play');
-    this.hud.toast(`Против вас ${HERO[this.enemyHero].name}, бот ${difficulty(this.settings.diff).name}. Крипы выходят на линию`);
+    this.hud.toast(
+      `Против вас ${HERO[this.enemyHero].name}, бот ${difficulty(this.settings.diff).name}. Крипы выходят на линию`,
+    );
   }
 
   private endGame(s: Snapshot) {
@@ -298,7 +314,15 @@ export class App {
     p.matches++;
     if (win) p.wins++;
     const online = this.session instanceof NetSession;
-    p.history.unshift({ w: win, t: Math.round(s.time), k: s.kills[this.view.myTeam], d: s.kills[1 - this.view.myTeam], diff: online ? 'net' : this.settings.diff, lh: mine.lastHits, hero: me.hero });
+    p.history.unshift({
+      w: win,
+      t: Math.round(s.time),
+      k: s.kills[this.view.myTeam],
+      d: s.kills[1 - this.view.myTeam],
+      diff: online ? 'net' : this.settings.diff,
+      lh: mine.lastHits,
+      hero: me.hero,
+    });
     p.history = p.history.slice(0, 8);
     store.set('profile', p);
     this.sound.play(win ? 'win' : 'lose');
@@ -492,7 +516,8 @@ export class App {
   }
 
   private updatePickInfo() {
-    $('pickInfo').textContent = `Вы: ${HERO[this.settings.hero].name}. Противник: ${HERO[this.enemyHero].name}, бот ${difficulty(this.settings.diff).name}.`;
+    $('pickInfo').textContent =
+      `Вы: ${HERO[this.settings.hero].name}. Противник: ${HERO[this.enemyHero].name}, бот ${difficulty(this.settings.diff).name}.`;
   }
 
   private renderHeroes() {
@@ -544,14 +569,18 @@ export class App {
 
   private renderProfile() {
     const { matches: m, wins: w, history } = this.profile;
-    $('statGrid').innerHTML = `<div><b>${m}</b><small>матчей</small></div><div><b>${w}</b><small>побед</small></div><div><b>${m - w}</b><small>поражений</small></div><div><b>${m ? Math.round((w / m) * 100) : 0}%</b><small>доля побед</small></div>`;
+    $('statGrid').innerHTML =
+      `<div><b>${m}</b><small>матчей</small></div><div><b>${w}</b><small>побед</small></div><div><b>${m - w}</b><small>поражений</small></div><div><b>${m ? Math.round((w / m) * 100) : 0}%</b><small>доля побед</small></div>`;
     const h = $('hist');
     if (!history.length) {
       h.innerHTML = '<p class="empty">Сыграйте первый матч, он появится здесь.</p>';
       return;
     }
     h.innerHTML = history
-      .map((r) => `<div><b class="${r.w ? 'w' : 'l'}">${r.w ? 'Победа' : 'Поражение'}</b><span>${r.diff === 'net' ? 'по сети' : 'бот ' + (DIFFICULTIES[r.diff]?.name ?? '')}, ${r.k}:${r.d}, ${r.lh} крипов</span><span>${fmt(r.t)}</span></div>`)
+      .map(
+        (r) =>
+          `<div><b class="${r.w ? 'w' : 'l'}">${r.w ? 'Победа' : 'Поражение'}</b><span>${r.diff === 'net' ? 'по сети' : 'бот ' + (DIFFICULTIES[r.diff]?.name ?? '')}, ${r.k}:${r.d}, ${r.lh} крипов</span><span>${fmt(r.t)}</span></div>`,
+      )
       .join('');
   }
 
@@ -633,7 +662,13 @@ export class App {
           this.view.handleEvents(s.events, this.session.slot);
           this.snap = s;
           this.hud.events(s.events);
-          this.sound.events(s.events, s, { x: this.view.camT.x, z: this.view.camT.z }, this.view.myUnit, this.session.slot);
+          this.sound.events(
+            s.events,
+            s,
+            { x: this.view.camT.x, z: this.view.camT.z },
+            this.view.myUnit,
+            this.session.slot,
+          );
           if (s.winner !== -1) this.endGame(s);
         }
       // Интерфейс в сети — по самому свежему снимку (золото, перезарядки без задержки интерполяции)
@@ -709,7 +744,8 @@ export class App {
           if (s.winner !== -1) app.endGame(s);
         }
       },
-      cast: (slot: number, x?: number, z?: number) => app.cast(slot, x !== undefined && z !== undefined ? { x, z } : null),
+      cast: (slot: number, x?: number, z?: number) =>
+        app.cast(slot, x !== undefined && z !== undefined ? { x, z } : null),
       order: (x: number, z: number) => app.send({ c: 'move', x, z }),
       reveal(on = true) {
         if (app.session instanceof LocalSession) app.session.revealAll = on;

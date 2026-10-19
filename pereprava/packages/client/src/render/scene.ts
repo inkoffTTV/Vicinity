@@ -41,7 +41,11 @@ export function createScene(host: HTMLElement): SceneKit {
   scene.fog = fog;
   const camera = new THREE.PerspectiveCamera(40, 1, 0.5, 300);
   scene.add(
-    new THREE.HemisphereLight(night ? 0x8091c4 : 0xfff1d6, night ? 0x1a2416 : 0x4d5c36, (night ? 0.62 : 0.8) * LEGACY_LIGHT),
+    new THREE.HemisphereLight(
+      night ? 0x8091c4 : 0xfff1d6,
+      night ? 0x1a2416 : 0x4d5c36,
+      (night ? 0.62 : 0.8) * LEGACY_LIGHT,
+    ),
   );
   const sun = new THREE.DirectionalLight(night ? 0xa9bcff : 0xffe0b0, (night ? 0.7 : 1.05) * LEGACY_LIGHT);
   sun.castShadow = true;

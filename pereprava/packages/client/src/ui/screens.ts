@@ -2,7 +2,8 @@
 import { ABILITIES, HERO, HEROES, ITEM, type PlayerSnap, type Snapshot } from '@pereprava/shared';
 
 const KEYS = ['Q', 'W', 'E', 'R'];
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+const esc = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 /** Вкладка «Герои»: все герои со способностями */
 export function renderHeroCards(el: HTMLElement, chosen: string, onPick: (id: string) => void) {
@@ -21,7 +22,9 @@ export function renderHeroCards(el: HTMLElement, chosen: string, onPick: (id: st
       <button class="ghost" data-hero="${h.id}" aria-pressed="${h.id === chosen}">${h.id === chosen ? 'Выбран' : 'Играть за этого героя'}</button>
     </article>`;
   }).join('');
-  el.querySelectorAll<HTMLButtonElement>('[data-hero]').forEach((b) => b.addEventListener('click', () => onPick(b.dataset.hero!)));
+  el.querySelectorAll<HTMLButtonElement>('[data-hero]').forEach((b) =>
+    b.addEventListener('click', () => onPick(b.dataset.hero!)),
+  );
 }
 
 /** Сетка карточек для экрана выбора */
@@ -43,7 +46,10 @@ export function renderPickGrid(el: HTMLElement, chosen: string, onPick: (id: str
 function items(p: PlayerSnap) {
   return p.items
     .filter((x): x is string => !!x)
-    .map((id) => `<i style="--ic:${ITEM[id].color}" title="${esc(ITEM[id].name)}"><svg viewBox="0 0 24 24">${ITEM[id].icon}</svg></i>`)
+    .map(
+      (id) =>
+        `<i style="--ic:${ITEM[id].color}" title="${esc(ITEM[id].name)}"><svg viewBox="0 0 24 24">${ITEM[id].icon}</svg></i>`,
+    )
     .join('');
 }
 

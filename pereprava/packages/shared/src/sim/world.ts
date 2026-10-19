@@ -6,7 +6,18 @@
 import { difficulty } from '../data/difficulty';
 import { HERO } from '../data/heroes';
 import { ITEM } from '../data/items';
-import { ANCIENTS, FOUNTAINS, INNER_TOWERS, laneDir, MAP_LIMIT, SPAWNS, TOWERS, treeGrid, type P2, type Tree } from '../map';
+import {
+  ANCIENTS,
+  FOUNTAINS,
+  INNER_TOWERS,
+  laneDir,
+  MAP_LIMIT,
+  SPAWNS,
+  TOWERS,
+  treeGrid,
+  type P2,
+  type Tree,
+} from '../map';
 import { RNG_MOD, rngNext } from '../rng';
 import type {
   Camp,
@@ -153,7 +164,10 @@ const UNIT_DEFAULTS = {
   barH: 2,
 };
 
-export function addUnit(w: World, o: Partial<Unit> & { kind: UnitKind; team: Side; x: number; z: number; maxHp: number; model: string }): Unit {
+export function addUnit(
+  w: World,
+  o: Partial<Unit> & { kind: UnitKind; team: Side; x: number; z: number; maxHp: number; model: string },
+): Unit {
   const u: Unit = { ...UNIT_DEFAULTS, id: w.nextId++, hp: o.maxHp, mods: [], ...o } as Unit;
   w.units.push(u);
   index(w).set(u.id, u);
@@ -344,7 +358,8 @@ export function nearestEnemy(w: World, u: Unit, r: number, filter?: (v: Unit) =>
   let best: Unit | null = null;
   let bd = 1e9;
   for (const v of w.units) {
-    if (!v.alive || v.team === u.team || v.team === 2 || v.invuln || hasFlag(v, 'invisible') || (filter && !filter(v))) continue;
+    if (!v.alive || v.team === u.team || v.team === 2 || v.invuln || hasFlag(v, 'invisible') || (filter && !filter(v)))
+      continue;
     const d = dist(u, v) - v.radius;
     if (d < r && d < bd) {
       bd = d;
@@ -511,7 +526,11 @@ export function damage(w: World, t: Unit, amt: number, src: Unit | null, type: D
     if (late > 0) amt *= 1 + BALANCE.decayPerMin * late;
   }
   // Здания без своих вражеских крипов рядом получают меньше урона (защита от «прокрадывания»)
-  if ((t.kind === 'tower' || t.kind === 'ancient') && src?.kind === 'hero' && !w.units.some((c) => c.alive && c.kind === 'creep' && c.team === src.team && dist(c, t) < 14))
+  if (
+    (t.kind === 'tower' || t.kind === 'ancient') &&
+    src?.kind === 'hero' &&
+    !w.units.some((c) => c.alive && c.kind === 'creep' && c.team === src.team && dist(c, t) < 14)
+  )
     amt *= 1 - BACKDOOR;
   // Щит поглощает урон первым
   let shielded = false;
@@ -621,7 +640,9 @@ function kill(w: World, t: Unit, src: Unit | null) {
     return;
   }
   if (t.kind === 'tower') {
-    const inner = w.units.find((u) => u.kind === 'tower' && u.team === t.team && u.alive && (u.tier ?? 1) > (t.tier ?? 1));
+    const inner = w.units.find(
+      (u) => u.kind === 'tower' && u.team === t.team && u.alive && (u.tier ?? 1) > (t.tier ?? 1),
+    );
     if (inner) inner.invuln = false;
     else {
       const an = ancientOf(w, t.team);
@@ -718,7 +739,18 @@ function shoot(w: World, u: Unit, t: Unit, dmg: number) {
 }
 
 /** Линейный снаряд способности (огненный шар и подобные) */
-export function launch(w: World, u: Unit, kind: string, dx: number, dz: number, speed: number, max: number, dmg: number, color: number, size = 1): Projectile {
+export function launch(
+  w: World,
+  u: Unit,
+  kind: string,
+  dx: number,
+  dz: number,
+  speed: number,
+  max: number,
+  dmg: number,
+  color: number,
+  size = 1,
+): Projectile {
   const p: Projectile = {
     id: w.nextId++,
     kind,
@@ -910,7 +942,10 @@ function updateTower(w: World, u: Unit) {
     t = undefined;
   }
   if (!t) {
-    t = nearestEnemy(w, u, u.range, (v) => v.kind === 'creep') ?? nearestEnemy(w, u, u.range, (v) => v.kind === 'hero') ?? undefined;
+    t =
+      nearestEnemy(w, u, u.range, (v) => v.kind === 'creep') ??
+      nearestEnemy(w, u, u.range, (v) => v.kind === 'hero') ??
+      undefined;
     u.target = t?.id ?? 0;
   }
   if (t) tryAttack(w, u, t);
@@ -1021,7 +1056,16 @@ function updateProjectiles(w: World) {
         w.projs.splice(i, 1);
         if (p.kind === 'attack') {
           damage(w, t, p.dmg, unitById(w, p.src) ?? null, 'physical');
-          fx(w, t.x, t.z, t.kind === 'creep' || t.kind === 'neutral' ? 0.8 : t.kind === 'hero' ? 1.4 : 4, p.color, 0.25, 0.2, 2);
+          fx(
+            w,
+            t.x,
+            t.z,
+            t.kind === 'creep' || t.kind === 'neutral' ? 0.8 : t.kind === 'hero' ? 1.4 : 4,
+            p.color,
+            0.25,
+            0.2,
+            2,
+          );
         } else ABILITIES[p.kind]?.onProjectileEnd?.(w, p, t);
       } else {
         p.x += (dx / L) * s;
@@ -1088,7 +1132,8 @@ function applyAuras(w: World, u: Unit) {
     const aura = ABILITIES[id]?.aura;
     if (!aura) continue;
     for (const v of w.units)
-      if (v.alive && v.team === u.team && (v.kind === 'hero' || v.kind === 'creep') && dist(v, u) < aura.radius) addMod(v, aura.mod, 0.25, aura.v, u.id);
+      if (v.alive && v.team === u.team && (v.kind === 'hero' || v.kind === 'creep') && dist(v, u) < aura.radius)
+        addMod(v, aura.mod, 0.25, aura.v, u.id);
   }
 }
 

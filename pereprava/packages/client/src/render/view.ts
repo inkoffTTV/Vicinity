@@ -1,7 +1,17 @@
 // Отображение мира по снимкам. Клиент ничего не решает: позиции берёт из двух последних снимков
 // (интерполяция), анимации — из тиков атаки/урона/каста, эффекты — из событий.
 import * as THREE from 'three';
-import { ABILITIES, DT, groundH, unitY, type ProjSnap, type SimEvent, type Snapshot, type UnitSnap, type ZoneSnap } from '@pereprava/shared';
+import {
+  ABILITIES,
+  DT,
+  groundH,
+  unitY,
+  type ProjSnap,
+  type SimEvent,
+  type Snapshot,
+  type UnitSnap,
+  type ZoneSnap,
+} from '@pereprava/shared';
 import { makeModel, setGhost, type Rig } from './models';
 import type { SceneKit } from './scene';
 import { animateRig } from './anim';
@@ -107,7 +117,15 @@ export class GameView {
       new THREE.MeshBasicMaterial({ color: 0x7dff9a, transparent: true, opacity: 0, depthWrite: false }),
     );
     kit.scene.add(this.marker);
-    this.rune = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.7, flatShading: true }));
+    this.rune = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.6, 0),
+      new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0xffffff,
+        emissiveIntensity: 0.7,
+        flatShading: true,
+      }),
+    );
     this.rune.visible = false;
     kit.scene.add(this.rune);
   }
@@ -185,7 +203,13 @@ export class GameView {
     if (z.k === 'dome') {
       dome = new THREE.Mesh(
         new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.16,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        }),
       );
       group.add(dome);
     }
@@ -350,7 +374,11 @@ export class GameView {
       const dm = z.disc.material as THREE.MeshBasicMaterial;
       const em = z.edge.material as THREE.MeshBasicMaterial;
       // Метеор до падения: красный круг-предупреждение, мигает
-      dm.opacity = pending ? 0.12 + 0.1 * Math.abs(Math.sin(time * 10)) : z.snap.k === 'dome' ? 0.08 : 0.2 + 0.08 * Math.sin(time * 6);
+      dm.opacity = pending
+        ? 0.12 + 0.1 * Math.abs(Math.sin(time * 10))
+        : z.snap.k === 'dome'
+          ? 0.08
+          : 0.2 + 0.08 * Math.sin(time * 6);
       em.opacity = pending ? 0.9 : 0.55;
       if (z.dome) z.dome.rotation.y += dt * 0.6;
     }
@@ -429,7 +457,10 @@ export class GameView {
     const stun = fxs.includes('stun');
     const root = fxs.includes('root');
     if (stun && !v.stun) {
-      v.stun = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.07, 4, 12), new THREE.MeshBasicMaterial({ color: 0xffe066 }));
+      v.stun = new THREE.Mesh(
+        new THREE.TorusGeometry(0.45, 0.07, 4, 12),
+        new THREE.MeshBasicMaterial({ color: 0xffe066 }),
+      );
       v.stun.rotation.x = Math.PI / 2;
       v.rig.root.add(v.stun);
     }
@@ -439,7 +470,10 @@ export class GameView {
       v.stun.rotation.z = time * 6;
     }
     if (root && !v.root) {
-      v.root = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.85, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x8a5ce0, transparent: true, opacity: 0.7, depthWrite: false }));
+      v.root = new THREE.Mesh(
+        new THREE.RingGeometry(0.6, 0.85, 16).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0x8a5ce0, transparent: true, opacity: 0.7, depthWrite: false }),
+      );
       v.rig.root.add(v.root);
       v.root.position.y = 0.08;
     }
