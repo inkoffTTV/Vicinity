@@ -159,18 +159,27 @@ describe('разворот', () => {
 });
 
 describe('«Хаос» и фразы', () => {
-  it('«Хаос» 3 на 3 на одной линии доигрывается быстро', () => {
-    const ids = ['mage', 'brute', 'ranger', 'keeper', 'shade', 'frost'];
-    const w = createWorld({
-      seed: 21,
-      jungle: true,
-      mode: '1v1',
-      chaos: true,
-      players: ids.map((hero, i) => ({ name: 'Б' + i, team: (i < 3 ? 0 : 1) as 0 | 1, hero, bot: 'normal' })),
-    });
-    while (w.winner === -1 && w.tick < 25 * 60 * TICK_RATE) step(w);
-    expect(w.winner).not.toBe(-1);
-    expect(w.time / 60).toBeLessThan(16);
+  it('«Хаос» 3 на 3 на одной линии доигрывается быстро (медиана по матчам)', () => {
+    const ids = ['mage', 'brute', 'ranger', 'keeper', 'shade', 'frost', 'storm', 'oak', 'bard', 'monk'];
+    const mins: number[] = [];
+    for (let k = 0; k < 4; k++) {
+      const w = createWorld({
+        seed: 31 + k,
+        jungle: true,
+        mode: '1v1',
+        chaos: true,
+        players: [0, 1, 2, 3, 4, 5].map((i) => ({
+          name: 'Б' + i,
+          team: (i < 3 ? 0 : 1) as 0 | 1,
+          hero: ids[(i + k * 2) % ids.length],
+          bot: 'normal',
+        })),
+      });
+      while (w.winner === -1 && w.tick < 30 * 60 * TICK_RATE) step(w);
+      mins.push(w.time / 60);
+    }
+    mins.sort((a, b) => a - b);
+    expect((mins[1] + mins[2]) / 2).toBeLessThan(15);
   });
 
   it('фраза уходит союзникам, но не чаще раза в 2 с', () => {

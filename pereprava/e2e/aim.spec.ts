@@ -59,6 +59,16 @@ async function startMatch(page: Page) {
     (me as unknown as { hero: { skill: number[] } }).hero.skill = [1, 1, 1, 0];
     const c = w.units.find((u) => u.kind === 'creep' && !(u as { owner?: number }).owner && u.team === 1 && u.alive)!;
     Object.assign(c, { x: me.x + 4, z: me.z - 4 });
+    // Крип стоит на месте (оглушён), вражеский герой далеко — под курсором только он
+    (c as unknown as { mods: { id: string; t: number; v: number; src: number }[] }).mods.push({
+      id: 'stun',
+      t: 120,
+      v: 0,
+      src: 0,
+    });
+    const foe = w.units.find((u) => u.id === w.players[1].unit)!;
+    Object.assign(foe, { x: -me.x, z: -me.z });
+    (window as unknown as { __tid: number }).__tid = c.id;
     g.step(2);
   });
   await page.waitForTimeout(300);
@@ -69,7 +79,7 @@ const points = (page: Page) =>
   page.evaluate(() => {
     const v = window.__g.app.view;
     const canvas = document.querySelector('canvas')!.getBoundingClientRect();
-    const creep = [...v.units.values()].find((u) => u.snap.k === 'creep' && u.snap.tm === 1)!;
+    const creep = v.units.get((window as unknown as { __tid: number }).__tid)!;
     const me = v.units.get(v.myUnit)!;
     const c = v.toScreen(creep.x, creep.y + 0.8, creep.z)!;
     const ground = v.toScreen(me.x - 5, me.y, me.z + 5)!;
