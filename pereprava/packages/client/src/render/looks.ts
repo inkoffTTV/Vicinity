@@ -419,6 +419,22 @@ export const CREEP_LOOKS: Record<'melee' | 'ranged', Look> = {
   },
 };
 
+/** Страж реки — каменный великан у реки (босс) */
+export const BOSS_LOOK: Look = {
+  height: 1.15,
+  bulk: 2.0,
+  skin: 0x6a7a8a,
+  cloth: 0x3a4a5a,
+  armor: 0x5a6a7a,
+  trim: 0x9ad8ff,
+  glow: 0x9ae8ff,
+  head: 'horns',
+  torso: 'plate',
+  shoulders: 'spikes',
+  weapon: 'hammer',
+  extra: ['tail'],
+};
+
 /** Лесной великан — большой нейтрал */
 export const GIANT_LOOK: Look = {
   height: 1.0,

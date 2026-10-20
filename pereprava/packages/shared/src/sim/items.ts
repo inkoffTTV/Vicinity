@@ -3,7 +3,7 @@ import { ITEM } from '../data/items';
 import type { Unit } from '../types';
 import { addMod, dispel } from './modifiers';
 import { INVENTORY } from './shop';
-import { clamp, fx, mapOf, recalc, resolveCollisions, type World } from './world';
+import { clamp, fx, mapOf, recalc, resolveCollisions, summon, type World } from './world';
 
 export interface ItemUse {
   (w: World, u: Unit, aim: { x: number; z: number } | null): boolean;
@@ -37,10 +37,23 @@ function bastion(w: World, u: Unit): boolean {
 }
 
 export const ITEM_USE: Record<string, ItemUse> = {
-  salve(w, u) {
-    addMod(u, 'regen', 10, 20, u.id);
-    addMod(u, 'salveMana', 10, 0, u.id);
-    fx(w, u.x, u.z, 1, 0x9be38a, 0.6, 0.5, 1.4);
+  ward(w, u, aim) {
+    // Не больше двух своих глаз одновременно: старый гаснет
+    const mine = w.units.filter((v) => v.alive && v.model === 'ward' && v.owner === u.id);
+    if (mine.length >= 2) {
+      mine[0].alive = false;
+      mine[0].hp = 0;
+    }
+    let x = aim?.x ?? u.x + Math.sin(u.rot) * 4;
+    let z = aim?.z ?? u.z + Math.cos(u.rot) * 4;
+    const d = Math.hypot(x - u.x, z - u.z);
+    if (d > 7) {
+      x = u.x + ((x - u.x) / d) * 7;
+      z = u.z + ((z - u.z) / d) * 7;
+    }
+    const v = summon(w, u, 'ward', x, z, 180, { maxHp: 1, dmg: 0, speed: 0, radius: 0.3, barH: 1.3 });
+    addMod(v, 'invisible', -1, 0, u.id);
+    fx(w, x, z, 0.8, 0xffd86a, 0.6, 0.5, 1.6);
     return true;
   },
   potion(w, u) {

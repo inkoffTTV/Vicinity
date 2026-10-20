@@ -86,6 +86,13 @@ export class Hud {
       this.toggleSay(false);
     });
     $('sayBtn').addEventListener('click', () => this.toggleSay());
+    $('talentBtn').addEventListener('click', () => this.toggleTalents());
+    $('talentBox').addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-pick]');
+      if (!b) return;
+      this.act.send({ c: 'talent', tier: +b.dataset.tier!, pick: +b.dataset.pick! });
+      $('talentBox').hidden = true;
+    });
     $('tpSlot').addEventListener('click', () => this.act.tpAim());
     $('portrait').addEventListener('dblclick', () => this.act.centerCamera());
     // На телефоне двойное касание
@@ -128,6 +135,28 @@ export class Hud {
     el.querySelector('b')!.textContent = info.name;
     (el.querySelector('i') as HTMLElement).style.width = `${Math.max(0, Math.min(1, info.hp / info.mhp)) * 100}%`;
     el.querySelector('span')!.textContent = `${Math.ceil(info.hp)} / ${Math.round(info.mhp)}`;
+  }
+
+  /** Таланты: два варианта для доступного яруса */
+  private toggleTalents() {
+    const box = $('talentBox');
+    const me = this.snap?.me;
+    if (!box.hidden || !me) {
+      box.hidden = true;
+      return;
+    }
+    const tier = me.talentReady.indexOf(true);
+    if (tier < 0) return;
+    const ab = HERO[me.hero].abilities.map((id) => ABILITIES[id]);
+    const opts =
+      tier === 0
+        ? [`${ab[0].name}: перезарядка на 30% короче`, `${ab[1].name}: перезарядка на 30% короче`]
+        : ['+15 к урону атаки и +150 к здоровью', '+20% к урону умений и +150 к мане'];
+    box.innerHTML = `<p>Талант ${tier ? '15' : '10'} уровня — выберите один:</p>${opts
+      .map((o, i) => `<button type="button" data-tier="${tier}" data-pick="${i}">${o}</button>`)
+      .join('')}`;
+    box.hidden = false;
+    box.querySelector<HTMLElement>('button')?.focus();
   }
 
   /** Колесо фраз: открыть или закрыть */
@@ -310,7 +339,9 @@ export class Hud {
     const me = s?.me;
     if (!s || !me) return;
     if (this.skillHero !== me.hero) this.buildSkills(me.hero);
-    this.setText('clock', $('clock'), fmt(s.time));
+    this.setText('clock', $('clock'), (s.night ? '☾ ' : '☀ ') + fmt(s.time));
+    $('clock').title = `${s.night ? 'Ночь' : 'День'}: ещё ${Math.ceil(s.dayT)} с. Ночью герои видят ближе`;
+    $('talentBtn').hidden = !me.talentReady.some(Boolean);
     this.setText('kA', $('kA'), String(s.kills[this.view.myTeam]));
     this.setText('kE', $('kE'), String(s.kills[1 - this.view.myTeam]));
     this.setText('gold', $('gold'), String(me.gold));
@@ -463,6 +494,14 @@ export class Hud {
         const h = HERO[me.hero];
         this.toast(`${h.name} ${h.fem ? 'вернулась' : 'вернулся'} в бой`);
       } else if (e.e === 'buy' && e.player === me.slot && e.item) this.toast('Куплено: ' + ITEM[e.item].name);
+      else if (e.e === 'bossUp') this.toast('Страж реки пробудился в своём логове у реки');
+      else if (e.e === 'boss')
+        this.toast(
+          e.team === myTeam
+            ? `Страж реки повержен! Команде — золото и благословение, у ${s.players[e.killer]?.name ?? 'союзника'} — Сердце стража (вторая жизнь)`
+            : 'Враги одолели Стража реки — осторожно, у одного из них вторая жизнь',
+        );
+      else if (e.e === 'aegis' && e.id === me.unit) this.toast('Сердце стража вернуло вас к жизни!');
       else if (e.e === 'say' && e.team === myTeam) {
         const p = s.players[e.player];
         this.feed(
@@ -576,6 +615,14 @@ export class Hud {
     c.beginPath();
     c.arc(X(m.ancients[1].x), X(m.ancients[1].z), 10 * k, 0, 7);
     c.fill();
+    // Логово Стража реки
+    c.fillStyle = '#ffd86a';
+    c.strokeStyle = '#3a2a10';
+    c.lineWidth = 2 * k;
+    c.beginPath();
+    c.arc(X(m.boss.x), X(m.boss.z), 6 * k, 0, 7);
+    c.fill();
+    c.stroke();
     void ik;
     this.mmStatic = st;
   }

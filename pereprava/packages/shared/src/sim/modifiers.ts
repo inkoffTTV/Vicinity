@@ -39,7 +39,10 @@ export interface ModifierDef {
 
 export const MODIFIERS: Record<string, ModifierDef> = {
   shield: { name: 'Щит', buff: true },
-  potion: { name: 'Зелье лечения', buff: true, stats: { heal: 50 } },
+  potion: { name: 'Зелье лечения', buff: true, stats: { heal: 50, manaHeal: 20 } },
+  blessing: { name: 'Благословение реки', buff: true, stats: { dmgAmp: 0.2, heal: 5 } },
+  aegis: { name: 'Сердце стража', buff: true },
+  nightStalker: { name: 'Охотник в ночи', buff: true, stats: { haste: 0.15 } },
   stun: { name: 'Оглушение', buff: false, flags: ['stun'] },
   slow: { name: 'Замедление', buff: false, stats: { slow: 'v' } },
   root: { name: 'Корни', buff: false, flags: ['root'] },
@@ -97,7 +100,7 @@ export const MODIFIERS: Record<string, ModifierDef> = {
       finishTp(w, u);
     },
   },
-  salveMana: { name: 'Травяной бальзам', buff: true, stats: { manaHeal: 8 } },
+
   // Ауры-пассивки на себя (обновляются каждый тик, пока герой жив)
   sap: {
     name: 'Сок земли',

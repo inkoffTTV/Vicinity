@@ -89,6 +89,18 @@ export const MODE_PACE: Record<
   '3v3': { fortifyUntil: 9 * 60, decayFrom: 17, decayPerMin: 0.12, bld: 1.6 },
 };
 
+/** Ночь: каждые 5 минут день сменяется ночью. Ночью герои видят на 40% ближе — кроме ночных охотников */
+export const DAY_LEN = 300;
+export const isNight = (w: World) => Math.floor(w.time / DAY_LEN) % 2 === 1;
+export const NIGHT_HEROES = ['shade', 'phantom', 'werewolf'];
+
+/** Таланты: на 10 уровне — перезарядка Q или W на 30% короче, на 15 — сила атаки или магии */
+export const TALENT_LEVELS = [10, 15];
+
+/** Страж реки (босс): когда появляется и через сколько возвращается после гибели, с */
+export const BOSS_FIRST = 180;
+export const BOSS_RESPAWN = 240;
+
 /** Темп «Хаоса» */
 export const CHAOS_PACE = { fortifyUntil: 2 * 60, decayFrom: 6, decayPerMin: 0.2, bld: 2.2 };
 
@@ -115,6 +127,9 @@ export interface World {
   /** Карта матча (MapDef — getMap(w.mapId)) */
   mapId: MapId;
   chaos?: boolean;
+  /** Страж реки: id живого (0 — нет) и когда появится */
+  boss: number;
+  bossAt: number;
   tick: number;
   time: number;
   nextWave: number;
@@ -258,6 +273,13 @@ export function recalc(u: Unit) {
   armor += agiUp * 0.14;
   atkSpeed += agiUp * 0.01;
   rg += (h.attrs.str - at.base.str) * 0.05;
+  if (h.talents[1] === 0) {
+    dmg += 15;
+    hp += 150;
+  } else if (h.talents[1] === 1) {
+    amp += 0.2;
+    mana += 150;
+  }
   const oldMana = h.maxMana;
   h.maxMana = Math.round(100 + h.attrs.int * 13 + mana);
   h.manaRegen = 0.9 + h.attrs.int * 0.06 + mreg;
@@ -294,6 +316,8 @@ export function createWorld(setup: MatchSetup): World {
   const w: World = {
     mapId,
     chaos: setup.chaos || undefined,
+    boss: 0,
+    bossAt: setup.chaos ? 60 : BOSS_FIRST,
     tick: 0,
     time: 0,
     nextWave: 1,
@@ -357,6 +381,7 @@ export function createWorld(setup: MatchSetup): World {
       stash: [],
       courier: 0,
       courierAt: 0,
+      talents: [-1, -1],
       chargeT: [0, 0, 0, 0],
       hist: [],
       respawn: 0,
@@ -538,6 +563,9 @@ function applyCommand(w: World, slot: number, cmd: Command) {
     case 'courier':
       sendCourier(w, u);
       return;
+    case 'talent':
+      if (Number.isInteger(cmd.tier) && Number.isInteger(cmd.pick)) pickTalent(u, cmd.tier, cmd.pick);
+      return;
     case 'say':
       // Не чаще раза в 2 с — чтобы колесо фраз не превращалось в спам
       if (!Number.isInteger(cmd.id) || cmd.id < 0 || cmd.id > 15 || w.time - (p.sayAt ?? -9) < 2) return;
@@ -698,6 +726,21 @@ export function autoLearn(u: Unit) {
     if (!order.length || !learn(u, order[0])) break;
   }
 }
+
+/** Можно ли выбрать талант яруса (0 — 10 уровень, 1 — 15) */
+export function canTalent(u: Unit, tier: number): boolean {
+  const h = u.hero;
+  return !!h && tier >= 0 && tier < 2 && h.talents[tier] === -1 && h.level >= TALENT_LEVELS[tier];
+}
+
+export function pickTalent(u: Unit, tier: number, pick: number) {
+  if (!canTalent(u, tier) || (pick !== 0 && pick !== 1)) return;
+  u.hero!.talents[tier] = pick;
+  recalc(u);
+}
+
+/** Перезарядка умения с учётом талантов 10 уровня (Q или W на 30% короче) */
+export const talentCd = (u: Unit, slot: number) => (u.hero?.talents[0] === slot ? 0.7 : 1);
 
 /** Свиток телепорта: через 3 с — к своей постройке рядом с точкой или к фонтану */
 function startTp(w: World, u: Unit, x: number, z: number) {
@@ -894,6 +937,15 @@ export function damage(w: World, t: Unit, amt: number, src: Unit | null, type: D
   t.hurtTick = w.tick;
   // Неистовство: не умирает
   if (t.hp < 1 && t.mods.length && getMod(t, 'undying')) t.hp = 1;
+  // Сердце стража: вторая жизнь на месте
+  if (t.hp <= 0 && t.hero && getMod(t, 'aegis')) {
+    removeMod(t, 'aegis');
+    t.hp = t.maxHp;
+    if (t.hero) t.hero.mana = t.hero.maxMana;
+    fx(w, t.x, t.z, 1, 0xfff2b8, 2, 0.8, 2);
+    emit(w, { e: 'aegis', id: t.id });
+    return amt;
+  }
   if (t.kind === 'neutral' && src) aggroNeutral(w, t, src);
   emit(w, { e: 'hit', id: t.id, src: src?.id ?? 0, amt, shield: shielded });
   if (src?.hero && t.kind === 'hero') {
@@ -930,7 +982,10 @@ export function addXp(w: World, u: Unit, n: number) {
     h.level++;
     h.points++;
     recalc(u);
-    if (w.players[h.player].bot) autoLearn(u);
+    if (w.players[h.player].bot) {
+      autoLearn(u);
+      for (let t = 0; t < 2; t++) if (canTalent(u, t)) pickTalent(u, t, (h.def.length + t) % 2);
+    }
     emit(w, { e: 'level', id: u.id, player: h.player, level: h.level });
     if (u.alive) fx(w, u.x, u.z, 1, 0xf1c453, 1, 0.6, 2.5);
   }
@@ -982,6 +1037,22 @@ function kill(w: World, t: Unit, src: Unit | null) {
       emit(w, { e: 'courier', player: owner.hero.player, state: 'dead' });
     }
     if (src?.hero) addGold(w, src, 60, t);
+    return;
+  }
+  if (t.kind === 'neutral' && t.model === 'boss') {
+    w.boss = 0;
+    w.bossAt = w.time + BOSS_RESPAWN;
+    const killer = src?.hero ? src : src?.owner ? unitById(w, src.owner) : undefined;
+    if (killer?.hero) {
+      for (const v of w.units)
+        if (v.kind === 'hero' && v.team === killer.team) {
+          addGold(w, v, 150, v === killer ? t : undefined);
+          if (v.alive) addMod(v, 'blessing', 180, 0, killer.id);
+        }
+      addMod(killer, 'aegis', 300, 0, killer.id);
+      emit(w, { e: 'boss', team: killer.team as Team, killer: killer.hero.player });
+    }
+    fx(w, t.x, t.z, 1, 0xffd86a, 3, 1, 1.6);
     return;
   }
   if (t.kind === 'neutral') {
@@ -1096,6 +1167,10 @@ export function tryAttack(w: World, u: Unit, t: Unit) {
   }
   if (u.ranged) shoot(w, u, t, dmg);
   else damage(w, t, dmg, u, 'physical');
+  if (u.model === 'boss')
+    for (const v of w.units)
+      if (v !== t && v.alive && v.team !== 2 && !v.invuln && v.kind !== 'tower' && dist(v, t) < 2.5 + v.radius)
+        damage(w, v, dmg * 0.5, u, 'physical');
 }
 
 function shoot(w: World, u: Unit, t: Unit, dmg: number) {
@@ -1279,6 +1354,7 @@ function heroTick(w: World, u: Unit): boolean {
   const f = mapOf(w).fountains[team];
   const ef = mapOf(w).fountains[1 - team];
   const atFountain = Math.hypot(u.x - f.x, u.z - f.z) < 8;
+  if (isNight(w) && NIGHT_HEROES.includes(h.def)) addMod(u, 'nightStalker', 0.25, 0, u.id);
   const heal = h.regen + modValue(u, 'heal') + (atFountain ? 90 : 0);
   u.hp = Math.min(u.maxHp, u.hp + heal * DT);
   h.mana = Math.min(h.maxMana, h.mana + (h.manaRegen + modValue(u, 'manaHeal') + (atFountain ? 40 : 0)) * DT);
@@ -1364,6 +1440,32 @@ export function reviveHero(w: World, u: Unit, x: number, z: number, hpFrac: numb
   fx(w, x, z, 1, 0xfff2b8, 1.6, 0.8, 2);
 }
 
+/** Страж реки: появляется в логове, бьёт по площади, держится у логова */
+function updateBoss(w: World) {
+  if (w.boss || w.time < w.bossAt) return;
+  const at = mapOf(w).boss;
+  const min = w.time / 60;
+  const b = addUnit(w, {
+    kind: 'neutral',
+    team: 2,
+    model: 'boss',
+    x: at.x,
+    z: at.z,
+    homeX: at.x,
+    homeZ: at.z,
+    maxHp: Math.round(3000 + 150 * min),
+    dmg: Math.round(60 + 3 * min),
+    armor: 5,
+    range: 2.2,
+    atkInt: 1.3,
+    radius: 1.6,
+    speed: 7,
+    barH: 4.6,
+  });
+  w.boss = b.id;
+  emit(w, { e: 'bossUp' });
+}
+
 /** Призвать существо на стороне героя (волки, тотем, отражения) */
 export function summon(
   w: World,
@@ -1397,6 +1499,13 @@ export function summon(
 function updateSummon(w: World, u: Unit) {
   u.life! -= DT;
   const owner = unitById(w, u.owner!);
+  if (u.model === 'ward') {
+    if (u.life! <= 0) {
+      u.alive = false;
+      u.hp = 0;
+    }
+    return;
+  }
   if (u.life! <= 0 || !owner?.alive) {
     u.alive = false;
     u.hp = 0;
@@ -1767,6 +1876,7 @@ export function step(w: World) {
   if (w.jungle) {
     updateCamps(w);
     updateRunes(w);
+    updateBoss(w);
   }
   // Мёртвые крипы и нейтралы больше не нужны: клиент доиграет их смерть сам
   if (w.units.some((u) => !u.alive && (u.kind === 'creep' || u.kind === 'neutral'))) {

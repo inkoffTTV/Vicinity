@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   addXp,
   canLearn,
+  damage,
+  DAY_LEN,
+  visibleIds,
+  visionOf,
   createWorld,
   getMap,
   heroOf,
@@ -177,5 +181,70 @@ describe('«Хаос» и фразы', () => {
     queueCommand(w, 0, { c: 'say', id: 2 });
     step(w);
     expect(w.events.some((e) => e.e === 'say')).toBe(false);
+  });
+});
+
+describe('босс, таланты, ночь, глаз-страж', () => {
+  it('Страж реки появляется на 3-й минуте; убийце — вторая жизнь, команде — благословение', () => {
+    const w = createWorld({
+      seed: 4,
+      jungle: true,
+      players: [
+        { name: 'А', team: 0, hero: 'mage', bot: null },
+        { name: 'Б', team: 1, hero: 'brute', bot: null },
+      ],
+    });
+    run(w, 181);
+    const boss = unitById(w, w.boss)!;
+    expect(boss?.model).toBe('boss');
+    const u = heroOf(w, 0)!;
+    Object.assign(u, { x: boss.x - 2, z: boss.z, invuln: true });
+    boss.hp = 1;
+    queueCommand(w, 0, { c: 'attack', id: boss.id });
+    run(w, 3);
+    expect(boss.alive).toBe(false);
+    expect(u.mods.some((m) => m.id === 'aegis')).toBe(true);
+    expect(u.mods.some((m) => m.id === 'blessing')).toBe(true);
+    // Вторая жизнь
+    u.invuln = false;
+    const dmg = u.hp + 10;
+    damage(w, u, dmg, null, 'pure');
+    expect(u.alive).toBe(true);
+    expect(u.mods.some((m) => m.id === 'aegis')).toBe(false);
+  });
+
+  it('талант 10 уровня укорачивает перезарядку выбранного умения', () => {
+    const w = duel();
+    const u = heroOf(w, 0)!;
+    u.hero!.level = 10;
+    u.hero!.skill = [1, 1, 1, 1];
+    u.hero!.mana = 9999;
+    queueCommand(w, 0, { c: 'talent', tier: 0, pick: 0 });
+    step(w);
+    expect(u.hero!.talents[0]).toBe(0);
+    queueCommand(w, 0, { c: 'cast', slot: 0, x: 5, z: 5 });
+    step(w);
+    expect(u.hero!.cd[0]).toBeCloseTo(ABILITIES[HERO.mage.abilities[0]].cd * 0.7, 1);
+  });
+
+  it('ночью обзор героя меньше', () => {
+    const w = duel();
+    const me = heroOf(w, 0)!;
+    expect(visionOf(w, me)).toBe(14);
+    w.time = DAY_LEN + 1;
+    expect(visionOf(w, me)).toBeLessThan(14);
+  });
+
+  it('глаз-страж ставится, врагам не виден, живёт 3 минуты', () => {
+    const w = duel();
+    const u = heroOf(w, 0)!;
+    u.hero!.items[0] = 'ward';
+    queueCommand(w, 0, { c: 'use', slot: 0, x: u.x + 5, z: u.z });
+    step(w);
+    const ward = w.units.find((v) => v.model === 'ward')!;
+    expect(ward).toBeDefined();
+    expect(visibleIds(w, 1).has(ward.id)).toBe(false);
+    run(w, 181);
+    expect(w.units.some((v) => v.model === 'ward' && v.alive)).toBe(false);
   });
 });

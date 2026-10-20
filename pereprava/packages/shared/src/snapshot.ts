@@ -5,10 +5,28 @@ import { FULL_REFUND_TIME, sellValue } from './sim/shop';
 import { ABILITIES, abilityAt, manaCost } from './sim/abilities';
 import { attrsOf, HERO } from './data/heroes';
 import { hasFlag, modValue } from './sim/modifiers';
-import { canLearn, nearShop, unitById, xpNeed, type World } from './sim/world';
+import {
+  canLearn,
+  canTalent,
+  DAY_LEN,
+  isNight,
+  nearShop,
+  NIGHT_HEROES,
+  unitById,
+  xpNeed,
+  type World,
+} from './sim/world';
 import type { SimEvent, Side, Team, Unit, UnitKind } from './types';
 
 export const VISION: Record<UnitKind, number> = { hero: 14, creep: 10, tower: 14, ancient: 14, neutral: 0 };
+
+/** Обзор юнита: ночью герои видят на 40% ближе (кроме ночных охотников), глаз-страж — 12 м */
+export function visionOf(w: World, u: Unit): number {
+  if (u.model === 'ward') return 12;
+  const v = VISION[u.kind];
+  if (u.kind === 'hero' && isNight(w) && !NIGHT_HEROES.includes(u.hero!.def)) return v * 0.6;
+  return v;
+}
 
 export interface UnitSnap {
   id: number;
@@ -86,6 +104,9 @@ export interface MeSnap {
   stash: string[];
   courier: 'idle' | 'go' | 'back' | 'dead';
   courierAt: number;
+  /** Таланты: выбор по ярусам (−1 — нет) и можно ли выбрать сейчас */
+  talents: number[];
+  talentReady: boolean[];
   slot: number;
   unit: number;
   hero: string;
@@ -143,6 +164,9 @@ export interface Snapshot {
   events: SimEvent[];
   me: MeSnap | null;
   rune: { kind: string; x: number; z: number } | null;
+  /** Ночь и сколько секунд до смены дня и ночи */
+  night: boolean;
+  dayT: number;
 }
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -168,7 +192,7 @@ export function visibleIds(w: World, team: Team | -1): Set<number> {
     }
     if (!u.alive || hasFlag(u, 'invisible')) continue;
     for (const e of eyes)
-      if (Math.hypot(e.x - u.x, e.z - u.z) < VISION[e.kind] + u.radius) {
+      if (Math.hypot(e.x - u.x, e.z - u.z) < visionOf(w, e) + u.radius) {
         out.add(u.id);
         break;
       }
@@ -179,7 +203,7 @@ export function visibleIds(w: World, team: Team | -1): Set<number> {
 /** Видна ли точка команде */
 export function pointVisible(w: World, team: Team | -1, x: number, z: number): boolean {
   if (team === -1) return true;
-  for (const u of w.units) if (u.team === team && u.alive && Math.hypot(u.x - x, u.z - z) < VISION[u.kind]) return true;
+  for (const u of w.units) if (u.team === team && u.alive && Math.hypot(u.x - x, u.z - z) < visionOf(w, u)) return true;
   return false;
 }
 
@@ -328,6 +352,8 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; even
         return c?.alive ? (c.cState ?? 'idle') : 'dead';
       })(),
       courierAt: r2(Math.max(0, h.courierAt)),
+      talents: [...h.talents],
+      talentReady: [0, 1].map((t) => canTalent(mu, t)),
     };
   }
   const players: PlayerSnap[] = w.players.map((q) => {
@@ -351,6 +377,8 @@ export function makeSnapshot(w: World, slot: number, opts: { all?: boolean; even
   return {
     tick: w.tick,
     time: r2(w.time),
+    night: isNight(w),
+    dayT: r2(DAY_LEN - (w.time % DAY_LEN)),
     kills: [...w.kills],
     winner: w.winner,
     nextWave: w.nextWave,

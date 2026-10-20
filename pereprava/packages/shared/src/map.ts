@@ -52,6 +52,8 @@ export interface MapDef {
   starts: [P2, P2];
   camps: CampDef[];
   runeSpots: P2[];
+  /** Логово Стража реки (босс) — на реке, в стороне от линий */
+  boss: P2;
   seed: number;
 }
 
@@ -146,6 +148,7 @@ function build1v1(): MapDef {
       { x: -17, z: -17 },
       { x: 17, z: 17 },
     ],
+    boss: { x: 28, z: 28 },
     seed: MAP_SEED,
   };
 }
@@ -184,6 +187,7 @@ function buildBig(id: '2v2' | '3v3', half: number, withMid: boolean, campsSide0:
       { x: -17 * k, z: -17 * k },
       { x: 17 * k, z: 17 * k },
     ],
+    boss: { x: 28 * k, z: 28 * k },
     seed: MAP_SEED + (withMid ? 3 : 2),
   };
 }

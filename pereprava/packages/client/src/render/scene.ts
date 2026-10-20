@@ -18,6 +18,24 @@ export interface SceneKit {
   sun: THREE.DirectionalLight;
   night: boolean;
   fog: THREE.Fog;
+  hemi: THREE.HemisphereLight;
+  /** Исходные значения света — от них считаются сумерки и ночь матча */
+  base: { sun: number; hemi: number; sky: THREE.Color; sunColor: THREE.Color };
+}
+
+const NIGHT_SKY = new THREE.Color(0x0e1420);
+const NIGHT_SUN = new THREE.Color(0x9fb4ff);
+const tmpC = new THREE.Color();
+
+/** Ночь матча: k = 0 — день, 1 — ночь (плавно, кадр за кадром) */
+export function daylight(kit: SceneKit, k: number) {
+  const b = kit.base;
+  kit.sun.intensity = b.sun * (1 - 0.5 * k);
+  kit.hemi.intensity = b.hemi * (1 - 0.4 * k);
+  kit.sun.color.copy(b.sunColor).lerp(NIGHT_SUN, k * 0.7);
+  tmpC.copy(b.sky).lerp(NIGHT_SKY, k * 0.75);
+  (kit.scene.background as THREE.Color).copy(tmpC);
+  kit.fog.color.copy(tmpC);
 }
 
 export function isNight(): boolean {
@@ -40,20 +58,28 @@ export function createScene(host: HTMLElement): SceneKit {
   const fog = new THREE.Fog(sky, 62, 135);
   scene.fog = fog;
   const camera = new THREE.PerspectiveCamera(40, 1, 0.5, 300);
-  scene.add(
-    new THREE.HemisphereLight(
-      night ? 0x8091c4 : 0xfff1d6,
-      night ? 0x1a2416 : 0x4d5c36,
-      (night ? 0.62 : 0.8) * LEGACY_LIGHT,
-    ),
+  const hemi = new THREE.HemisphereLight(
+    night ? 0x8091c4 : 0xfff1d6,
+    night ? 0x1a2416 : 0x4d5c36,
+    (night ? 0.62 : 0.8) * LEGACY_LIGHT,
   );
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight(night ? 0xa9bcff : 0xffe0b0, (night ? 0.7 : 1.05) * LEGACY_LIGHT);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 160 });
   sun.shadow.bias = -0.0008;
   scene.add(sun, sun.target);
-  return { renderer, scene, camera, sun, night, fog };
+  return {
+    renderer,
+    scene,
+    camera,
+    sun,
+    night,
+    fog,
+    hemi,
+    base: { sun: sun.intensity, hemi: hemi.intensity, sky: sky.clone(), sunColor: sun.color.clone() },
+  };
 }
 
 /** Качество: плотность пикселей и размер карты теней */

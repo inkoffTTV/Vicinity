@@ -17,6 +17,7 @@ import {
   heal,
   launch,
   mapOf,
+  talentCd,
   nearestEnemy,
   resolveCollisions,
   ULT_LEVEL,
@@ -697,7 +698,7 @@ function spend(u: Unit, slot: number, a: AbilityDef) {
   const h = u.hero!;
   h.mana = Math.max(0, h.mana - manaCost(a));
   if (!a.charges) {
-    h.cd[slot] = a.cd * (1 - h.cdr);
+    h.cd[slot] = a.cd * (1 - h.cdr) * talentCd(u, slot);
     return;
   }
   h.charges[slot]--;

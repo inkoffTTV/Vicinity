@@ -3,7 +3,7 @@
 // У каждой модели есть «скелет» для процедурной анимации (anim.ts).
 import * as THREE from 'three';
 import { buildAncient, buildBeast, buildHumanoid, buildTotem, buildTower, type AttackStyle } from './humanoid';
-import { CREEP_LOOKS, GIANT_LOOK, HERO_LOOKS } from './looks';
+import { BOSS_LOOK, CREEP_LOOKS, GIANT_LOOK, HERO_LOOKS } from './looks';
 
 export const TEAM_COLORS = [0x3ec7a1, 0xe2504a, 0xc8b48a];
 
@@ -54,6 +54,14 @@ export function makeModel(model: string, team: number): Rig {
     // Призванные: волки Звероловки, тотем Шамана
     case 'spiritwolf':
       return buildBeast(0x7a9ad8, 0xe0f0ff, 'spiritwolf', 0.95);
+    case 'boss':
+      return buildHumanoid(BOSS_LOOK, 2, 'boss', 1.7);
+    case 'ward': {
+      const r = buildTotem(Math.min(1, team));
+      r.scale = 0.45;
+      r.root.scale.setScalar(0.45);
+      return r;
+    }
     // Курьер: маленький крылатый зверёк
     case 'courier':
       return buildBeast(0xd8b060, 0xfff4c0, 'courier', 0.55);

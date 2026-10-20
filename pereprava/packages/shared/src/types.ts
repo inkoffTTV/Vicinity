@@ -99,6 +99,8 @@ export interface HeroState {
   neutral: string | null;
   /** Тайник у фонтана: куплено вдали от лавки, ждёт курьера */
   stash: { id: string; t: number; paid: number }[];
+  /** Таланты: выбор на 10 и 15 уровне (−1 — ещё не выбран) */
+  talents: number[];
   /** Курьер: id юнита (0 — погиб) и через сколько вернётся */
   courier: number;
   courierAt: number;
@@ -224,6 +226,8 @@ export type Command =
   | { c: 'tp'; x: number; z: number }
   /** Курьер: отвезти тайник герою */
   | { c: 'courier' }
+  /** Выбрать талант: ярус (0 — 10 уровень, 1 — 15) и вариант (0 или 1) */
+  | { c: 'talent'; tier: number; pick: number }
   /** Фраза из колеса (номер в PHRASES) — союзникам */
   | { c: 'say'; id: number }
   /** Поменять местами два слота (в том числе с рюкзаком) */
@@ -241,6 +245,9 @@ export type SimEvent =
   | { e: 'castFail'; player: number; slot: number; reason: 'target' | 'cd' | 'stun' | 'silence' | 'level' | 'mana' }
   | { e: 'neutral'; player: number; item: string }
   | { e: 'say'; player: number; team: Team; id: number }
+  | { e: 'boss'; team: Team; killer: number }
+  | { e: 'bossUp' }
+  | { e: 'aegis'; id: number }
   | { e: 'courier'; player: number; state: 'go' | 'back' | 'done' | 'dead' }
   | { e: 'death'; id: number; kind: UnitKind; team: Side; killer: number; x: number; z: number }
   | { e: 'heroKill'; victim: number; killer: number; victimTeam: Team }

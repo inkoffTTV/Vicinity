@@ -81,7 +81,7 @@ export class ShopUI {
     }
     if (this.tab === 'rec') {
       const build = this.me ? HERO[this.me.hero].build : [];
-      return [...new Set([...build, 'potion', 'salve', 'recall'])];
+      return [...new Set([...build, 'potion', 'ward', 'recall'])];
     }
     return ITEMS.filter((i) => i.section === this.tab || (this.tab === 'final' && i.tier === 3)).map((i) => i.id);
   }

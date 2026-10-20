@@ -30,7 +30,7 @@ import { Portrait } from './render/portrait';
 import type { Session } from './game/session';
 import { attachInput } from './game/input';
 import { AutoScale } from './render/autoscale';
-import { applyQuality, basePixelRatio, createScene, type Quality } from './render/scene';
+import { applyQuality, basePixelRatio, createScene, daylight, type Quality } from './render/scene';
 import { buildTerrain, disposeTerrain, type Terrain } from './render/terrain';
 import { GameView } from './render/view';
 import { fmt, Hud } from './ui/hud';
@@ -958,6 +958,7 @@ export class App {
   }
 
   private readonly portrait = new Portrait();
+  private nightK = 0;
 
   /** Экран выбора героя (создаётся при первом показе) */
   private _pick: PickScreen | null = null;
@@ -1133,6 +1134,12 @@ export class App {
       const id = s.units.find((u) => u.k === 'hero' && u.pl === (this.menuFocusBot ? 1 : 0))?.id;
       const v = id ? this.view.units.get(id) : undefined;
       if (v) v.rig.root.rotation.y = face;
+    }
+    // Ночь матча: плавные сумерки и рассвет
+    const nightT = (this.state === 'play' || this.state === 'over') && this.snap?.night ? 1 : 0;
+    if (Math.abs(nightT - this.nightK) > 0.001) {
+      this.nightK += (nightT - this.nightK) * Math.min(1, dt * 0.6);
+      daylight(this.kit, this.nightK);
     }
     this.kit.renderer.render(this.kit.scene, this.kit.camera);
     // Живой портрет героя в нижней панели
