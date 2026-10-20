@@ -32,10 +32,11 @@ export class Portrait {
   ) {
     const r = el.getBoundingClientRect();
     if (r.width < 8 || r.height < 8 || !el.offsetParent) return;
-    const key = hero + '|' + team;
+    const skin = snap?.sk ?? 0;
+    const key = hero + '|' + team + '|' + skin;
     if (key !== this.key) {
       if (this.rig) this.scene.remove(this.rig.root);
-      this.rig = makeModel(hero, team);
+      this.rig = makeModel(hero, team, skin);
       this.rig.root.rotation.y = 0.4;
       this.scene.add(this.rig.root);
       this.key = key;

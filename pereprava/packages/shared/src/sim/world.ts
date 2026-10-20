@@ -108,6 +108,8 @@ export interface PlayerSetup {
   name: string;
   team: Team;
   hero: string;
+  /** Облик героя (0 — обычный, 1 — сумеречный, 2 — королевский) */
+  skin?: number;
   /** null — человек; иначе сложность бота */
   bot: string | null;
 }
@@ -355,6 +357,7 @@ export function createWorld(setup: MatchSetup): World {
       barH: def.barH,
       rot: ps.team ? -Math.PI * 0.25 : Math.PI * 0.75,
       turn: turnOf(def),
+      skin: ps.skin && ps.skin > 0 && ps.skin < 3 ? Math.floor(ps.skin) : undefined,
     });
     u.hero = {
       def: def.id,

@@ -289,7 +289,7 @@ export class GameView {
   }
 
   private addUnit(us: UnitSnap): VUnit {
-    const rig = makeModel(us.m, us.tm);
+    const rig = makeModel(us.m, us.tm, us.sk ?? 0);
     rig.root.position.set(us.x, unitY(this.map, us.x, us.z), us.z);
     rig.root.rotation.y = us.r;
     this.scene.add(rig.root);

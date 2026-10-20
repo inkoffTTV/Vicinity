@@ -161,6 +161,8 @@ export interface Unit {
   courier?: boolean;
   cargo?: { id: string; t: number; paid: number }[];
   cState?: 'idle' | 'go' | 'back';
+  /** Облик героя (0 — обычный) */
+  skin?: number;
   /** Призванный: чей (id героя) и сколько ещё живёт, с */
   owner?: number;
   life?: number;

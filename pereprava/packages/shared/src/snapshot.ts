@@ -51,6 +51,8 @@ export interface UnitSnap {
   sh?: number;
   /** Герой: игрок и уровень */
   pl?: number;
+  /** Облик героя */
+  sk?: number;
   lv?: number;
   /** Идёт замах: способность, сколько осталось, сколько всего */
   cast?: { a: string; t: number; T: number };
@@ -213,6 +215,7 @@ function unitSnap(u: Unit): UnitSnap {
     k: u.kind,
     tm: u.team,
     m: u.model,
+    ...(u.skin ? { sk: u.skin } : {}),
     x: r2(u.x),
     z: r2(u.z),
     r: r2(u.rot),

@@ -33,6 +33,8 @@ export class Lobby {
     readonly conn: Connection,
     readonly host: HTMLElement,
     private onRoomChange: (room: RoomInfo | null) => void,
+    /** Облик героя у этого игрока */
+    private skinOf: (hero: string) => number = () => 0,
   ) {
     this.el = document.createElement('section');
     this.el.id = 'lobby';
@@ -196,6 +198,7 @@ export class Lobby {
       </div>
       <p class="lbl">Ваш герой</p>
       <div class="lb-heroes">${heroes}</div>
+      ${r.tally?.length ? `<div class="lb-tally"><h3>Счёт комнаты</h3>${r.tally.map((t) => `<span><b>${esc(t.name)}</b> ${t.w} : ${t.l}</span>`).join('')}</div>` : ''}
       <p class="lb-msg" role="status">${esc(status || this.msg || (r.state === 'game' ? 'Матч идёт — подключаемся…' : r.state === 'over' ? 'Матч окончен' : ''))}</p>
       <div class="lb-actions">
         <button class="go alt" data-act="leave">Выйти</button>
@@ -245,7 +248,7 @@ export class Lobby {
             this.conn.send({ t: 'team', team: b.dataset.team === '1' ? 1 : 0 });
             break;
           case 'pick':
-            this.conn.send({ t: 'pick', hero: b.dataset.hero! });
+            this.conn.send({ t: 'pick', hero: b.dataset.hero!, skin: this.skinOf(b.dataset.hero!) });
             break;
           case 'ready':
             this.conn.send({ t: 'ready', ready: !mine?.ready });

@@ -111,7 +111,7 @@ function handle(c: Client, m: ClientMsg) {
       c.send({ t: 'room', room: null });
       return;
     case 'pick':
-      if (typeof m.hero === 'string') room?.pick(c, m.hero);
+      if (typeof m.hero === 'string') room?.pick(c, m.hero, Number.isInteger(m.skin) ? (m.skin as number) : 0);
       return;
     case 'team':
       if (m.team === 0 || m.team === 1) room?.switchTeam(c, m.team);

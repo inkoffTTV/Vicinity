@@ -67,6 +67,8 @@ export class Hud {
   private mmStatic: HTMLCanvasElement | null = null;
   private MMS = 1;
   snap: Snapshot | null = null;
+  /** Стража реки одолели (true — наша команда) */
+  onBoss?: (ours: boolean) => void;
 
   constructor(
     readonly view: GameView,
@@ -495,13 +497,14 @@ export class Hud {
         this.toast(`${h.name} ${h.fem ? 'вернулась' : 'вернулся'} в бой`);
       } else if (e.e === 'buy' && e.player === me.slot && e.item) this.toast('Куплено: ' + ITEM[e.item].name);
       else if (e.e === 'bossUp') this.toast('Страж реки пробудился в своём логове у реки');
-      else if (e.e === 'boss')
+      else if (e.e === 'boss') {
+        this.onBoss?.(e.team === myTeam);
         this.toast(
           e.team === myTeam
             ? `Страж реки повержен! Команде — золото и благословение, у ${s.players[e.killer]?.name ?? 'союзника'} — Сердце стража (вторая жизнь)`
             : 'Враги одолели Стража реки — осторожно, у одного из них вторая жизнь',
         );
-      else if (e.e === 'aegis' && e.id === me.unit) this.toast('Сердце стража вернуло вас к жизни!');
+      } else if (e.e === 'aegis' && e.id === me.unit) this.toast('Сердце стража вернуло вас к жизни!');
       else if (e.e === 'say' && e.team === myTeam) {
         const p = s.players[e.player];
         this.feed(

@@ -40,9 +40,18 @@ export interface LobbySlot {
   client: number;
   name: string;
   hero: string;
+  /** Облик героя */
+  skin?: number;
   ready: boolean;
   bot: boolean;
   online: boolean;
+}
+
+/** Счёт комнаты: сколько матчей выиграл и проиграл каждый, пока комната жива */
+export interface RoomTally {
+  name: string;
+  w: number;
+  l: number;
 }
 
 export interface RoomInfo {
@@ -53,6 +62,7 @@ export interface RoomInfo {
   /** lobby — выбор героев; game — идёт матч; over — матч окончен */
   state: 'lobby' | 'game' | 'over';
   botDifficulty: string;
+  tally?: RoomTally[];
 }
 
 export type ClientMsg =
@@ -60,7 +70,7 @@ export type ClientMsg =
   | { t: 'create'; mode: GameMode; difficulty?: string }
   | { t: 'join'; code: string }
   | { t: 'leave' }
-  | { t: 'pick'; hero: string }
+  | { t: 'pick'; hero: string; skin?: number }
   | { t: 'team'; team: Team }
   | { t: 'ready'; ready: boolean }
   | { t: 'mode'; mode: GameMode }

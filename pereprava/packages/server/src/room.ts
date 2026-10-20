@@ -94,6 +94,7 @@ export class Room {
       slots: this.slots.map((s) => ({ ...s })),
       state: this.state,
       botDifficulty: this.difficulty,
+      tally: [...this.tally.entries()].map(([name, t]) => ({ name, ...t })).sort((a, b) => b.w - a.w || a.l - b.l),
     };
   }
 
@@ -156,10 +157,11 @@ export class Room {
     this.sync();
   }
 
-  pick(c: Client, hero: string) {
+  pick(c: Client, hero: string, skin = 0) {
     const i = this.slotOf(c);
     if (i < 0 || this.state !== 'lobby' || !HERO[hero] || this.slots[i].ready) return;
     this.slots[i].hero = hero;
+    this.slots[i].skin = skin > 0 && skin < 3 ? skin : 0;
     this.sync();
   }
 
@@ -234,6 +236,7 @@ export class Room {
         name: s.name,
         team: s.team,
         hero: s.hero,
+        skin: s.skin ?? 0,
         bot: s.client ? null : this.difficulty,
       })),
       jungle: true,
@@ -299,8 +302,20 @@ export class Room {
     c.send({ t: 'snap', s: makeSnapshot(this.world, slot, { events: [] }), ack: this.acks[slot] });
   }
 
+  /** Счёт комнаты по именам игроков */
+  private tally = new Map<string, { w: number; l: number }>();
+
   private finish() {
     this.stop();
+    const winner = this.world?.winner ?? -1;
+    if (winner !== -1)
+      for (const s of this.slots) {
+        if (!s.client) continue;
+        const t = this.tally.get(s.name) ?? { w: 0, l: 0 };
+        if (s.team === winner) t.w++;
+        else t.l++;
+        this.tally.set(s.name, t);
+      }
     this.state = 'over';
     this.sync();
     // Комната живёт ещё немного: итоги, «Ещё раз»

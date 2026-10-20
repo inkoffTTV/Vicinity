@@ -26,6 +26,7 @@ import { Lobby } from './ui/lobby';
 import { Sound, type Volumes } from './audio/sound';
 import { renderHeroCards, scoreTable } from './ui/screens';
 import { PickScreen } from './ui/pick';
+import { applyMatch, buySkin, daily, hasSkin, questOf, SKINS, type MetaProfile } from './ui/meta';
 import { Portrait } from './render/portrait';
 import type { Session } from './game/session';
 import { attachInput } from './game/input';
@@ -40,7 +41,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 
 type State = 'menu' | 'search' | 'accept' | 'pick' | 'loading' | 'play' | 'over';
 
-interface Profile {
+interface Profile extends MetaProfile {
   name: string;
   matches: number;
   wins: number;
@@ -53,6 +54,8 @@ interface Settings {
   quality: Quality;
   shadows: boolean;
   hero: string;
+  /** Выбранный облик для каждого героя */
+  skins?: Record<string, number>;
   vol: Volumes;
   /** Оформление: как в системе, день или ночь */
   theme: 'auto' | 'day' | 'night';
@@ -168,6 +171,9 @@ export class App {
       centerCamera: () => this.centerCamera(),
     });
     this.hud.setMap(this.view.map);
+    this.hud.onBoss = (ours) => {
+      if (ours) this.bossWon = true;
+    };
     this.view.onFloat = (x, y, z, text, color) => this.floatText(x, y, z, text, color);
     this.preview = this.makeLocal();
     this.showPreview();
@@ -217,14 +223,19 @@ export class App {
     });
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) mm.addEventListener(ev, () => clearTimeout(holdT));
     this.initMenu();
-    this.lobby = new Lobby(this.conn, $('game'), (room) => {
-      // Матч кончился, а мы ещё на экране итогов — остаёмся; комнаты нет — в меню
-      if (!room && this.session instanceof NetSession) this.backToMenu('Вы вышли из комнаты');
-      if (room && room.state === 'lobby' && this.state === 'over' && this.session instanceof NetSession) {
-        this.backToMenu('');
-        this.lobby.open();
-      }
-    });
+    this.lobby = new Lobby(
+      this.conn,
+      $('game'),
+      (room) => {
+        // Матч кончился, а мы ещё на экране итогов — остаёмся; комнаты нет — в меню
+        if (!room && this.session instanceof NetSession) this.backToMenu('Вы вышли из комнаты');
+        if (room && room.state === 'lobby' && this.state === 'over' && this.session instanceof NetSession) {
+          this.backToMenu('');
+          this.lobby.open();
+        }
+      },
+      (h) => this.skinOf(h),
+    );
     this.conn.on((m) => this.onServer(m));
     this.conn.onStatus = (st) => {
       $('netBanner').hidden = !(this.session instanceof NetSession && st !== 'online');
@@ -287,7 +298,9 @@ export class App {
       const id = pool[pi++ % pool.length];
       return id;
     };
-    const players: MatchSetup['players'] = [{ name: this.playerName(), team: 0, hero, bot: null }];
+    const players: MatchSetup['players'] = [
+      { name: this.playerName(), team: 0, hero, bot: null, skin: this.skinOf(hero) },
+    ];
     for (let i = 1; i < n; i++) {
       const h = nextHero();
       players.push({ name: `${HERO[h].name} (союзник)`, team: 0, hero: h, bot: this.settings.diff });
@@ -681,6 +694,7 @@ export class App {
     this.sound.startAmbient();
     for (const id of ['menu', 'loading', 'accept', 'screen', 'pick']) $(id).hidden = true;
     this.setState('play');
+    this.bossWon = false;
     this.hud.toast('Матч начался. Крипы выходят на линию');
   }
 
@@ -709,6 +723,7 @@ export class App {
     $('accept').hidden = true;
     $('screen').hidden = true;
     this.setState('play');
+    this.bossWon = false;
     const n = MODE_SIZE[this.localMode()];
     this.hud.toast(
       this.chaosHero
@@ -740,6 +755,16 @@ export class App {
       hero: me.hero,
     });
     p.history = p.history.slice(0, 8);
+    const meta = applyMatch(p, {
+      win,
+      hero: me.hero,
+      kills: mine.kills,
+      assists: mine.assists,
+      lastHits: mine.lastHits,
+      chaos: this.localMode() === 'chaos' && !online,
+      boss: this.bossWon,
+      online,
+    });
     store.set('profile', p);
     this.sound.play(win ? 'win' : 'lose');
     $('board').hidden = true;
@@ -747,6 +772,7 @@ export class App {
     $('card').innerHTML = `<h1 class="${win ? 'win' : 'lose'}">${win ? 'Победа' : 'Поражение'}</h1>
       <p>${win ? 'Кристалл врага разрушен.' : 'Наш кристалл пал.'} ${online ? 'Сетевой матч.' : 'Бот: ' + difficulty(this.settings.diff).name + '.'}</p>
       <div class="res"><div><b>${fmt(s.time)}</b><small>длительность</small></div><div><b>${s.kills[this.view.myTeam]} : ${s.kills[1 - this.view.myTeam]}</b><small>убийства героев</small></div><div><b>${mine.lastHits}</b><small>добито крипов</small></div><div><b>${mine.gold}</b><small>золото</small></div><div><b>${me.level}</b><small>уровень</small></div></div>
+      <p class="earn">✦ +${meta.sparks} искр${meta.done.length ? ` · задания выполнены: ${meta.done.join(', ')}` : ''}</p>
       <div class="tablewrap">${scoreTable(s, this.view.myTeam, me.slot)}</div>
       <div class="actions"><button class="go alt" id="toMenu">В меню</button><button class="go" id="again">${online ? 'В лобби' : 'Реванш'}</button></div>`;
     $('screen').hidden = false;
@@ -959,11 +985,31 @@ export class App {
 
   private readonly portrait = new Portrait();
   private nightK = 0;
+  /** В этом матче наша команда победила Стража реки (для задания) */
+  bossWon = false;
 
   /** Экран выбора героя (создаётся при первом показе) */
   private _pick: PickScreen | null = null;
   private get pickScreen() {
-    return (this._pick ??= new PickScreen());
+    return (this._pick ??= new PickScreen({
+      skin: (h) => this.skinOf(h),
+      skins: (h) => SKINS.map((s) => ({ name: s.name, open: hasSkin(this.profile, h, s.id), cost: s.cost })),
+      chooseSkin: (h, k) => {
+        if (!hasSkin(this.profile, h, k) && !buySkin(this.profile, h, k)) return false;
+        this.settings.skins = { ...this.settings.skins, [h]: k };
+        store.set('settings', this.settings);
+        store.set('profile', this.profile);
+        this.sound.play('ui');
+        return true;
+      },
+      sparks: () => this.profile.sparks ?? 0,
+    }));
+  }
+
+  /** Облик героя у этого игрока (только открытый) */
+  private skinOf(hero: string): number {
+    const k = this.settings.skins?.[hero] ?? 0;
+    return hasSkin(this.profile, hero, k) ? k : 0;
   }
 
   private toLoading() {
@@ -1009,6 +1055,18 @@ export class App {
 
   private renderProfile() {
     const { matches: m, wins: w, history } = this.profile;
+    // Задания дня и искры
+    const d = daily(this.profile);
+    store.set('profile', this.profile);
+    $('sparks').textContent = `✦ ${this.profile.sparks ?? 0}`;
+    $('quests').innerHTML = d.ids
+      .map((id, i) => {
+        const q = questOf(id);
+        if (!q) return '';
+        const done = d.prog[i] >= q.goal;
+        return `<div class="q${done ? ' done' : ''}"><span>${q.name}</span><b>${done ? '✓' : `${d.prog[i]} / ${q.goal}`}</b><small>+${q.reward} ✦</small></div>`;
+      })
+      .join('');
     $('statGrid').innerHTML =
       `<div><b>${m}</b><small>матчей</small></div><div><b>${w}</b><small>побед</small></div><div><b>${m - w}</b><small>поражений</small></div><div><b>${m ? Math.round((w / m) * 100) : 0}%</b><small>доля побед</small></div>`;
     const h = $('hist');

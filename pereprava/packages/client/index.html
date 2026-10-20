@@ -105,6 +105,7 @@
           <label class="field">Имя игрока<input id="nameIn" maxlength="16" autocomplete="off"></label>
         </div>
         <div class="pcard panel"><h3>Статистика</h3><div class="statgrid" id="statGrid"></div></div>
+        <div class="pcard panel"><h3>Задания дня <span class="sparks" id="sparks"></span></h3><div class="quests" id="quests"></div><p class="qnote">Искры даются за каждый матч и за задания. За них открываются облики героев — на экране выбора.</p></div>
         <div class="pcard panel"><h3>Последние матчи</h3><div class="hist" id="hist"></div></div>
       </section>
       <section class="pane" id="pane-settings" role="tabpanel" aria-labelledby="tab-settings" data-pane="settings" hidden>
@@ -168,7 +169,7 @@
       </div>
       <div class="pickmain">
         <div class="pickgrid" id="pickGrid" role="group" aria-label="Герои"></div>
-        <aside class="pickcard"><canvas id="pickPreview" aria-label="Модель выбранного героя"></canvas><div id="pickDetail"></div></aside>
+        <aside class="pickcard"><canvas id="pickPreview" aria-label="Модель выбранного героя"></canvas><div id="pickSkins" role="group" aria-label="Облик"></div><div id="pickDetail"></div></aside>
       </div>
       <div class="pickfoot"><p id="pickInfo"></p><button class="go" id="pickGo">В бой</button></div>
     </div>

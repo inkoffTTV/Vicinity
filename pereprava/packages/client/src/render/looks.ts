@@ -1,6 +1,7 @@
 // Внешность героев, крипов и нейтралов — данные для общего скелета (humanoid.ts).
 // У каждого героя свой силуэт (рост, ширина, головной убор, оружие, плащ) и своя палитра;
 // цвет команды — на поясе, наплечных камнях и плюмажах.
+import { Color } from 'three';
 import type { Look } from './humanoid';
 
 export const HERO_LOOKS: Record<string, Look> = {
@@ -418,6 +419,31 @@ export const CREEP_LOOKS: Record<'melee' | 'ranged', Look> = {
     extra: ['quiver'],
   },
 };
+
+/** Облик героя: 1 — сумеречный (тёмная ткань, холодное свечение), 2 — королевский (золото и белое) */
+export function skinLook(l: Look, skin: number): Look {
+  if (!skin) return l;
+  const c = new Color();
+  const tint = (hex: number, dh: number, ds: number, dl: number) => c.setHex(hex).offsetHSL(dh, ds, dl).getHex();
+  if (skin === 1)
+    return {
+      ...l,
+      cloth: tint(l.cloth, 0.55, -0.1, -0.12),
+      armor: tint(l.armor, 0.55, -0.1, -0.1),
+      trim: 0x9ab8ff,
+      glow: 0x8ad8ff,
+      cape: l.cape ? tint(l.cape, 0.55, -0.1, -0.15) : l.cape,
+    };
+  return {
+    ...l,
+    cloth: tint(l.cloth, 0, -0.3, 0.18),
+    armor: 0xe8d8a8,
+    trim: 0xf1c453,
+    glow: 0xffe08a,
+    cape: l.cape ? 0x9a2a2a : l.cape,
+    extra: [...(l.extra ?? []).filter((e) => e !== 'halo'), 'halo'],
+  };
+}
 
 /** Страж реки — каменный великан у реки (босс) */
 export const BOSS_LOOK: Look = {

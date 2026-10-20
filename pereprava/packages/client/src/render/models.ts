@@ -3,7 +3,7 @@
 // У каждой модели есть «скелет» для процедурной анимации (anim.ts).
 import * as THREE from 'three';
 import { buildAncient, buildBeast, buildHumanoid, buildTotem, buildTower, type AttackStyle } from './humanoid';
-import { BOSS_LOOK, CREEP_LOOKS, GIANT_LOOK, HERO_LOOKS } from './looks';
+import { BOSS_LOOK, CREEP_LOOKS, GIANT_LOOK, HERO_LOOKS, skinLook } from './looks';
 
 export const TEAM_COLORS = [0x3ec7a1, 0xe2504a, 0xc8b48a];
 
@@ -38,7 +38,7 @@ export interface Rig {
 }
 
 /** Модель по id из снимка */
-export function makeModel(model: string, team: number): Rig {
+export function makeModel(model: string, team: number, skin = 0): Rig {
   switch (model) {
     case 'melee':
     case 'ranged':
@@ -73,8 +73,8 @@ export function makeModel(model: string, team: number): Rig {
     case 'form:hex':
       return buildBeast(0x5aa040, 0xfff080, 'frog', 0.6);
     default: {
-      const look = HERO_LOOKS[model] ?? HERO_LOOKS.mage;
-      return buildHumanoid(look, team, 'hero-' + model, 1);
+      const look = skinLook(HERO_LOOKS[model] ?? HERO_LOOKS.mage, skin);
+      return buildHumanoid(look, team, `hero-${model}-${skin}`, 1);
     }
   }
 }

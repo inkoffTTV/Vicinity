@@ -12,6 +12,16 @@ const norm = (s: string) => s.toLowerCase().replace(/ё/g, 'е');
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
+export interface PickMeta {
+  /** Выбранный облик героя */
+  skin(hero: string): number;
+  /** Подписи кнопок облика: имя, открыт ли, цена */
+  skins(hero: string): { name: string; open: boolean; cost: number }[];
+  /** Нажали облик: выбрать или купить. false — не хватает искр */
+  chooseSkin(hero: string, skin: number): boolean;
+  sparks(): number;
+}
+
 export class PickScreen {
   private role: RoleId | 'all' = 'all';
   private query = '';
@@ -25,7 +35,15 @@ export class PickScreen {
   private raf = 0;
   private t0 = 0;
 
-  constructor() {
+  constructor(private readonly meta: PickMeta) {
+    $('pickSkins').addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-skin]');
+      if (!b) return;
+      if (this.meta.chooseSkin(this.chosen, +b.dataset.skin!)) {
+        this.renderSkins();
+        this.showModel();
+      } else b.classList.add('deny');
+    });
     const roles = $('pickRoles');
     for (const r of [{ id: 'all' as const, name: 'Все' }, ...ROLES]) {
       const b = document.createElement('button');
@@ -56,6 +74,7 @@ export class PickScreen {
     this.onPick = onPick;
     this.renderGrid();
     this.renderCard();
+    this.renderSkins();
     this.startPreview();
   }
 
@@ -103,6 +122,7 @@ export class PickScreen {
         el.querySelectorAll('.hcard').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
         this.onPick(this.chosen);
         this.renderCard();
+        this.renderSkins();
         this.showModel();
       }),
     );
@@ -127,6 +147,18 @@ export class PickScreen {
     $('pickDetail').innerHTML =
       `<h3 style="color:${h.color}">${esc(h.name)}</h3><small class="role">${esc(h.role)}</small>
       <p class="slogan">${esc(h.tagline)}</p><ul class="pskills">${skills}</ul>`;
+  }
+
+  private renderSkins() {
+    const cur = this.meta.skin(this.chosen);
+    $('pickSkins').innerHTML =
+      this.meta
+        .skins(this.chosen)
+        .map(
+          (s, i) =>
+            `<button type="button" data-skin="${i}" aria-pressed="${i === cur}" class="${s.open ? '' : 'lock'}">${esc(s.name)}${s.open ? '' : ` · ${s.cost} ✦`}</button>`,
+        )
+        .join('') + `<span class="sp">✦ ${this.meta.sparks()}</span>`;
   }
 
   // ── 3D-превью ──
@@ -157,7 +189,7 @@ export class PickScreen {
   private showModel() {
     if (!this.renderer) return;
     if (this.rig) this.scene.remove(this.rig.root);
-    this.rig = makeModel(this.chosen, 0);
+    this.rig = makeModel(this.chosen, 0, this.meta.skin(this.chosen));
     this.scene.add(this.rig.root);
   }
 
