@@ -652,3 +652,10 @@ button.go{width:100%;padding:var(--s3) var(--s4);min-height:44px;border:0;border
 .lb-tally{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center;font-size:var(--fs-s)}
 .lb-tally h3{margin:0;font:400 var(--fs-m) var(--f-title);width:100%}
 .lb-tally span{padding:3px var(--s2);border-radius:var(--r1);background:var(--surface)}
+
+/* Зритель */
+#specBar{position:absolute;left:50%;bottom:var(--s3);transform:translateX(-50%);display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s3)}
+#specBar[hidden]{display:none}
+#specBar button{min-width:40px;min-height:40px;border-radius:var(--r2);border:1px solid var(--panel-line);background:var(--surface);color:var(--ink);cursor:pointer}
+#specBar b{min-width:160px;text-align:center}
+#game.spectate #dock,#game.spectate #sayBtn{display:none}

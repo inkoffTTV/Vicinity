@@ -15,6 +15,12 @@
   <button id="sayBtn" class="panel" type="button" title="Фразы союзникам (Y)" aria-label="Фразы союзникам, клавиша Y">Фразы</button>
   <div id="sayWheel" class="panel" hidden role="menu" aria-label="Фразы союзникам"></div>
   <div id="feed" aria-live="polite"></div>
+  <div id="specBar" class="panel" hidden role="group" aria-label="Режим зрителя">
+    <span class="lbl">Вы зритель</span>
+    <button id="specPrev" type="button" aria-label="Предыдущий герой">◀</button>
+    <b id="specName"></b>
+    <button id="specNext" type="button" aria-label="Следующий герой">▶</button>
+  </div>
   <div id="top">
     <div id="score" class="panel num" role="button" tabindex="0" aria-label="Счёт матча, подробнее — Tab"><span class="a" id="kA">0</span><span id="clock">0:00</span><span class="e" id="kE">0</span></div>
     <div id="hoverPlate" class="panel" hidden aria-hidden="true"><b></b><div class="hpb"><i></i></div><span class="num"></span></div>

@@ -63,6 +63,8 @@ export interface RoomInfo {
   state: 'lobby' | 'game' | 'over';
   botDifficulty: string;
   tally?: RoomTally[];
+  /** Зрители: имена */
+  watchers?: string[];
 }
 
 export type ClientMsg =

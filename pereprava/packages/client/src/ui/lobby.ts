@@ -198,6 +198,7 @@ export class Lobby {
       </div>
       <p class="lbl">Ваш герой</p>
       <div class="lb-heroes">${heroes}</div>
+      ${r.watchers?.length ? `<p class="lb-note">Смотрят: ${r.watchers.map(esc).join(', ')}</p>` : ''}
       ${r.tally?.length ? `<div class="lb-tally"><h3>Счёт комнаты</h3>${r.tally.map((t) => `<span><b>${esc(t.name)}</b> ${t.w} : ${t.l}</span>`).join('')}</div>` : ''}
       <p class="lb-msg" role="status">${esc(status || this.msg || (r.state === 'game' ? 'Матч идёт — подключаемся…' : r.state === 'over' ? 'Матч окончен' : ''))}</p>
       <div class="lb-actions">

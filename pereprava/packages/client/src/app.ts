@@ -171,6 +171,8 @@ export class App {
       centerCamera: () => this.centerCamera(),
     });
     this.hud.setMap(this.view.map);
+    $('specPrev').addEventListener('click', () => this.specStep(-1));
+    $('specNext').addEventListener('click', () => this.specStep(1));
     this.hud.onBoss = (ours) => {
       if (ours) this.bossWon = true;
     };
@@ -695,7 +697,26 @@ export class App {
     for (const id of ['menu', 'loading', 'accept', 'screen', 'pick']) $(id).hidden = true;
     this.setState('play');
     this.bossWon = false;
-    this.hud.toast('Матч начался. Крипы выходят на линию');
+    // Зритель: вся карта, камера за выбранным героем
+    this.spectating = slot < 0;
+    if (!this.spectating) $('game').classList.remove('spectate');
+    $('game').classList.toggle('spectate', this.spectating);
+    $('specBar').hidden = !this.spectating;
+    this.specPl = 0;
+    this.hud.toast(
+      this.spectating
+        ? 'Вы смотрите матч. Стрелки на панели — следующий герой'
+        : 'Матч начался. Крипы выходят на линию',
+    );
+  }
+
+  // ── Зритель ──
+  private spectating = false;
+  private specPl = 0;
+  private specStep(d: number) {
+    const n = this.snap?.players.length ?? 0;
+    if (!n) return;
+    this.specPl = (this.specPl + d + n) % n;
   }
 
   // ── Матч ──
@@ -736,6 +757,21 @@ export class App {
 
   private endGame(s: Snapshot) {
     if (this.state === 'over') return;
+    if (!s.me) {
+      // Зритель: только итог
+      this.setState('over');
+      $('card').classList.add('wide');
+      $('card').innerHTML = `<h1>${s.winner === 0 ? 'Победил Свет' : 'Победила Тьма'}</h1>
+        <p>Матч окончен за ${fmt(s.time)}, счёт ${s.kills[0]} : ${s.kills[1]}.</p>
+        <div class="tablewrap">${scoreTable(s, 0, -1)}</div>
+        <div class="actions"><button class="go" id="toMenu">В меню</button></div>`;
+      $('screen').hidden = false;
+      $('toMenu').addEventListener('click', () => {
+        this.conn.send({ t: 'leave' });
+        this.backToMenu('');
+      });
+      return;
+    }
     const me = s.me!;
     const win = s.winner === this.view.myTeam;
     this.setState('over');
@@ -1084,6 +1120,9 @@ export class App {
 
   backToMenu(msg: string) {
     $('netBanner').hidden = true;
+    this.spectating = false;
+    $('game').classList.remove('spectate');
+    $('specBar').hidden = true;
     this.view.ownPos = null;
     this.session?.dispose();
     this.session = null;
@@ -1184,7 +1223,14 @@ export class App {
     }
     const me = this.snap?.me;
     const mine = me ? this.view.units.get(me.unit) : undefined;
-    const follow = mine && me?.alive ? { x: mine.x, z: mine.z } : me ? spawnOf(this.view.myTeam) : null;
+    let follow = mine && me?.alive ? { x: mine.x, z: mine.z } : me ? spawnOf(this.view.myTeam) : null;
+    if (this.spectating && this.snap) {
+      const p = this.snap.players[this.specPl];
+      const u = this.snap.units.find((x) => x.k === 'hero' && x.pl === this.specPl);
+      const v = u ? this.view.units.get(u.id) : undefined;
+      if (v) follow = { x: v.x, z: v.z };
+      $('specName').textContent = p ? `${p.name} · ${HERO[p.hero]?.name ?? ''}` : '';
+    }
     const face = this.view.updateCamera(dt, follow);
     if (this.view.menuFocus) {
       // В меню герой поворачивается к камере

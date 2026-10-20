@@ -94,6 +94,7 @@ export class Room {
       slots: this.slots.map((s) => ({ ...s })),
       state: this.state,
       botDifficulty: this.difficulty,
+      watchers: [...this.watchers.keys()].map((id) => this.clients.get(id)?.name ?? 'Зритель'),
       tally: [...this.tally.entries()].map(([name, t]) => ({ name, ...t })).sort((a, b) => b.w - a.w || a.l - b.l),
     };
   }
@@ -117,13 +118,16 @@ export class Room {
 
   // ── Лобби ──
 
+  /** Зрители: id клиентов и их события между снимками */
+  private watchers = new Map<number, SimEvent[]>();
+
   join(c: Client): string | null {
-    if (this.state !== 'lobby') return 'Матч уже идёт';
-    if (this.slotOf(c) >= 0) return null;
+    if (this.slotOf(c) >= 0 || this.watchers.has(c.id)) return null;
     const t0 = this.slots.filter((s) => s.team === 0 && s.client).length;
     const t1 = this.slots.filter((s) => s.team === 1 && s.client).length;
-    const s = this.freeSlot(t0 <= t1 ? 0 : 1) ?? this.freeSlot();
-    if (!s) return 'Комната заполнена';
+    const s = this.state === 'lobby' ? (this.freeSlot(t0 <= t1 ? 0 : 1) ?? this.freeSlot()) : undefined;
+    // Мест нет или матч уже идёт — смотрим зрителем
+    if (!s) return this.watch(c);
     // Свободный герой, если на нём уже кто-то
     const used = new Set(this.slots.filter((x) => x.client).map((x) => x.hero));
     const hero = used.has(s.hero) ? (HEROES.find((h) => !used.has(h.id))?.id ?? s.hero) : s.hero;
@@ -134,7 +138,22 @@ export class Room {
     return null;
   }
 
+  /** Войти зрителем: видит всю карту, приказы не принимаются */
+  private watch(c: Client): null {
+    this.watchers.set(c.id, []);
+    this.clients.set(c.id, c);
+    c.room = this;
+    this.sync();
+    if (this.state === 'game' && this.world) {
+      const players = this.slots.map((s) => ({ name: s.name, team: s.team, hero: s.hero, bot: !s.client }));
+      c.send({ t: 'start', slot: -1, tick: this.world.tick, mode: this.mode, players });
+      c.send({ t: 'snap', s: makeSnapshot(this.world, -1, { all: true, events: [] }), ack: 0 });
+    }
+    return null;
+  }
+
   leave(c: Client) {
+    this.watchers.delete(c.id);
     const i = this.slotOf(c);
     this.clearGrace(c.id);
     this.clients.delete(c.id);
@@ -251,6 +270,8 @@ export class Room {
       const c = s.client ? this.clients.get(s.client) : undefined;
       c?.send({ t: 'start', slot, tick: 0, mode: this.mode, players });
     });
+    for (const id of this.watchers.keys())
+      this.clients.get(id)?.send({ t: 'start', slot: -1, tick: 0, mode: this.mode, players });
     this.sync();
     this.lastT = performance.now();
     this.acc = 0;
@@ -271,6 +292,7 @@ export class Room {
       this.slots.forEach((s, slot) => {
         if (s.client && s.online) this.pending[slot].push(...eventsFor(w, slot));
       });
+      for (const ev of this.watchers.values()) ev.push(...eventsFor(w, -1, true));
       if (w.tick % SNAP_EVERY === 0 || w.winner !== -1) this.sendSnapshots();
       if (w.winner !== -1) {
         this.finish();
@@ -291,6 +313,10 @@ export class Room {
       c.send({ t: 'snap', s: makeSnapshot(w, slot, { events: this.pending[slot] }), ack: this.acks[slot] });
       this.pending[slot] = [];
     });
+    for (const [id, ev] of this.watchers) {
+      this.clients.get(id)?.send({ t: 'snap', s: makeSnapshot(w, -1, { all: true, events: ev }), ack: 0 });
+      ev.length = 0;
+    }
   }
 
   /** Полный снимок одному игроку (после переподключения) */
