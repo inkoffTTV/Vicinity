@@ -15,6 +15,9 @@
   <button id="sayBtn" class="panel" type="button" title="Фразы союзникам (Y)" aria-label="Фразы союзникам, клавиша Y">Фразы</button>
   <div id="sayWheel" class="panel" hidden role="menu" aria-label="Фразы союзникам"></div>
   <div id="feed" aria-live="polite"></div>
+  <div id="coach" class="panel" hidden role="status" aria-live="polite">
+    <small id="coachStep"></small><p id="coachText"></p><button id="coachSkip" class="ghost" type="button">Пропустить обучение</button>
+  </div>
   <div id="specBar" class="panel" hidden role="group" aria-label="Режим зрителя">
     <span class="lbl">Вы зритель</span>
     <button id="specPrev" type="button" aria-label="Предыдущий герой">◀</button>
@@ -155,6 +158,7 @@
       <div class="seg" role="radiogroup" aria-label="Карта: сколько линий и героев в команде" id="mapSeg" style="--n:4"><button data-v="1v1">1 на 1</button><button data-v="2v2">2 на 2</button><button data-v="3v3">3 на 3</button><button data-v="chaos" title="3 на 3 на одной линии, случайные герои, вдвое быстрее золото и опыт — около 10 минут">Хаос</button></div>
       <p id="playMsg"></p>
       <button class="go" id="findBtn">Играть</button>
+      <button class="ghost" id="tutorBtn" type="button">Обучение для новичков · +50 ✦</button>
       <div id="search" hidden><span>Поиск игры</span><b id="searchT">0:00</b><button class="ghost" id="cancelSearch">Отмена</button></div>
     </div>
   </div>

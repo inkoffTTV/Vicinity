@@ -26,6 +26,7 @@ import { Lobby } from './ui/lobby';
 import { Sound, type Volumes } from './audio/sound';
 import { renderHeroCards, scoreTable } from './ui/screens';
 import { PickScreen } from './ui/pick';
+import { Tutorial } from './ui/tutorial';
 import { applyMatch, buySkin, daily, hasSkin, questOf, SKINS, type MetaProfile } from './ui/meta';
 import { Portrait } from './render/portrait';
 import type { Session } from './game/session';
@@ -721,8 +722,35 @@ export class App {
 
   // ── Матч ──
 
-  startGame() {
-    const local = this.makeLocal((Date.now() % 2147483646) + 1);
+  /** Обучение: маг против лёгкого Громилы, подсказки по шагам */
+  private tutorial: Tutorial | null = null;
+  startTutorial() {
+    this.tutorial?.finish(false);
+    const local = new LocalSession({
+      seed: 777,
+      jungle: true,
+      mode: '1v1',
+      players: [
+        { name: this.playerName(), team: 0, hero: 'mage', bot: null, skin: this.skinOf('mage') },
+        { name: HERO.brute.name, team: 1, hero: 'brute', bot: 'easy' },
+      ],
+    });
+    this.startGame(local);
+    this.tutorial = new Tutorial(local.world, () => {
+      this.profile.sparks = (this.profile.sparks ?? 0) + 50;
+      store.set('profile', this.profile);
+      this.hud.toast('Обучение пройдено! +50 ✦ — дальше играйте как хотите');
+      this.sound.play('win');
+    });
+    this.hud.toast('Обучение: следуйте подсказкам вверху экрана');
+  }
+
+  startGame(given?: LocalSession) {
+    if (!given) {
+      this.tutorial?.finish(false);
+      this.tutorial = null;
+    }
+    const local = given ?? this.makeLocal((Date.now() % 2147483646) + 1);
     this.applyMap(local.world.mapId);
     this.sound.night = this.kit.night;
     this.sound.startAmbient();
@@ -757,6 +785,7 @@ export class App {
 
   private endGame(s: Snapshot) {
     if (this.state === 'over') return;
+    this.tutorial?.finish(false);
     if (!s.me) {
       // Зритель: только итог
       this.setState('over');
@@ -925,6 +954,7 @@ export class App {
       resetArmed = false;
       b.textContent = 'Статистика сброшена';
     });
+    $('tutorBtn').addEventListener('click', () => this.startTutorial());
     $('findBtn').addEventListener('click', () => {
       if (this.state !== 'menu') return;
       this.setState('search');
@@ -1119,6 +1149,8 @@ export class App {
   }
 
   backToMenu(msg: string) {
+    this.tutorial?.finish(false);
+    this.tutorial = null;
     $('netBanner').hidden = true;
     this.spectating = false;
     $('game').classList.remove('spectate');
@@ -1265,6 +1297,7 @@ export class App {
     if (this.state === 'play') this.autoscale.tick(dt);
     if (this.fpsEl) this.fpsTick(dt);
     this.view.updateBars();
+    if (this.state === 'play' && this.tutorial && this.snap) this.tutorial.tick(this.snap);
     if (this.state === 'play') {
       // Здоровье под курсором меняется, герой двигается — плашку и прицел обновляем каждый кадр
       if (this.view.hoverId) this.refreshHover();
@@ -1326,6 +1359,7 @@ export class App {
         return app.session instanceof LocalSession ? app.session.world : null;
       },
       start: () => app.startGame(),
+      tutorial: () => app.startTutorial(),
       step(n: number) {
         if (!(app.session instanceof LocalSession)) return;
         for (const s of app.session.advance(n)) {
