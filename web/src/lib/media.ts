@@ -118,6 +118,8 @@ export interface MediaPrefs {
   pttDelay: number;
   /** Показ экрана: плавность (60 к/с на Ultra) или чёткость текста */
   screenMode: ScreenMode;
+  /** Показ экрана со звуком (вкладки, окна, всего экрана — что даёт браузер) */
+  screenAudio: boolean;
   /** Усиление микрофона, 0…2 */
   micGain: number;
   /** Громкость собеседников, 0…2 (в звонке выше 1 не бывает — так устроен <audio>) */
@@ -143,6 +145,7 @@ const DEFAULTS: MediaPrefs = {
   pttKey: 'AltLeft',
   pttDelay: 200,
   screenMode: 'motion',
+  screenAudio: true,
   micGain: 1,
   volume: 1,
 };
@@ -169,6 +172,7 @@ function loadPrefs(): MediaPrefs {
       pttKey: typeof raw.pttKey === 'string' && raw.pttKey ? raw.pttKey : DEFAULTS.pttKey,
       pttDelay: clampNum(raw.pttDelay, 0, 1000, DEFAULTS.pttDelay),
       screenMode: raw.screenMode === 'detail' ? 'detail' : 'motion',
+      screenAudio: bool(raw.screenAudio, DEFAULTS.screenAudio),
       micGain: clampLevel(raw.micGain, DEFAULTS.micGain),
       volume: clampLevel(raw.volume, DEFAULTS.volume),
     };
@@ -256,15 +260,58 @@ export function screenQuality(tier: number, mode: ScreenMode, opts: { desktopPee
   };
 }
 
-/** Параметры getDisplayMedia под выбранное качество */
-export function screenCaptureOptions(q: ScreenQuality): DisplayMediaStreamOptions {
+/** Параметры getDisplayMedia под выбранное качество (и со звуком, если он включён в настройках) */
+export function screenCaptureOptions(q: ScreenQuality, audio = useMediaPrefs.getState().screenAudio): DisplayMediaStreamOptions {
   return {
     video: {
       width: { ideal: q.width, max: q.width },
       height: { ideal: q.height, max: q.height },
       frameRate: { ideal: q.fps, max: q.fps },
     },
-    audio: false,
+    // Звук как есть: без шумодава и эхоподавления (это музыка и игры, а не голос).
+    // restrictOwnAudio — не захватывать звук самого Vicinity (голоса собеседников), где браузер это умеет
+    audio: audio
+      ? ({
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          suppressLocalAudioPlayback: false,
+          restrictOwnAudio: true,
+        } as MediaTrackConstraints)
+      : false,
+    // Chrome: предложить звук всего экрана и звук окна, а не только вкладки
+    ...(audio ? ({ systemAudio: 'include', windowAudio: 'system' } as object) : {}),
+  };
+}
+
+/** Звук экрана поверх микрофона — одной дорожкой (в звонке 1:1 линии фиксированы, новую не добавить) */
+export interface ScreenMix {
+  track: MediaStreamTrack;
+  setMic(track: MediaStreamTrack | undefined): void;
+  close(): void;
+}
+
+export function mixScreenAudio(mic: MediaStreamTrack | undefined, screen: MediaStreamTrack): ScreenMix {
+  const ctx = new AudioContext();
+  const dest = ctx.createMediaStreamDestination();
+  const scr = ctx.createMediaStreamSource(new MediaStream([screen]));
+  scr.connect(dest);
+  let micSrc: MediaStreamAudioSourceNode | null = null;
+  const setMic = (t: MediaStreamTrack | undefined) => {
+    micSrc?.disconnect();
+    micSrc = t ? ctx.createMediaStreamSource(new MediaStream([t])) : null;
+    micSrc?.connect(dest);
+  };
+  setMic(mic);
+  void ctx.resume().catch(() => {});
+  return {
+    track: dest.stream.getAudioTracks()[0],
+    setMic,
+    close() {
+      micSrc?.disconnect();
+      scr.disconnect();
+      void ctx.close().catch(() => {});
+    },
   };
 }
 

@@ -239,7 +239,7 @@ function FocusStream({ watch, name }: { watch: Watch; name: string }) {
       data-state={watch.state}
     >
       {watch.stream ? (
-        <StreamVideo stream={watch.stream} className="stage-stream-video" onDoubleClick={fs.toggle} />
+        <StreamVideo stream={watch.stream} className="stage-stream-video" onDoubleClick={fs.toggle} audible={watch.kind === 'screen'} />
       ) : (
         <div className="stage-stream-wait">
           <span className="spinner" /> Подключение к трансляции…

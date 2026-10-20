@@ -67,6 +67,7 @@ export function ScreenQualityPanel({ desktopPeer }: { desktopPeer?: boolean }) {
   const tier = useStore((s) => s.me?.subscription_tier ?? 0);
   const mode = useMediaPrefs((s) => s.screenMode);
   const setPrefs = useMediaPrefs((s) => s.set);
+  const screenAudio = useMediaPrefs((s) => s.screenAudio);
   const motion = screenQuality(tier, 'motion', { desktopPeer });
   const detail = screenQuality(tier, 'detail', { desktopPeer });
   return (
@@ -80,6 +81,12 @@ export function ScreenQualityPanel({ desktopPeer }: { desktopPeer?: boolean }) {
           Чёткость <span className="muted small">{detail.label}</span>
         </button>
       </div>
+      <label className="row screen-audio">
+        <input type="checkbox" checked={screenAudio} onChange={(e) => setPrefs({ screenAudio: e.target.checked })} />
+        <span>
+          Звук экрана <span className="muted small">— включается со следующего показа; в окне выбора отметьте «Поделиться звуком»</span>
+        </span>
+      </label>
       <div className="muted small">
         Подписка: {TIER_NAMES[Math.max(0, Math.min(3, tier))]}. Плавность — для игр и видео, чёткость — для текста и кода.
       </div>

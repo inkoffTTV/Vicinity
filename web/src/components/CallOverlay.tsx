@@ -1,3 +1,4 @@
+import { useVoice } from '../lib/voice';
 import {
   Maximize,
   Mic,
@@ -80,18 +81,30 @@ export function StreamVideo({
   className,
   videoRef,
   onDoubleClick,
+  audible,
 }: {
   stream: MediaStream;
   className: string;
   videoRef?: React.Ref<HTMLVideoElement>;
   onDoubleClick?: () => void;
+  /** Играть звук потока (трансляция экрана со звуком); громкость и устройство — из настроек звука */
+  audible?: boolean;
 }) {
   const ref = useRef<HTMLVideoElement | null>(null);
+  const outputId = useMediaPrefs((s) => s.outputId);
+  const volume = useMediaPrefs((s) => s.volume);
+  const deafened = useVoice((s) => s.deafened);
   useEffect(() => {
     const el = ref.current!;
     el.srcObject = stream;
     void el.play().catch(() => {});
   }, [stream]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !audible) return;
+    applyOutput(el, outputId);
+    el.volume = Math.min(1, volume);
+  }, [audible, outputId, volume]);
   return (
     <video
       ref={(el) => {
@@ -102,7 +115,7 @@ export function StreamVideo({
       className={className}
       autoPlay
       playsInline
-      muted
+      muted={!audible || deafened}
       onDoubleClick={onDoubleClick}
     />
   );

@@ -10,7 +10,9 @@ import {
   mediaError,
   openMic,
   processingKey,
+  mixScreenAudio,
   openScreen,
+  type ScreenMix,
   rtcIceServers,
   screenQuality,
   stopStream,
@@ -120,6 +122,8 @@ interface Session {
   mic: MediaStream | null;
   cam: MediaStream | null;
   scr: MediaStream | null;
+  /** Звук экрана, смешанный с микрофоном (пока идёт показ экрана со звуком) */
+  mix?: ScreenMix | null;
   /** Входящий звонок: SDP предложения до ответа */
   offer: string;
   transceivers: Partial<Record<Role, RTCRtpTransceiver>>;
@@ -195,6 +199,8 @@ function teardown(sound = true) {
     s.pc.close();
   }
   [s.mic, s.cam, s.scr].forEach(stopStream);
+  s.mix?.close();
+  s.mix = null;
   const { phase, peerId } = useCall.getState();
   if (phase !== 'idle') {
     lastEnded = { peerId, at: Date.now() };
@@ -434,6 +440,12 @@ function stopVideo(s: Session, role: 'video' | 'screen') {
   } else {
     stopStream(s.scr);
     s.scr = null;
+    if (s.mix) {
+      // Вернуть чистый микрофон
+      void s.transceivers.audio?.sender.replaceTrack(s.mic?.getAudioTracks()[0] ?? null).catch(() => {});
+      s.mix.close();
+      s.mix = null;
+    }
     useCall.setState({ screen: false, localScreen: null, screenLabel: '' });
   }
   sendCtrl(s);
@@ -477,6 +489,17 @@ async function startVideo(s: Session, role: 'video' | 'screen') {
     s.scr = stream;
     useCall.setState({ screen: true, localScreen: stream, screenLabel: quality.label });
     void tuneScreenSender(t.sender, quality);
+    // Звук экрана: в звонке 1:1 новую линию не добавить — смешиваем с микрофоном
+    const audio = stream.getAudioTracks()[0];
+    if (audio && s.transceivers.audio) {
+      const mix = mixScreenAudio(s.mic?.getAudioTracks()[0], audio);
+      try {
+        await s.transceivers.audio.sender.replaceTrack(mix.track);
+        s.mix = mix;
+      } catch {
+        mix.close();
+      }
+    }
   }
   // Камеру отключили или нажали «Прекратить показ» в браузере
   track.addEventListener('ended', () => {
@@ -777,7 +800,9 @@ useMediaPrefs.subscribe((p, prev) => {
       if (sess !== s) return stopStream(mic);
       applyMute(mic);
       try {
-        await s.transceivers.audio?.sender.replaceTrack(mic.getAudioTracks()[0]);
+        // Идёт показ экрана со звуком — меняем микрофон внутри смеси, линия та же
+        if (s.mix) s.mix.setMic(mic.getAudioTracks()[0]);
+        else await s.transceivers.audio?.sender.replaceTrack(mic.getAudioTracks()[0]);
       } catch {
         stopStream(mic);
         if (sess === s) toast('Не удалось переключить микрофон', 'error');

@@ -215,6 +215,9 @@ async function onWatch(viewer: number, kind: StreamKind) {
         : [{ maxBitrate: 1_500_000, maxFramerate: 30 }],
   });
   applyCodecOrder(transceiver, codecs.order);
+  // Звук экрана — отдельной дорожкой в том же потоке (зритель слышит его в окне трансляции)
+  const screenAudio = kind === 'screen' ? stream.getAudioTracks()[0] : undefined;
+  if (screenAudio) pc.addTransceiver(screenAudio, { direction: 'sendonly', streams: [stream] });
   const sender = transceiver.sender;
   if (kind === 'screen') peer.screen = { sender, hardware: codecs.hardware };
   pc.onicecandidate = (e) => {
