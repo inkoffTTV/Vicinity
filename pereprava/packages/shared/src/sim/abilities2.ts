@@ -1757,8 +1757,8 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
   consecrate: {
     id: 'consecrate',
     name: 'Освящение',
-    desc: 'Земля вокруг 4 с светится в 4 м: врагам 20 урона, +4 за уровень, каждые 0,5 с, союзникам — столько же лечения.',
-    cd: 18,
+    desc: 'Земля вокруг 5 с светится в 4 м: врагам 28 урона, +5 за уровень, каждые 0,5 с, союзникам — столько же лечения.',
+    cd: 16,
     target: 'none',
     range: 4,
     colors: C('#fff6c0', '#fffcec', '#e8c860', '#6a5214'),
@@ -1769,12 +1769,12 @@ export const ABILITIES_2: Record<string, AbilityDef> = {
         x: u.x,
         z: u.z,
         r: 4,
-        t: 4,
+        t: 5,
         delay: 0,
         period: 0.5,
         src: u.id,
         team: u.team,
-        v: 20 + lvl(u, 'consecrate') * 4,
+        v: 28 + lvl(u, 'consecrate') * 5,
       });
       return true;
     },
