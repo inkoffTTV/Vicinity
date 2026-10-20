@@ -69,6 +69,7 @@ STD.name = 'v-std';
 GLOW.name = 'v-glow';
 
 const tmpM = new THREE.Matrix4();
+const WEAPON_SCALE = new THREE.Matrix4().makeScale(1.4, 1.4, 1.4);
 const tmpQ = new THREE.Quaternion();
 const tmpE = new THREE.Euler();
 const tmpC = new THREE.Color();
@@ -90,6 +91,12 @@ class Parts {
     for (let i = 0; i < n; i++) col.set([tmpC.r, tmpC.g, tmpC.b], i * 3);
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     (glow ? this.glow : this.std).push(geo);
+    return this;
+  }
+  /** Забрать части другого набора, преобразовав их матрицей (оружие крупнее вокруг кисти) */
+  absorb(o: Parts, m: THREE.Matrix4) {
+    for (const g of o.std) this.std.push(g.applyMatrix4(m));
+    for (const g of o.glow) this.glow.push(g.applyMatrix4(m));
     return this;
   }
   /** Слить в меши (кэшируются по ключу, чтобы одинаковые модели делили геометрию) */
@@ -322,13 +329,15 @@ export const TEAM_ACCENT = [0x3ec7a1, 0xe2504a, 0xc8b48a];
 export function buildHumanoid(look: Look, team: number, key: string, scale = 1): Rig {
   const l = look;
   const H = l.height;
-  const W = l.bulk;
+  // Проход читаемости: разница в телосложении заметнее (худые — тоньше, массивные — шире)
+  const W = 1 + (l.bulk - 1) * 1.8;
   const hip = 1.0 * H;
   const legL = 1.0 * H;
   const torsoH = 0.78 * H;
   const shY = hip + torsoH * 0.88;
   const armLen = 0.86 * H;
-  const hr = 0.25 * (0.85 + 0.15 * W);
+  // Голова крупнее: с игровой камеры на телефоне лицо и головной убор — главное, что видно
+  const hr = 0.25 * (0.85 + 0.15 * W) * 1.3;
   const hy = hip + torsoH + hr * 1.05;
   const tw = 0.36 * W;
   const tc = TEAM_ACCENT[team] ?? TEAM_ACCENT[2];
@@ -432,8 +441,16 @@ export function buildHumanoid(look: Look, team: number, key: string, scale = 1):
     if (l.torso === 'plate' || l.torso === 'leather')
       ap.add(box(0.21 * W, 0.12, 0.22 * W), l.trim, [0, -armLen * 0.62, 0]);
     ap.add(box(0.15, 0.15, 0.15), l.skin, [0, -armLen, 0]);
-    if (sx > 0) weapon(ap, l, armLen);
-    else offhand(ap, l, armLen);
+    // Оружие и вторая рука — крупнее в 1,4 раза вокруг кисти, чтобы читались сверху
+    const wp = new Parts();
+    if (sx > 0) weapon(wp, l, armLen);
+    else offhand(wp, l, armLen);
+    ap.absorb(
+      wp,
+      WEAPON_SCALE.clone()
+        .premultiply(new THREE.Matrix4().makeTranslation(0, -armLen, 0))
+        .multiply(new THREE.Matrix4().makeTranslation(0, armLen, 0)),
+    );
     bone(g, ap, `${k}|arm${sx}`);
     body.add(g);
     arms.push(g);
