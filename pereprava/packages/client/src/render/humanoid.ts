@@ -70,6 +70,7 @@ GLOW.name = 'v-glow';
 
 const tmpM = new THREE.Matrix4();
 const WEAPON_SCALE = new THREE.Matrix4().makeScale(1.4, 1.4, 1.4);
+const NO_SCALE = new THREE.Matrix4();
 const tmpQ = new THREE.Quaternion();
 const tmpE = new THREE.Euler();
 const tmpC = new THREE.Color();
@@ -329,15 +330,17 @@ export const TEAM_ACCENT = [0x3ec7a1, 0xe2504a, 0xc8b48a];
 export function buildHumanoid(look: Look, team: number, key: string, scale = 1): Rig {
   const l = look;
   const H = l.height;
-  // Проход читаемости: разница в телосложении заметнее (худые — тоньше, массивные — шире)
-  const W = 1 + (l.bulk - 1) * 1.8;
+  // Проход читаемости — только для героев (крипы мелкие и рисуются инстансами, их не трогаем):
+  // разница в телосложении заметнее, голова и оружие крупнее
+  const hero = !key.startsWith('creep');
+  const W = hero ? 1 + (l.bulk - 1) * 1.8 : l.bulk;
   const hip = 1.0 * H;
   const legL = 1.0 * H;
   const torsoH = 0.78 * H;
   const shY = hip + torsoH * 0.88;
   const armLen = 0.86 * H;
   // Голова крупнее: с игровой камеры на телефоне лицо и головной убор — главное, что видно
-  const hr = 0.25 * (0.85 + 0.15 * W) * 1.3;
+  const hr = 0.25 * (0.85 + 0.15 * W) * (hero ? 1.3 : 1);
   const hy = hip + torsoH + hr * 1.05;
   const tw = 0.36 * W;
   const tc = TEAM_ACCENT[team] ?? TEAM_ACCENT[2];
@@ -447,7 +450,8 @@ export function buildHumanoid(look: Look, team: number, key: string, scale = 1):
     else offhand(wp, l, armLen);
     ap.absorb(
       wp,
-      WEAPON_SCALE.clone()
+      (hero ? WEAPON_SCALE : NO_SCALE)
+        .clone()
         .premultiply(new THREE.Matrix4().makeTranslation(0, -armLen, 0))
         .multiply(new THREE.Matrix4().makeTranslation(0, armLen, 0)),
     );

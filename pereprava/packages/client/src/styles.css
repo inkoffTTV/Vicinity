@@ -405,7 +405,9 @@ button.go{width:100%;padding:var(--s3) var(--s4);min-height:44px;border:0;border
 .pickfoot p{margin:0;color:var(--ink-dim);font-size:var(--fs-s);line-height:1.4}
 .pickfoot .go{width:auto;padding:var(--s3) 28px}
 .hcard{text-align:left;padding:var(--s3);border-radius:var(--r3);border:1px solid var(--panel-line);border-top:3px solid var(--hc);background:var(--surface);cursor:pointer;display:flex;flex-direction:column;gap:var(--s1);color:var(--ink)}
-.hcard b{font:400 clamp(16px,1.6vw,19px) var(--f-title);color:var(--hc);overflow-wrap:anywhere}
+.hcard{container-type:inline-size}
+/* Имя целиком: шрифт подстраивается под ширину карточки, слово не рвётся посередине («Отравительница» — самое длинное) */
+.hcard b{font:400 clamp(12px,10.5cqi,19px)/1.15 var(--f-title);color:var(--hc);overflow-wrap:normal;word-break:normal;hyphens:manual}
 .hcard small{font-size:12px;color:var(--gold)}
 .hcard span{font-size:12px;color:var(--ink-dim);line-height:1.35}
 .hcard .keys4{display:flex;gap:var(--s1);margin-top:var(--s1)}
@@ -669,3 +671,11 @@ button.go{width:100%;padding:var(--s3) var(--s4);min-height:44px;border:0;border
 #coach button{grid-column:2;grid-row:1/3;min-height:36px;font-size:var(--fs-xs)}
 .hl{outline:3px solid var(--gold)!important;outline-offset:3px;animation:pulse 1.2s infinite}
 @media (max-width:900px),(pointer:coarse){#coach{top:calc(var(--s2) + 100px)}}
+
+/* ── Иконки 0.5: силуэт умения на кнопке, подложка раздела у плиток лавки ── */
+/* Иконка — картинкой: декодируется один раз и не перерисовывается вместе с перезарядкой */
+.sk img.ai{position:absolute;inset:22%;width:56%;height:56%;pointer-events:none}
+.sk.locked img.ai{opacity:.55}
+.ic.framed{position:relative;background:none;overflow:visible}
+.ic .frm{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);fill:currentColor;fill-opacity:.16;stroke:currentColor;stroke-opacity:.55;stroke-width:1}
+.ic.framed > svg:not(.frm){position:relative;width:62%;height:62%}

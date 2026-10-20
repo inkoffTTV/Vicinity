@@ -17,6 +17,7 @@ import {
 } from '@pereprava/shared';
 import type { GameView } from '../render/view';
 import { ShopUI } from './shop';
+import { abilityImg, itemGlyph } from './icons';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 export const fmt = (t: number) => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
@@ -224,7 +225,7 @@ export class Hud {
       b.style.cssText = `--rim:${rim};--c1:${c1};--c2:${c2};--c3:${c3}`;
       b.setAttribute('aria-label', a.passive ? `${a.name}, пассивная` : `${a.name}, клавиша ${KEYS[slot]}`);
       b.title = `${a.name}${a.passive ? ' (пассивная)' : ` (${KEYS[slot]})`}: ${a.desc}`;
-      b.innerHTML = `<span class="k">${KEYS[slot]}</span><b class="cdn"></b>${a.passive ? '' : '<small class="mc"></small>'}${a.charges ? '<em class="chg"></em>' : ''}`;
+      b.innerHTML = `<img class="ai" alt="" src='${abilityImg(a)}'><span class="k">${KEYS[slot]}</span><b class="cdn"></b>${a.passive ? '' : '<small class="mc"></small>'}${a.charges ? '<em class="chg"></em>' : ''}`;
       wrap.append(b, pips);
       if (a.passive) {
         b.tabIndex = -1;
@@ -295,7 +296,7 @@ export class Hud {
       b.className = 'slot' + (it?.active && i < INVENTORY ? ' use' : '') + (i >= INVENTORY ? ' bp' : '');
       if (it) {
         b.style.setProperty('--ic', it.color);
-        b.innerHTML = `<svg viewBox="0 0 24 24">${it.icon}</svg>${i < INVENTORY ? `<kbd>${i + 1}</kbd>` : ''}<i class="icd"></i>`;
+        b.innerHTML = `<svg viewBox="0 0 24 24">${itemGlyph(it.id)}</svg>${i < INVENTORY ? `<kbd>${i + 1}</kbd>` : ''}<i class="icd"></i>`;
         b.title =
           it.name + (i >= INVENTORY ? ' (в рюкзаке — не работает)' : it.active ? `: нажмите или клавиша ${i + 1}` : '');
         b.setAttribute('aria-label', b.title);
@@ -382,7 +383,7 @@ export class Hud {
       const it = me.neutral ? ITEM[me.neutral] : null;
       const nb = $('neutralSlot');
       nb.style.setProperty('--ic', it?.color ?? 'transparent');
-      nb.innerHTML = it ? `<svg viewBox="0 0 24 24">${it.icon}</svg>` : '';
+      nb.innerHTML = it ? `<svg viewBox="0 0 24 24">${itemGlyph(it.id)}</svg>` : '';
       nb.title = it ? `${it.name}: ${it.desc}` : 'Нейтральный предмет: выпадает из лесных зверей';
       nb.setAttribute('aria-label', it ? `Нейтральный предмет: ${it.name}` : 'Нейтральный предмет: пусто');
     }

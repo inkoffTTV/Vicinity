@@ -588,6 +588,7 @@ export class App {
     this.updateAim();
   }
 
+  private hoverT = 0;
   private refreshHover() {
     const s =
       this.state === 'play' && this.mouse
@@ -1311,6 +1312,12 @@ export class App {
     if (this.state === 'play' || this.state === 'over') this.hud.update(dt);
     if (!$('board').hidden) this.showBoard(true);
     this.sound.tick(dt);
+    // Цель под неподвижной мышью тоже меняется: едет камера, ходят юниты — пересчитываем 10 раз в секунду
+    this.hoverT -= dt;
+    if (this.mouse && this.state === 'play' && this.hoverT <= 0) {
+      this.hoverT = 0.1;
+      this.refreshHover();
+    }
     this.mmT -= dt;
     if (this.mmT <= 0) {
       this.mmT = 0.1;

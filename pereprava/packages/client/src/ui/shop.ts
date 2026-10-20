@@ -17,11 +17,12 @@ import {
   type ItemSection,
   type MeSnap,
 } from '@pereprava/shared';
+import { itemGlyph, itemTile } from './icons';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const TIER = ['', 'Базовый', 'Промежуточный', 'Итоговый'];
 const norm = (s: string) => s.toLowerCase().replace(/ё/g, 'е');
-const icon = (id: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ITEM[id].icon}</svg>`;
+const icon = (id: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${itemGlyph(id)}</svg>`;
 
 type Tab = 'rec' | ItemSection;
 
@@ -159,7 +160,7 @@ export class ShopUI {
         ? ids
             .map(
               (id) =>
-                `<button class="sitem" data-open="${id}" data-id="${id}" style="--ic:${ITEM[id].color}"><span class="ic">${icon(id)}</span><b>${ITEM[id].name}</b><span class="pr coin"></span></button>`,
+                `<button class="sitem" data-open="${id}" data-id="${id}" style="--ic:${ITEM[id].color}"><span class="ic framed">${itemTile(id)}</span><b>${ITEM[id].name}</b><span class="pr coin"></span></button>`,
             )
             .join('')
         : '<p class="empty">Ничего не нашлось</p>';
@@ -224,7 +225,7 @@ export class ShopUI {
     const next = isT ? nextPart(this.pool(me), me.gold, id) : null;
     card.innerHTML = `
       <button class="back ghost" type="button">← К списку</button>
-      <div class="ch" style="--ic:${it.color}"><span class="ic big">${icon(id)}</span><div><h3>${it.name}</h3><small>${TIER[it.tier]} · ${SECTIONS.find((s) => s.id === it.section)!.name}</small></div></div>
+      <div class="ch" style="--ic:${it.color}"><span class="ic big framed">${itemTile(id)}</span><div><h3>${it.name}</h3><small>${TIER[it.tier]} · ${SECTIONS.find((s) => s.id === it.section)!.name}</small></div></div>
       ${stats.length ? `<ul class="stats">${stats.map((s) => `<li>${s}</li>`).join('')}</ul>` : ''}
       ${it.active || it.consumable || !stats.length ? `<p class="desc">${it.desc}</p>` : ''}
       ${parts}${into}

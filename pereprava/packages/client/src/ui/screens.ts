@@ -1,5 +1,6 @@
 // Экраны меню: карточки героев, выбор героя перед матчем, таблица счёта.
 import { ABILITIES, HERO, HEROES, ITEM, type PlayerSnap, type Snapshot } from '@pereprava/shared';
+import { itemGlyph } from './icons';
 
 const KEYS = ['Q', 'W', 'E', 'R'];
 const esc = (s: string) =>
@@ -48,7 +49,7 @@ function items(p: PlayerSnap) {
     .filter((x): x is string => !!x)
     .map(
       (id) =>
-        `<i style="--ic:${ITEM[id].color}" title="${esc(ITEM[id].name)}"><svg viewBox="0 0 24 24">${ITEM[id].icon}</svg></i>`,
+        `<i style="--ic:${ITEM[id].color}" title="${esc(ITEM[id].name)}"><svg viewBox="0 0 24 24">${itemGlyph(id)}</svg></i>`,
     )
     .join('');
 }

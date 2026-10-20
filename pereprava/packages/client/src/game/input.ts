@@ -143,8 +143,11 @@ export function attachInput(canvas: HTMLCanvasElement, view: GameView, act: Inpu
     else if (e.code === 'KeyY') act.sayWheel();
     else if (/^Digit[1-6]$/.test(e.code)) act.useItem(+e.code.slice(5) - 1, mouseAim());
     else if (e.code === 'KeyA') act.armAttackMove();
-    else if (e.code === 'KeyB') act.toggleShop();
-    else if (e.code === 'Escape') {
+    else if (e.code === 'KeyB') {
+      // Лавка ставит фокус в поиск прямо сейчас — без этого буква «b» попала бы в поле
+      e.preventDefault();
+      act.toggleShop();
+    } else if (e.code === 'Escape') {
       if (!act.cancelAim()) act.toggleShop(false);
     } else if (e.code === 'KeyS') act.stop();
     else if (e.code === 'KeyG') {

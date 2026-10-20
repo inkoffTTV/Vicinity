@@ -74,8 +74,27 @@ async function startMatch(page: Page) {
   await page.waitForTimeout(300);
 }
 
+/** Камера плавно догоняет героя — точку на экране берём, когда она остановилась */
+async function cameraSettled(page: Page) {
+  await page.waitForFunction(
+    () =>
+      new Promise<boolean>((done) => {
+        const cam = (window.__g.app.view as unknown as { kit: { camera: { position: { x: number; z: number } } } }).kit
+          .camera.position;
+        const a = { x: cam.x, z: cam.z };
+        setTimeout(() => done(Math.hypot(cam.x - a.x, cam.z - a.z) < 0.02), 250);
+      }),
+    null,
+    { timeout: 20_000 },
+  );
+}
+
 /** Экранная точка вражеского крипа и свободной земли рядом с героем */
-const points = (page: Page) =>
+const points = async (page: Page) => {
+  await cameraSettled(page);
+  return pointsNow(page);
+};
+const pointsNow = (page: Page) =>
   page.evaluate(() => {
     const v = window.__g.app.view;
     const canvas = document.querySelector('canvas')!.getBoundingClientRect();

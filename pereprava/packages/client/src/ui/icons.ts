@@ -1,6 +1,7 @@
 // Иконки «Переправы»: сетка 24×24, линия 2 px, скруглённые концы, без заливок.
 // Правило набора: каждая иконка узнаётся по силуэту без цвета; раздел лавки дополнительно
 // кодируется формой подложки (SECTION_FRAME), цвет — только подсказка. Всё своё.
+import { ITEM, type AbilityDef } from '@pereprava/shared';
 
 export type Section = 'consum' | 'attack' | 'defense' | 'magic' | 'speed' | 'final';
 
@@ -96,3 +97,26 @@ export const ABILITY_KIND_ICON: Record<string, string> = {
 /** Готовая SVG-разметка иконки (обводка — currentColor) */
 export const svg = (inner: string, size = 24) =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+
+/** Силуэт предмета: из набора, а для нового предмета без своей иконки — из его данных */
+export const itemGlyph = (id: string) => ITEM_ICON[id] ?? ITEM[id]?.icon ?? '';
+
+/** Иконка предмета с подложкой раздела — для плиток лавки (40 px и крупнее) */
+export function itemTile(id: string) {
+  const sec = ITEM[id]?.section as Section | undefined;
+  const frame = sec ? `<svg class="frm" viewBox="0 0 24 24" aria-hidden="true">${SECTION_FRAME[sec]}</svg>` : '';
+  return `${frame}<svg viewBox="0 0 24 24" aria-hidden="true">${itemGlyph(id)}</svg>`;
+}
+
+/** Иконка умения по его типу (подсказка ai для бота); пассивные — свой значок */
+export function abilityGlyph(a: AbilityDef) {
+  if (a.passive) return ABILITY_KIND_ICON.passive;
+  return ABILITY_KIND_ICON[a.ai?.kind ?? ''] ?? ABILITY_KIND_ICON.nuke;
+}
+
+/** Иконка умения картинкой (data URL): белая линия поверх тёмной подложки, без фильтров */
+export function abilityImg(a: AbilityDef) {
+  const g = abilityGlyph(a);
+  const svgText = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><g stroke="rgba(0,0,0,.5)" stroke-width="4.2">${g}</g><g stroke="#fff" stroke-width="2.2">${g}</g></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svgText)}`;
+}
