@@ -938,3 +938,147 @@ button.settings-download {
   vertical-align: -3px;
   color: var(--accent);
 }
+
+/* ── Компоненты по дизайн-системе (design/previews, design/components.css) ── */
+
+/* Рельс: неактивный — круг, наведение и активный — radius-md за dur-base; слева полоска-индикатор */
+.rail-item {
+  border-radius: var(--radius-pill);
+  transition: border-radius var(--dur-base) var(--ease-out-soft), background var(--dur-fast), color var(--dur-fast);
+}
+.rail-item:hover {
+  transform: none;
+  border-radius: var(--radius-md);
+}
+.rail-item:hover:not(.active):not(.add) {
+  background: var(--bg-active);
+  color: var(--text);
+}
+.rail-item.active {
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+.rail-item::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  border-radius: 2px;
+  background: var(--text);
+  transform: translateY(-50%);
+  transition: height var(--dur-base) var(--ease-out-soft);
+}
+.rail-item:hover::before {
+  height: 16px;
+}
+.rail-item.active::before {
+  left: -12px;
+  height: 28px;
+  border-radius: 2px;
+  background: var(--text);
+}
+
+/* Лента: наведение — bg-hover; внутри группы одного автора — space-1, между группами — space-3 */
+.msg:hover,
+.msg:focus-within {
+  background: var(--bg-hover);
+}
+.msg.editing {
+  background: var(--bg-active);
+}
+.msg.grouped {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+.msg-time-hover {
+  text-align: center;
+  padding-top: 0;
+  line-height: 21px;
+}
+
+/* Цитата-ответ: полоса accent 2px слева, имя label, одна строка body-sm цвета text-2 */
+.reply-quote {
+  position: relative;
+  padding-left: 10px;
+  margin-left: 56px;
+  max-width: min(var(--message-max), calc(100% - 56px));
+}
+.reply-quote::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+.reply-spine {
+  display: none;
+}
+.reply-author {
+  font-size: var(--fs-label);
+  font-weight: 500;
+}
+.reply-text {
+  font-size: var(--fs-body-sm);
+  color: var(--text-2);
+}
+
+/* Реакции: чипы 26px pill на bg-raised; своя — accent-soft с обводкой accent */
+.reactions {
+  gap: var(--space-1) var(--space-2);
+}
+.reaction {
+  height: 26px;
+  padding: 0 var(--space-2) 0 6px;
+  gap: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-raised);
+  font-size: var(--fs-body);
+  line-height: 1;
+  transition: background var(--dur-fast), transform var(--dur-fast) var(--ease-out-soft);
+}
+.reaction:hover {
+  background: var(--bg-active);
+}
+.reaction:active {
+  transform: scale(0.94);
+}
+.reaction span {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+}
+.reaction:hover span {
+  color: var(--text);
+}
+.reaction.mine {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.reaction.mine span {
+  color: var(--text);
+}
+
+/* Тосты: на bg-modal с тенью окна; ошибка — текст danger-text, а не красная плашка */
+.toast {
+  box-shadow: var(--shadow-modal);
+}
+.toast.error {
+  background: var(--bg-modal);
+  color: var(--danger-text);
+  border-color: color-mix(in srgb, var(--danger-text) 40%, transparent);
+}
+
+/* «Печатает…»: строка caption фиксированной высоты, чтобы не дёргать поле ввода */
+.typing-line {
+  height: 20px;
+  line-height: 20px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.typing-dots i {
+  background: var(--text-3);
+}

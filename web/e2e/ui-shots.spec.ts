@@ -20,6 +20,12 @@ for (const [name, viewport, colorScheme] of [
     const a = await registerUser(browser, 'Алиса', { colorScheme });
     const b = await registerUser(browser, 'Борис');
     const page = a.page;
+    // По умолчанию приложение не следует системной теме — включаем, чтобы светлые снимки были светлыми
+    if (colorScheme === 'light') {
+      await page.evaluate(() => localStorage.setItem('vicinity.appearance', JSON.stringify({ followSystem: true })));
+      await page.reload();
+      await expect(page.locator('.user-panel-me')).toBeVisible();
+    }
     // Пауза — чтобы снимок не попал на середину анимации (выезд меню, появление окна)
     const shot = async (what: string) => {
       await page.waitForTimeout(450);
