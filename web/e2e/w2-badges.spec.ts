@@ -9,10 +9,10 @@ test('profile badge and connection icon', async ({ browser }) => {
 
   await page.getByTitle('Настройки').click();
   await settingsTab(a, 'Профиль').click();
-  await page.getByRole('button', { name: 'Открыть редактор' }).click();
   const modal = page.locator('.profile-studio');
   await modal.getByRole('radio', { name: 'Геймер' }).click();
   await expect(modal.getByRole('radio', { name: 'Геймер' })).toHaveAttribute('aria-checked', 'true');
+  if (process.env.VICINITY_SHOTS_DIR) await page.screenshot({ path: `${process.env.VICINITY_SHOTS_DIR}/studio-inline.png` });
 
   await modal.getByLabel('Сервис').selectOption('steam');
   await modal.getByPlaceholder('Ник или имя').fill('alice_plays');

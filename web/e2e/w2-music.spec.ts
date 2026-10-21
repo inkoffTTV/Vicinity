@@ -22,7 +22,6 @@ test('music in profile', async ({ browser }) => {
 
   await page.getByTitle('Настройки').click();
   await settingsTab(a, 'Профиль').click();
-  await page.getByRole('button', { name: 'Открыть редактор' }).click();
   const studio = page.locator('.profile-studio');
   await studio.getByLabel('Поиск трека').fill('ночь');
   await studio.getByRole('button', { name: 'Найти' }).click();

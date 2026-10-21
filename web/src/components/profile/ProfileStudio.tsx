@@ -10,7 +10,7 @@ import { nameCss } from '../../lib/nameStyle';
 import { usePlan } from '../../lib/plan';
 import { DEFAULT_ACCENT } from '../../lib/prefs';
 import { useStore } from '../../lib/store';
-import { Avatar } from '../Avatar';
+import { Avatar, PRESENCE_LABEL } from '../Avatar';
 import { Modal } from '../Modal';
 import { bannerColorOf, parseProfileJson, statusOf } from './cardData';
 import { NameStyleEditor } from './NameStyleEditor';
@@ -38,8 +38,16 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/** Редактор в окне — из своей карточки профиля */
 export function ProfileStudio() {
   const hide = useProfileStudio((s) => s.hide);
+  return <ProfileStudioPanel onClose={hide} />;
+}
+
+/** Редактор профиля: единственное место, где правится всё — имя, статус, аватар, баннер, тема, подключения.
+ *  С onClose — в окне (ProfileStudio), без него — встроен во вкладку Настройки → Профиль */
+export function ProfileStudioPanel({ onClose }: { onClose?: () => void }) {
+  const inline = !onClose;
   const me = useStore((s) => s.me)!;
   const refreshMe = useStore((s) => s.refreshMe);
   const toast = useStore((s) => s.toast);
@@ -54,6 +62,7 @@ export function ProfileStudio() {
   const [pronouns, setPronouns] = useState(me.pronouns ?? '');
   const [bio, setBio] = useState(me.bio ?? '');
   const [status, setStatus] = useState(statusOf(pj));
+  const [presence, setPresence] = useState<Presence>(me.presence === 'offline' ? 'online' : me.presence);
   const [accent, setAccent] = useState(me.accent_color || DEFAULT_ACCENT);
   const [bannerColor, setBannerColor] = useState(() => {
     const c = bannerColorOf(pj, me.accent_color);
@@ -122,7 +131,6 @@ export function ProfileStudio() {
     try {
       // Общие с десктопом поля profile_json (статус, цвет баннера) — остальные его ключи сохраняем как есть
       const nextPj = { ...pj, statusText: status.trim(), showStatus: status.trim() !== '' || pj.showStatus === true, banner: { ...(pj.banner ?? {}), type: 'solid', color: bannerColor } };
-      const presence: Presence = me.presence === 'offline' ? 'online' : me.presence;
       await api.customize({
         display_name: displayName.trim(),
         bio,
@@ -132,6 +140,8 @@ export function ProfileStudio() {
         profile_json: JSON.stringify(nextPj),
       });
       setExt(normalizeExt(await api.saveProfileExt({ ...ext, frame: null, effect: null })));
+      // Сообщить друзьям о смене статуса
+      if (presence !== me.presence) useStore.getState().setPresence(presence);
       await refreshMe();
       setDirty(false);
       toast('Профиль сохранён');
@@ -144,7 +154,7 @@ export function ProfileStudio() {
 
   const close = () => {
     if (dirty && !confirm('Выйти без сохранения изменений?')) return;
-    hide();
+    onClose?.();
   };
 
   const badge = myServers.find((s) => s.id === ext.badge_server) ?? null;
@@ -171,11 +181,45 @@ export function ProfileStudio() {
     theme: ext.profile_theme,
   };
 
-  return (
-    <Modal onClose={close} bare label="Редактор профиля">
-      <div className="profile-studio">
+  const body = (
+      <div className={`profile-studio${inline ? ' inline' : ''}`}>
         <aside className="studio-editor" aria-label="Настройки профиля">
-          <div className="studio-title">Мой профиль</div>
+          {!inline && <div className="studio-title">Мой профиль</div>}
+
+          <Section title="Основное">
+            <label>
+              Отображаемое имя
+              <input value={displayName} maxLength={32} onChange={(e) => touch(setDisplayName)(e.target.value)} />
+            </label>
+            <label>
+              Местоимения
+              <input value={pronouns} maxLength={40} onChange={(e) => touch(setPronouns)(e.target.value)} />
+            </label>
+            <label>
+              Статус
+              <input value={status} maxLength={128} placeholder="Что у вас нового?" onChange={(e) => touch(setStatus)(e.target.value)} />
+            </label>
+            <label>
+              О себе <span className="muted small">{bio.length}/{bioMax}</span>
+              <textarea value={bio} maxLength={bioMax} rows={4} onChange={(e) => touch(setBio)(e.target.value)} />
+            </label>
+            <div className="row">
+              <label>
+                Цвет профиля (ник в чатах с Basic)
+                <input type="color" value={accent} onChange={(e) => touch(setAccent)(e.target.value)} />
+              </label>
+              <label className="grow">
+                Видимость
+                <select value={presence} onChange={(e) => touch(setPresence)(e.target.value as Presence)}>
+                  {(['online', 'idle', 'dnd', 'invisible'] as Presence[]).map((p) => (
+                    <option key={p} value={p}>
+                      {PRESENCE_LABEL[p]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </Section>
 
           <Section title="Бейджик">
             <div className="studio-badges" role="radiogroup" aria-label="Тег сервера у ника">
@@ -241,29 +285,6 @@ export function ProfileStudio() {
             </button>
           </Section>
 
-          <Section title="Основное">
-            <label>
-              Отображаемое имя
-              <input value={displayName} maxLength={32} onChange={(e) => touch(setDisplayName)(e.target.value)} />
-            </label>
-            <label>
-              Местоимения
-              <input value={pronouns} maxLength={40} onChange={(e) => touch(setPronouns)(e.target.value)} />
-            </label>
-            <label>
-              Статус
-              <input value={status} maxLength={128} placeholder="Что у вас нового?" onChange={(e) => touch(setStatus)(e.target.value)} />
-            </label>
-            <label>
-              О себе <span className="muted small">{bio.length}/{bioMax}</span>
-              <textarea value={bio} maxLength={bioMax} rows={4} onChange={(e) => touch(setBio)(e.target.value)} />
-            </label>
-            <label>
-              Цвет профиля (ник в чатах с Basic)
-              <input type="color" value={accent} onChange={(e) => touch(setAccent)(e.target.value)} />
-            </label>
-          </Section>
-
           <Section title="Музыка">
             <p className="muted small">Трек из каталога — с обложкой и 30-секундным превью в карточке.</p>
             {ext.music ? (
@@ -279,7 +300,7 @@ export function ProfileStudio() {
 
           <Section title="Значок">
             <p className="muted small">Один значок из набора — виден рядом с именем в карточке и в панели снизу.</p>
-            <div className="studio-badges" role="radiogroup" aria-label="Значок профиля">
+            <div className="studio-picks" role="radiogroup" aria-label="Значок профиля">
               <button type="button" className="studio-badge" role="radio" aria-checked={!ext.badge_pick} onClick={() => editExt({ ...ext, badge_pick: null })}>
                 <Icon icon={Ban} size={16} />
                 Без значка
@@ -359,14 +380,16 @@ export function ProfileStudio() {
             <span className="muted small">{dirty ? 'Есть несохранённые изменения' : 'Изменений нет'}</span>
           )}
           <div className="grow" />
-          <button type="button" className="btn" onClick={close}>
-            Закрыть
-          </button>
+          {!inline && (
+            <button type="button" className="btn" onClick={close}>
+              Закрыть
+            </button>
+          )}
           <button type="button" className="btn primary" disabled={busy || !dirty || themeLocked} onClick={save}>
             Сохранить
           </button>
         </div>
       </div>
-    </Modal>
   );
+  return inline ? body : <Modal onClose={close} bare label="Редактор профиля">{body}</Modal>;
 }

@@ -1,19 +1,18 @@
 import { ChevronLeft, LogOut, Search, X } from 'lucide-react';
 import { FormEvent, useCallback, useState } from 'react';
-import { api, ApiError, Presence } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { NOTIFY_LEVELS, serverLevel, useNotifySettings } from '../lib/notify';
-import { DEFAULT_ACCENT } from '../lib/prefs';
 import { usePlan } from '../lib/plan';
 import { useStore } from '../lib/store';
 import { AdminPanel } from './AdminPanel';
 import { SettingsAppLinks } from './AppDownloads';
 import { VoiceScreen } from './settings/VoiceScreen';
 import { AppIconScreen } from './settings/AppIconScreen';
-import { Avatar, PRESENCE_LABEL } from './Avatar';
+import { Avatar } from './Avatar';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
 import { Toggle } from './SettingControls';
-import { useProfileStudio } from './profile/ProfileStudio';
+import { ProfileStudioPanel } from './profile/ProfileStudio';
 import { AccessibilityTab, SubscriptionTab, ThemeTab } from './ThemeSettings';
 import { AccountScreen } from './settings/AccountScreen';
 
@@ -129,7 +128,7 @@ export function Settings() {
           </div>
           <div className="settings-main-body">
             {tab === 'account' && <AccountScreen onEditProfile={() => go('profile')} />}
-            {tab === 'profile' && <ProfileTab onClose={close} />}
+            {tab === 'profile' && <ProfileTab />}
             {tab === 'theme' && <ThemeTab goTo={(t) => go(t === 'accessibility' ? 'accessibility' : 'subscription')} />}
             {tab === 'appicon' && <AppIconScreen goSubscription={() => go('subscription')} />}
             {tab === 'voice' && <VoiceScreen />}
@@ -186,163 +185,10 @@ const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Ошибк
 
 // ── Профиль ──
 
-function ProfileTab({ onClose }: { onClose: () => void }) {
-  const me = useStore((s) => s.me)!;
-  const refreshMe = useStore((s) => s.refreshMe);
-  const logout = useStore((s) => s.logout);
-  const toast = useStore((s) => s.toast);
-  const [displayName, setDisplayName] = useState(me.display_name);
-  const [bio, setBio] = useState(me.bio ?? '');
-  const bioMax = usePlan((s) => s.current.bio);
-  const [pronouns, setPronouns] = useState(me.pronouns ?? '');
-  const [accent, setAccent] = useState(me.accent_color || DEFAULT_ACCENT);
-  const [presence, setPresence] = useState<Presence>(me.presence === 'offline' ? 'online' : me.presence);
-  const [busy, setBusy] = useState(false);
-
-  const save = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await api.customize({
-        display_name: displayName.trim(),
-        bio,
-        pronouns,
-        presence,
-        accent_color: accent,
-        profile_json: me.profile_json ?? '', // настройки оформления десктоп-клиента — не трогаем
-      });
-      // Сообщить друзьям о смене статуса
-      useStore.getState().setPresence(presence);
-      await refreshMe();
-      toast('Профиль сохранён');
-      onClose();
-    } catch (err) {
-      toast(errText(err), 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const upload = async (field: 'avatar' | 'banner', file?: File) => {
-    if (!file) return;
-    if (!/^image\/(png|jpe?g|gif)$/.test(file.type)) return toast('Только PNG, JPG или GIF', 'error');
-    if (file.size > 15 * 1024 * 1024) return toast('Файл слишком большой (макс 15 МБ)', 'error');
-    try {
-      await api.uploadMedia(field, file);
-      await refreshMe();
-      toast(field === 'avatar' ? 'Аватар обновлён' : 'Баннер обновлён');
-    } catch (err) {
-      toast(errText(err), 'error');
-    }
-  };
-
-  const clear = async (field: 'avatar' | 'banner') => {
-    try {
-      await api.clearMedia(field);
-      await refreshMe();
-    } catch (err) {
-      toast(errText(err), 'error');
-    }
-  };
-
-  return (
-    <form onSubmit={save} className="settings">
-      <section className="settings-card studio-cta">
-        <div className="grow">
-          <strong>Редактор профиля</strong>
-          <span className="muted small">Карточка, тема профиля, стиль ника, тег сервера, подключения и любимые игры</span>
-        </div>
-        <button
-          type="button"
-          className="btn primary"
-          onClick={() => {
-            onClose();
-            useProfileStudio.getState().show();
-          }}
-        >
-          Открыть редактор
-        </button>
-      </section>
-      <div className="settings-media">
-        <div
-          className="settings-banner"
-          style={me.banner_path ? { backgroundImage: `url("${me.banner_path}")` } : { background: accent }}
-        >
-          <label className="btn small">
-            Баннер…
-            <input type="file" hidden accept="image/png,image/jpeg,image/gif" onChange={(e) => upload('banner', e.target.files?.[0])} />
-          </label>
-          {me.banner_path && (
-            <button type="button" className="btn small" onClick={() => clear('banner')}>
-              Убрать
-            </button>
-          )}
-        </div>
-        <div className="settings-avatar">
-          <Avatar name={displayName} src={me.avatar_path} id={me.user_id} size={80} />
-          <div className="stack-row">
-            <label className="btn small">
-              Аватар…
-              <input type="file" hidden accept="image/png,image/jpeg,image/gif" onChange={(e) => upload('avatar', e.target.files?.[0])} />
-            </label>
-            {me.avatar_path && (
-              <button type="button" className="btn small" onClick={() => clear('avatar')}>
-                Убрать
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <label>
-        Отображаемое имя
-        <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={32} required />
-      </label>
-      <label>
-        Местоимения
-        <input value={pronouns} onChange={(e) => setPronouns(e.target.value)} maxLength={40} />
-      </label>
-      <label>
-        О себе <span className="muted small">{bio.length}/{bioMax}</span>
-        <textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={bioMax} rows={3} />
-      </label>
-      <div className="row">
-        <label>
-          Цвет профиля
-          <input type="color" value={accent} onChange={(e) => setAccent(e.target.value)} />
-        </label>
-        <label className="grow">
-          Статус
-          <select value={presence} onChange={(e) => setPresence(e.target.value as Presence)}>
-            {(['online', 'idle', 'dnd', 'invisible'] as Presence[]).map((p) => (
-              <option key={p} value={p}>
-                {PRESENCE_LABEL[p]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="row end settings-actions">
-        <button type="button" className="btn danger" onClick={() => logout()}>
-          <Icon icon={LogOut} size={16} anim="bounce" />
-          Выйти
-        </button>
-        <div className="grow" />
-        <button type="button" className="btn" onClick={onClose}>
-          Отмена
-        </button>
-        <button className="btn primary" disabled={busy}>
-          Сохранить
-        </button>
-      </div>
-    </form>
-  );
+/** Вкладка «Профиль» — это и есть редактор профиля, одна форма на всё (components/profile/ProfileStudio.tsx) */
+function ProfileTab() {
+  return <ProfileStudioPanel />;
 }
-
-// ── Аккаунт и безопасность ──
-
-/** Оценка пароля для подсказки: 0 — пусто, 1..4 — от слабого к надёжному */
 function strength(p: string): number {
   if (!p) return 0;
   let score = p.length >= 8 ? 1 : 0;
