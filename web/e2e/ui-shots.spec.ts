@@ -29,8 +29,8 @@ for (const [name, viewport, colorScheme] of [
       await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
       await page.keyboard.press('Escape');
       await expect(page.locator('.modal')).toHaveCount(0);
-      // Меню статуса, открытое кликом по панели пользователя, тоже закрываем
-      if (await page.locator('.popover').count()) await page.keyboard.press('Escape');
+      // Меню статуса, открытое кликом по панели пользователя, закрывается повторным кликом
+      await page.locator('.user-panel-me').click();
     }
     // Пауза — чтобы снимок не попал на середину анимации (выезд меню, появление окна)
     const shot = async (what: string) => {
