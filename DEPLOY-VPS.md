@@ -413,6 +413,18 @@ cd ~/vicinity && git pull && cd deploy && docker compose up -d --build
 После смены настроек в `.env` достаточно `docker compose up -d` — compose пересоздаст затронутые контейнеры.
 Выключаешь Caddy (убрал `COMPOSE_PROFILES=https`) — останови его: `docker compose --profile https stop caddy`.
 
+### Автообновление с ветки
+
+Сервер может подтягивать ветку сам, без доступа извне: раз в 5 минут cron сравнивает локальный HEAD
+с `origin` и при новых коммитах запускает `update.sh`. Проверено: работает. Строка для `crontab -e`:
+
+```
+*/5 * * * * cd ~/vicinity && git fetch -q origin claude/zen-feynman-rcs2s3 && [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/claude/zen-feynman-rcs2s3)" ] && flock -n /tmp/vicinity-up.lock sh deploy/update.sh >> deploy/autoupdate.log 2>&1
+```
+
+Репозиторий на сервере должен стоять на этой ветке (`git checkout claude/zen-feynman-rcs2s3`).
+Лог — `deploy/autoupdate.log`. Скрипт `deploy/vps.sh` — для запуска `update.sh` по SSH с другой машины.
+
 ### Обновление со старой версии
 
 Раньше инструкция просила вписать IP и секрет прямо в `deploy/turnserver.conf` (и иногда TURN —
