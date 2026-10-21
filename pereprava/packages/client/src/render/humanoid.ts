@@ -36,11 +36,21 @@ export type Weapon =
   | 'lute';
 export type Offhand = 'shield' | 'dagger' | 'orb' | 'lantern' | 'book' | null;
 export type AttackStyle = 'swing' | 'thrust' | 'shoot' | 'cast';
+/** Телосложение — четыре типа скелета поверх роста и ширины: отличаются длиной ног, торсом, толщиной рук и головой */
+export type Build = 'lean' | 'normal' | 'heavy' | 'giant';
+const BUILDS: Record<Build, { w: number; h: number; leg: number; torso: number; arm: number; head: number }> = {
+  lean: { w: 0.88, h: 1.0, leg: 1.08, torso: 0.95, arm: 0.85, head: 1.05 },
+  normal: { w: 1, h: 1, leg: 1, torso: 1, arm: 1, head: 1 },
+  heavy: { w: 1.18, h: 1.0, leg: 0.94, torso: 1.06, arm: 1.25, head: 0.98 },
+  giant: { w: 1.3, h: 1.08, leg: 1.0, torso: 1.1, arm: 1.35, head: 0.92 },
+};
 
 export interface Look {
   /** Рост (1 — обычный, ≈ 2,3 м) и ширина плеч */
   height: number;
   bulk: number;
+  /** Тип скелета (по умолчанию normal) */
+  build?: Build;
   skin: number;
   cloth: number;
   armor: number;
@@ -260,8 +270,7 @@ function offhand(p: Parts, l: Look, L: number) {
   }
 }
 
-function headgear(p: Parts, l: Look, hy: number, hr: number, team: number) {
-  const tc = TEAM_ACCENT[team];
+function headgear(p: Parts, l: Look, hy: number, hr: number) {
   switch (l.head) {
     case 'hood':
       p.add(cone(hr * 1.35, hr * 2.6, 7), l.cloth, [0, hy + hr * 0.55, -0.05], [-0.2, 0, 0]);
@@ -271,12 +280,12 @@ function headgear(p: Parts, l: Look, hy: number, hr: number, team: number) {
       p.add(cyl(hr * 1.08, hr * 1.12, hr * 1.4, 7), l.armor, [0, hy + hr * 0.2, 0]);
       p.add(cone(hr * 1.1, hr * 0.6, 7), l.armor, [0, hy + hr * 1.2, 0]);
       p.add(box(hr * 1.5, hr * 0.14, 0.06), 0x15181c, [0, hy, hr * 1.05]);
-      p.add(box(0.06, hr * 0.7, hr * 1.4), tc, [0, hy + hr * 1.3, -0.05]);
+      p.add(box(0.06, hr * 0.7, hr * 1.4), l.trim, [0, hy + hr * 1.3, -0.05]);
       break;
     case 'plume':
       p.add(cyl(hr * 1.08, hr * 1.12, hr * 1.3, 7), l.armor, [0, hy + hr * 0.25, 0]);
       p.add(box(hr * 1.5, hr * 0.14, 0.06), 0x15181c, [0, hy, hr * 1.05]);
-      p.add(box(0.12, hr * 0.9, hr * 1.8), tc, [0, hy + hr * 1.45, -0.15], [0.3, 0, 0]);
+      p.add(box(0.12, hr * 0.9, hr * 1.8), l.trim, [0, hy + hr * 1.45, -0.15], [0.3, 0, 0]);
       break;
     case 'hat':
       p.add(cyl(hr * 2.1, hr * 2.1, 0.06, 9), l.cloth, [0, hy + hr * 0.75, 0]);
@@ -309,7 +318,7 @@ function headgear(p: Parts, l: Look, hy: number, hr: number, team: number) {
         const a = (i / 5) * Math.PI * 2;
         p.add(cone(0.06, hr * 0.5, 4), 0xf1c453, [Math.sin(a) * hr * 0.85, hy + hr * 1.35, Math.cos(a) * hr * 0.85]);
       }
-      p.add(gem(0.08), tc, [0, hy + hr * 0.95, hr * 0.95], [0, 0, 0], [1, 1, 1], true);
+      p.add(gem(0.08), l.glow, [0, hy + hr * 0.95, hr * 0.95], [0, 0, 0], [1, 1, 1], true);
       p.add(ball(hr * 1.02, 0), l.hair ?? 0xd8d0c0, [0, hy + hr * 0.15, -hr * 0.15]);
       break;
     case 'skull':
@@ -317,30 +326,31 @@ function headgear(p: Parts, l: Look, hy: number, hr: number, team: number) {
       p.add(cone(hr * 1.4, hr * 2.0, 6), l.cloth, [0, hy + hr * 0.6, -0.12], [-0.35, 0, 0]);
       break;
     case 'bandana':
-      p.add(cyl(hr * 1.03, hr * 1.03, hr * 0.35, 7), tc, [0, hy + hr * 0.45, 0]);
-      p.add(box(0.06, hr * 0.3, hr * 1.2), tc, [hr * 0.5, hy + hr * 0.2, -hr * 1.2], [0.6, 0.3, 0]);
+      p.add(cyl(hr * 1.03, hr * 1.03, hr * 0.35, 7), l.trim, [0, hy + hr * 0.45, 0]);
+      p.add(box(0.06, hr * 0.3, hr * 1.2), l.trim, [hr * 0.5, hy + hr * 0.2, -hr * 1.2], [0.6, 0.3, 0]);
       p.add(ball(hr * 1.02, 0), l.hair ?? 0x2a2018, [0, hy + hr * 0.35, -hr * 0.2], [0, 0, 0], [1, 0.75, 1]);
       break;
   }
 }
 
-/** Акцент команды на моделях (пояс, наплечные камни, плюмаж, табард крипов) */
+/** Цвет команды на моделях: одна перевязь через грудь у людей и крипов, тотемы и башни */
 export const TEAM_ACCENT = [0x3ec7a1, 0xe2504a, 0xc8b48a];
 
 export function buildHumanoid(look: Look, team: number, key: string, scale = 1): Rig {
   const l = look;
-  const H = l.height;
+  const H = l.height * (!key.startsWith('creep') && l.build ? BUILDS[l.build].h : 1);
   // Проход читаемости — только для героев (крипы мелкие и рисуются инстансами, их не трогаем):
   // разница в телосложении заметнее, голова и оружие крупнее
   const hero = !key.startsWith('creep');
-  const W = hero ? 1 + (l.bulk - 1) * 1.8 : l.bulk;
-  const hip = 1.0 * H;
-  const legL = 1.0 * H;
-  const torsoH = 0.78 * H;
+  const B = BUILDS[(hero && l.build) || 'normal'];
+  const W = (hero ? 1 + (l.bulk - 1) * 1.8 : l.bulk) * B.w;
+  const legL = 1.0 * H * B.leg;
+  const hip = legL;
+  const torsoH = 0.78 * H * B.torso;
   const shY = hip + torsoH * 0.88;
   const armLen = 0.86 * H;
   // Голова крупнее: с игровой камеры на телефоне лицо и головной убор — главное, что видно
-  const hr = 0.25 * (0.85 + 0.15 * W) * (hero ? 1.3 : 1);
+  const hr = 0.25 * (0.85 + 0.15 * W) * (hero ? 1.3 : 1) * B.head;
   const hy = hip + torsoH + hr * 1.05;
   const tw = 0.36 * W;
   const tc = TEAM_ACCENT[team] ?? TEAM_ACCENT[2];
@@ -372,9 +382,12 @@ export function buildHumanoid(look: Look, team: number, key: string, scale = 1):
     if (l.torso === 'leather')
       tp.add(box(0.08, torsoH * 0.7, 0.46 * W), l.trim, [0, ty(hip + torsoH * 0.55), 0], [0, 0, 0.6]);
   }
-  // Пояс в цвете команды
-  tp.add(box(tw * 2.05, 0.12, 0.46 * W), tc, [0, ty(hip + 0.05), 0]);
+  // Пояс — в отделке героя
+  tp.add(box(tw * 2.05, 0.12, 0.46 * W), shade(l.trim, 0.9), [0, ty(hip + 0.05), 0]);
   tp.add(box(0.14, 0.14, 0.05), l.trim, [0, ty(hip + 0.05), 0.24 * W]);
+  // Единственная метка команды — широкая перевязь через грудь: одна, крупная, видна с игровой камеры издалека
+  const sashZ = l.torso === 'robe' ? tw * 1.12 : 0.22 * W + 0.04;
+  tp.add(box(tw * 0.8, torsoH * 1.2, 0.07), tc, [0, ty(hip + torsoH * 0.52), sashZ], [0, 0, 0.6]);
   // Шея и голова
   tp.add(cyl(0.09, 0.11, 0.18, 5), l.skin, [0, ty(hip + torsoH + 0.05), 0]);
   tp.add(ball(hr, 0), l.skin, [0, ty(hy), 0], [0, 0, 0], [1, 1.08, 1]);
@@ -382,14 +395,14 @@ export function buildHumanoid(look: Look, team: number, key: string, scale = 1):
   if (l.head !== 'mask' && l.head !== 'skull')
     tp.add(box(hr * 1.1, hr * 0.12, 0.05), l.glow, [0, ty(hy + hr * 0.12), hr * 0.92], [0, 0, 0], [1, 1, 1], true);
   if (l.head === 'skull') tp.add(ball(hr * 1.02, 0), 0xe8e0cc, [0, ty(hy), 0]);
-  headgear(tp, l, ty(hy), hr, team);
+  headgear(tp, l, ty(hy), hr);
   // Наплечники
   for (const sx of [-1, 1]) {
     const x = sx * (tw + 0.08);
     switch (l.shoulders) {
       case 'pads':
         tp.add(ball(0.2 * W, 0), l.armor, [x, ty(shY + 0.06), 0], [0, 0, 0], [1.2, 0.7, 1.1]);
-        tp.add(gem(0.07), tc, [x * 1.05, ty(shY + 0.18), 0.1], [0, 0, 0], [1, 1, 1], true);
+        tp.add(gem(0.07), l.glow, [x * 1.05, ty(shY + 0.18), 0.1], [0, 0, 0], [1, 1, 1], true);
         break;
       case 'spikes':
         tp.add(ball(0.18 * W, 0), l.armor, [x, ty(shY + 0.05), 0], [0, 0, 0], [1.2, 0.7, 1.1]);
@@ -407,7 +420,7 @@ export function buildHumanoid(look: Look, team: number, key: string, scale = 1):
     if (e === 'quiver') {
       tp.add(cyl(0.12, 0.1, 0.8, 6), 0x6a4a2c, [0.15, ty(hip + torsoH * 0.6), -0.3], [0.35, 0, -0.3]);
       for (const dx of [-0.04, 0.04])
-        tp.add(cone(0.05, 0.14, 4), tc, [0.25 + dx, ty(hip + torsoH + 0.15), -0.42], [0.35, 0, -0.3]);
+        tp.add(cone(0.05, 0.14, 4), l.trim, [0.25 + dx, ty(hip + torsoH + 0.15), -0.42], [0.35, 0, -0.3]);
     } else if (e === 'wings') {
       for (const sx of [-1, 1])
         tp.add(box(1.1, 0.7, 0.05), l.cloth, [sx * 0.6, ty(shY + 0.1), -0.35], [0.15, sx * 0.35, sx * 0.35]);
@@ -415,12 +428,12 @@ export function buildHumanoid(look: Look, team: number, key: string, scale = 1):
       tp.add(cone(0.1, 0.9, 5), l.skin, [0, ty(hip - 0.1), -0.55], [-1.9, 0, 0]);
     } else if (e === 'pack') {
       tp.add(box(0.5, 0.6, 0.3), 0x6a4a2c, [0, ty(hip + torsoH * 0.6), -0.36]);
-      tp.add(box(0.52, 0.1, 0.32), tc, [0, ty(hip + torsoH * 0.85), -0.36]);
+      tp.add(box(0.52, 0.1, 0.32), l.trim, [0, ty(hip + torsoH * 0.85), -0.36]);
     } else if (e === 'halo') {
       tp.add(ring(hr * 1.2, 0.03), l.glow, [0, ty(hy + hr * 1.7), -0.05], [Math.PI / 2, 0, 0], [1, 1, 1], true);
     } else if (e === 'scarf') {
-      tp.add(cyl(0.16, 0.2, 0.14, 7), tc, [0, ty(hip + torsoH - 0.02), 0]);
-      tp.add(box(0.14, 0.5, 0.05), tc, [0.12, ty(hip + torsoH - 0.3), -0.25], [0.3, 0, 0]);
+      tp.add(cyl(0.16, 0.2, 0.14, 7), l.trim, [0, ty(hip + torsoH - 0.02), 0]);
+      tp.add(box(0.14, 0.5, 0.05), l.trim, [0.12, ty(hip + torsoH - 0.3), -0.25], [0.3, 0, 0]);
     } else if (e === 'belt') {
       tp.add(box(0.14, 0.18, 0.1), 0x6a4a2c, [-tw * 0.7, ty(hip), 0.24 * W]);
       tp.add(box(0.14, 0.18, 0.1), 0x6a4a2c, [tw * 0.7, ty(hip), 0.24 * W]);
@@ -435,14 +448,14 @@ export function buildHumanoid(look: Look, team: number, key: string, scale = 1):
     const g = new THREE.Group();
     g.position.set(sx * (tw + 0.1), ty(shY), 0);
     const ap = new Parts();
-    ap.add(box(0.19 * W, armLen * 0.52, 0.2 * W), sleeve, [0, -armLen * 0.26, 0]);
-    ap.add(box(0.17 * W, armLen * 0.46, 0.18 * W), l.torso === 'bare' ? l.skin : shade(sleeve, 0.9), [
+    ap.add(box(0.19 * W * B.arm, armLen * 0.52, 0.2 * W * B.arm), sleeve, [0, -armLen * 0.26, 0]);
+    ap.add(box(0.17 * W * B.arm, armLen * 0.46, 0.18 * W * B.arm), l.torso === 'bare' ? l.skin : shade(sleeve, 0.9), [
       0,
       -armLen * 0.72,
       0,
     ]);
     if (l.torso === 'plate' || l.torso === 'leather')
-      ap.add(box(0.21 * W, 0.12, 0.22 * W), l.trim, [0, -armLen * 0.62, 0]);
+      ap.add(box(0.21 * W * B.arm, 0.12, 0.22 * W * B.arm), l.trim, [0, -armLen * 0.62, 0]);
     ap.add(box(0.15, 0.15, 0.15), l.skin, [0, -armLen, 0]);
     // Оружие и вторая рука — крупнее в 1,4 раза вокруг кисти, чтобы читались сверху
     const wp = new Parts();
@@ -483,7 +496,7 @@ export function buildHumanoid(look: Look, team: number, key: string, scale = 1):
     capeG.position.set(0, ty(shY + 0.05), -0.24 * W);
     const cp = new Parts();
     cp.add(box(tw * 2.1, H * 1.25, 0.05), l.cape, [0, -H * 0.62, -0.03]);
-    cp.add(box(tw * 2.12, 0.1, 0.06), tc, [0, -H * 1.22, -0.03]);
+    cp.add(box(tw * 2.12, 0.1, 0.06), l.trim, [0, -H * 1.22, -0.03]);
     bone(capeG, cp, `${k}|cape`);
     body.add(capeG);
   }

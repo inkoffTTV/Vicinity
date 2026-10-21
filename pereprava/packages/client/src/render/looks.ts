@@ -1,10 +1,31 @@
 // Внешность героев, крипов и нейтралов — данные для общего скелета (humanoid.ts).
-// У каждого героя свой силуэт (рост, ширина, головной убор, оружие, плащ) и своя палитра;
-// цвет команды — на поясе, наплечных камнях и плюмажах.
+// У каждого героя свой силуэт (рост, ширина, тип скелета, головной убор, оружие, плащ) и своя палитра:
+// главный цвет одежды — от цвета карточки героя в меню, чтобы модель и интерфейс читались одинаково;
+// цвет команды — одна перевязь через грудь (humanoid.ts).
+import { HEROES } from '@pereprava/shared';
 import { Color } from 'three';
-import type { Look } from './humanoid';
+import type { Build, Look } from './humanoid';
 
-export const HERO_LOOKS: Record<string, Look> = {
+/** Главный цвет героя из цвета его карточки: тот же оттенок, насыщенный, темнее — чтобы не сливался с травой.
+ *  Блёклые цвета карточек (белые и кремовые мантии) не трогаем — там свой задуманный цвет. */
+function mainColor(id: string, fallback: number): number {
+  const ui = HEROES.find((h) => h.id === id)?.color;
+  if (!ui) return fallback;
+  const hsl = { h: 0, s: 0, l: 0 };
+  new Color(ui).getHSL(hsl);
+  if (hsl.s < 0.3 || KEEP_CLOTH.has(id)) return fallback;
+  return new Color().setHSL(hsl.h, Math.min(0.72, Math.max(0.5, hsl.s)), 0.4).getHex();
+}
+const KEEP_CLOTH = new Set(['keeper', 'priest', 'paladin']);
+
+/** Тип скелета: худые ловкачи, обычные, тяжёлые воины и великаны */
+const BUILD: Record<string, Build> = {
+  shade: 'lean', venom: 'lean', phantom: 'lean', ranger: 'lean', frost: 'lean', duelist: 'lean', eagle: 'lean', bard: 'lean',
+  brute: 'heavy', warden: 'heavy', gunner: 'heavy', berserker: 'heavy', werewolf: 'heavy', paladin: 'heavy',
+  oak: 'giant', glutton: 'giant',
+};
+
+const RAW_LOOKS: Record<string, Look> = {
   // Маг огня: высокий, мантия, остроконечная шляпа, посох с огненным камнем
   mage: {
     height: 1.05,
@@ -389,6 +410,10 @@ export const HERO_LOOKS: Record<string, Look> = {
 };
 
 /** Крипы: мечник со щитом и лучник; табард и плюмаж — в цвете команды */
+export const HERO_LOOKS: Record<string, Look> = Object.fromEntries(
+  Object.entries(RAW_LOOKS).map(([id, l]) => [id, { ...l, cloth: mainColor(id, l.cloth), build: BUILD[id] ?? 'normal' }]),
+);
+
 export const CREEP_LOOKS: Record<'melee' | 'ranged', Look> = {
   melee: {
     height: 0.95,
