@@ -6,12 +6,14 @@ on:
       - main
     paths:
       - 'web/**'
+      - 'design/**'
       - '.github/workflows/web-ci.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'web/**'
+      - 'design/**'
       - '.github/workflows/web-ci.yml'
 
 concurrency:
@@ -43,6 +45,11 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Токены совпадают с design/tokens.json
+        run: |
+          npm run tokens
+          git diff --exit-code -- src/tokens.css ../client/src/core/ThemeTokens.h
 
       - name: Typecheck and build
         run: npm run build

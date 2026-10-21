@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "tokens": "node ../design/tools/gen-tokens.mjs ../design/tokens.json src/tokens.css ../client/src/core/ThemeTokens.h",
     "test:e2e": "playwright test",
     "icons": "node pwa/icons.mjs"
   },
