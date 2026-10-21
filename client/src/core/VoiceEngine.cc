@@ -18,9 +18,16 @@ static constexpr auto   kTxHangover     = milliseconds(300);
 
 // Джиттер-буфер источника (16 кГц): копим 60 мс перед стартом, больше 250 мс — отстали,
 // срезаем старое до 80 мс. Обрывок короче предбуфера доигрываем через 100 мс тишины.
-static constexpr size_t kPrebuffer    = 960;
-static constexpr size_t kMaxBuffered  = 4000;
-static constexpr size_t kTrimTo       = 1280;
+// Предбуфер адаптивный (как в web/public/worklets/voice-processor.js): с 60 мс; разрыв посреди речи
+// (буфер опустел, данные вернулись в ближайшие 200 мс) — +30 мс, до 300 мс; 10 с без разрывов — −10 мс
+static constexpr size_t kPrebufferMin   = 960;
+static constexpr size_t kPrebufferMax   = 4800;
+static constexpr size_t kPrebufferStep  = 480;
+static constexpr size_t kPrebufferRelax = 160;
+static constexpr size_t kStableFor      = 10 * 16000;
+static constexpr auto   kUnderrunWindow = milliseconds(200);
+static constexpr size_t kSlack          = 3200;   // хвост сверх предбуфера, после которого старое выкидываем
+static constexpr size_t kTrimSlack      = 320;    // оставить предбуфер + 20 мс
 static constexpr auto   kFlushAfter   = milliseconds(100);
 static constexpr auto   kSourceIdle   = std::chrono::seconds(10);   // молчащий источник забываем
 
@@ -198,10 +205,19 @@ void VoiceEngine::pushSource(int64_t id, const int16_t* s, int n) {
     if (!m_active.load() || n <= 0) return;
     std::lock_guard<std::mutex> lk(m_mixMx);
     Source& src = m_sources[id];
+    const auto now = steady_clock::now();
+    if (src.drained) {
+        // Опустели, а данные вернулись почти сразу — это был разрыв, а не конец фразы: буфер растёт
+        if (now - src.drainedAt < kUnderrunWindow && src.target < kPrebufferMax) {
+            src.target = std::min(kPrebufferMax, src.target + kPrebufferStep);
+            src.stable = 0;
+        }
+        src.drained = false;
+    }
     src.pcm.insert(src.pcm.end(), s, s + n);
-    if (src.pcm.size() > kMaxBuffered)   // отстали (пачка после задержки сети) — старое выкидываем
-        src.pcm.erase(src.pcm.begin(), src.pcm.begin() + static_cast<std::ptrdiff_t>(src.pcm.size() - kTrimTo));
-    src.last = steady_clock::now();
+    if (src.pcm.size() > src.target + kSlack)   // отстали (пачка после задержки сети) — старое выкидываем
+        src.pcm.erase(src.pcm.begin(), src.pcm.begin() + static_cast<std::ptrdiff_t>(src.pcm.size() - (src.target + kTrimSlack)));
+    src.last = now;
 }
 
 void VoiceEngine::dropSources(bool channel) {
@@ -219,14 +235,23 @@ void VoiceEngine::mixInto(int16_t* out, int n) {
         const auto now = steady_clock::now();
         for (auto it = m_sources.begin(); it != m_sources.end();) {
             Source& src = it->second;
-            if (!src.primed && (src.pcm.size() >= kPrebuffer ||
+            if (!src.primed && (src.pcm.size() >= src.target ||
                                 (!src.pcm.empty() && now - src.last > kFlushAfter)))
                 src.primed = true;
             if (src.primed) {
                 const int take = std::min(n, static_cast<int>(src.pcm.size()));
                 for (int i = 0; i < take; ++i) m_acc[i] += src.pcm[i];
                 src.pcm.erase(src.pcm.begin(), src.pcm.begin() + take);
-                if (take < n) src.primed = false;   // опустел — снова копим предбуфер
+                src.stable += static_cast<size_t>(take);
+                if (src.stable >= kStableFor && src.target > kPrebufferMin) {   // спокойно — ужимаем задержку
+                    src.target = std::max(kPrebufferMin, src.target - kPrebufferRelax);
+                    src.stable = 0;
+                }
+                if (take < n) {   // опустел — снова копим предбуфер; запомним, когда, чтобы отличить разрыв от паузы
+                    src.primed = false;
+                    src.drained = true;
+                    src.drainedAt = now;
+                }
             }
             if (src.pcm.empty() && now - src.last > kSourceIdle) it = m_sources.erase(it);
             else ++it;

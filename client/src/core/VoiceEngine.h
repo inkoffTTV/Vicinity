@@ -81,6 +81,10 @@ private:
         std::deque<int16_t> pcm;
         bool primed = false;                          // накопили предбуфер — играем
         std::chrono::steady_clock::time_point last;   // когда пришли последние данные
+        size_t target = 960;                          // текущий предбуфер (сэмплов), растёт после разрывов
+        size_t stable = 0;                            // сэмплов сыграно без разрывов
+        bool drained = false;                         // опустели и ждём: разрыв это был или пауза
+        std::chrono::steady_clock::time_point drainedAt;
     };
 
     void start();

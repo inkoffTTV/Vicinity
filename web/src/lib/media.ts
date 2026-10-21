@@ -292,7 +292,14 @@ export interface ScreenMix {
 }
 
 export function mixScreenAudio(mic: MediaStreamTrack | undefined, screen: MediaStreamTrack): ScreenMix {
-  const ctx = new AudioContext();
+  // 48 кГц — частота Opus в WebRTC: иначе смесь передискретизируется дважды. Firefox может не принять
+  // дорожку с другой частотой — тогда контекст на частоте устройства
+  let ctx: AudioContext;
+  try {
+    ctx = new AudioContext({ sampleRate: 48000 });
+  } catch {
+    ctx = new AudioContext();
+  }
   const dest = ctx.createMediaStreamDestination();
   const scr = ctx.createMediaStreamSource(new MediaStream([screen]));
   scr.connect(dest);

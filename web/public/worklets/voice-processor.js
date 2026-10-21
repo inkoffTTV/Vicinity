@@ -147,9 +147,17 @@ class CaptureProcessor extends AudioWorkletProcessor {
 }
 
 // ── Воспроизведение: у каждого отправителя свой буфер джиттера, затем микс и передискретизация ──
-const PREBUFFER = 960; // 60 мс накопить перед началом (и после опустошения)
-const MAX_BUFFERED = 4000; // больше 250 мс — отставание: выбросить старое...
-const TRIM_TO = 1280; // ...оставив 80 мс
+// Предбуфер адаптивный: начинаем с 60 мс; разрыв посреди речи (буфер опустел, а данные пришли снова
+// в ближайшие 200 мс) — значит, сеть пришла пачкой, и предбуфер растёт на 30 мс (до 300 мс); 10 с без
+// разрывов — ужимается на 10 мс. Хвост сверх предбуфера больше 200 мс — отставание, старое выбрасываем
+const PREBUFFER_MIN = 960; // 60 мс
+const PREBUFFER_MAX = 4800; // 300 мс
+const PREBUFFER_STEP = 480; // +30 мс за разрыв
+const PREBUFFER_RELAX = 160; // −10 мс за спокойные 10 с
+const STABLE_FOR = 10 * VOICE_RATE;
+const UNDERRUN_WINDOW = 3200; // данные вернулись в течение 200 мс после опустошения — это был разрыв
+const SLACK = 3200; // допустимый хвост сверх предбуфера, 200 мс
+const TRIM_SLACK = 320; // после выбрасывания оставить предбуфер + 20 мс
 const FLUSH_IDLE = 1600; // кадры не идут 100 мс — доиграть то, что меньше PREBUFFER
 const FORGET_IDLE = 5 * VOICE_RATE; // тишина 5 с — забыть отправителя
 const RING = 8192; // ёмкость буфера, степень двойки; кадр сервера не больше 4092 сэмплов
@@ -162,6 +170,9 @@ class Jitter {
     this.count = 0;
     this.playing = false;
     this.idle = 0;
+    this.target = PREBUFFER_MIN;
+    this.stable = 0; // сэмплов воспроизведено без разрывов
+    this.drained = -1; // сэмплов с момента опустошения (−1 — не опустошались)
   }
 
   push(view) {
@@ -169,8 +180,15 @@ class Jitter {
     for (let i = 0; i < n; i++)
       this.buf[(this.read + this.count + i) & (RING - 1)] = view.getInt16(i * 2, true) / 32768;
     this.count += n;
-    if (this.count > MAX_BUFFERED) {
-      const drop = this.count - TRIM_TO;
+    if (this.drained >= 0) {
+      if (this.drained < UNDERRUN_WINDOW && this.target < PREBUFFER_MAX) {
+        this.target = Math.min(PREBUFFER_MAX, this.target + PREBUFFER_STEP);
+        this.stable = 0;
+      }
+      this.drained = -1;
+    }
+    if (this.count > this.target + SLACK) {
+      const drop = this.count - (this.target + TRIM_SLACK);
       this.read = (this.read + drop) & (RING - 1);
       this.count -= drop;
     }
@@ -180,15 +198,24 @@ class Jitter {
   // Подмешать n сэмплов в out
   mixInto(out, n) {
     this.idle += n;
+    if (this.drained >= 0) this.drained += n;
     if (!this.playing) {
-      if (this.count >= PREBUFFER || (this.count > 0 && this.idle >= FLUSH_IDLE)) this.playing = true;
+      if (this.count >= this.target || (this.count > 0 && this.idle >= FLUSH_IDLE)) this.playing = true;
       else return;
     }
     const take = Math.min(n, this.count);
     for (let i = 0; i < take; i++) out[i] += this.buf[(this.read + i) & (RING - 1)];
     this.read = (this.read + take) & (RING - 1);
     this.count -= take;
-    if (this.count === 0) this.playing = false;
+    this.stable += take;
+    if (this.stable >= STABLE_FOR && this.target > PREBUFFER_MIN) {
+      this.target = Math.max(PREBUFFER_MIN, this.target - PREBUFFER_RELAX);
+      this.stable = 0;
+    }
+    if (this.count === 0) {
+      this.playing = false;
+      this.drained = 0;
+    }
   }
 }
 
