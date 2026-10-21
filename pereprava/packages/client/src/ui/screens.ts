@@ -63,7 +63,7 @@ export function scoreTable(s: Snapshot, myTeam: number, mySlot: number): string 
       const h = HERO[p.hero];
       const cls = `t${p.team === myTeam ? 0 : 1}${p.slot === mySlot ? ' mine' : ''}`;
       return `<tr class="${cls}"><td class="who"><b>${esc(p.name)}</b><small>${h.name}, ур. ${p.level}${p.alive ? '' : ' · ' + Math.ceil(p.respawn) + ' с'}</small></td>
-        <td>${p.kills} / ${p.deaths} / ${p.assists}</td><td>${p.lastHits}${p.denies ? ' / ' + p.denies : ''}</td><td>${p.gold}</td><td>${p.heroDamage}</td><td><span class="its">${items(p)}</span></td></tr>`;
+        <td data-l="У / С / П">${p.kills} / ${p.deaths} / ${p.assists}</td><td data-l="Добито">${p.lastHits}${p.denies ? ' / ' + p.denies : ''}</td><td data-l="Золото">${p.gold}</td><td data-l="Урон героям">${p.heroDamage}</td><td data-l="Предметы"><span class="its">${items(p)}</span></td></tr>`;
     })
     .join('');
   return `<table class="score"><thead><tr><th>Игрок</th><th title="Убийства / смерти / помощь">У / С / П</th><th title="Добито крипов / не отдано врагу">Добито</th><th>Золото</th><th>Урон героям</th><th>Предметы</th></tr></thead><tbody>${rows}</tbody></table>`;

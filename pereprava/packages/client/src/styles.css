@@ -62,7 +62,11 @@ body{height:100%;margin:0;overflow:hidden;background:var(--sky);color:var(--ink)
 button{font:inherit;color:inherit}
 [hidden]{display:none!important}
 .num{font-family:var(--f-title)}
-.panel{background:var(--panel);border:1px solid var(--panel-line);border-radius:var(--r3);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+/* Панель по макетам: срезанные углы (левый верхний и правый нижний) и золотая метка вдоль верхнего среза.
+   Срез — clip-path, поэтому у панелей нет внешней тени; метка — полоса градиента шириной 3 px сразу за срезом */
+.panel{--cut:10px;position:relative;background:linear-gradient(135deg,var(--gold) calc(var(--cut)*.707),var(--gold) calc(var(--cut)*.707 + 3px),transparent calc(var(--cut)*.707 + 3.5px)) no-repeat 0 0/48px 48px,var(--panel);border:1px solid var(--panel-line);border-radius:var(--r3);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);clip-path:polygon(var(--cut) 0,100% 0,100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,0 100%,0 var(--cut))}
+/* Мелкие плашки интерфейса боя — без среза и метки */
+#score,#toast,#hoverPlate,#sayBtn,#sayWheel,#coach,#specBar,#netBanner,#talentBox{--cut:0;background-image:none}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* ── Анимации появления ── */
@@ -294,6 +298,19 @@ button.go{width:100%;padding:var(--s3) var(--s4);min-height:44px;border:0;border
 .score tr.t0 td:first-child{border-left:3px solid var(--ally)} .score tr.t1 td:first-child{border-left:3px solid var(--enemy)}
 .score tr.mine td{background:rgba(241,196,83,.08)}
 .score .who b{display:block;font-weight:500} .score .who small{color:var(--ink-dim)}
+/* Телефон: строки таблицы — карточками, чтобы ничего не уезжало за край */
+@media (max-width:640px){
+  .score thead{display:none}
+  .score,.score tbody{display:block}
+  .score tr{display:grid;grid-template-columns:1fr 1fr;gap:2px var(--s3);padding:var(--s2) var(--s3);margin-bottom:var(--s2);border:1px solid var(--panel-line);border-radius:var(--r2);background:var(--surface)}
+  .score td{display:block;text-align:left;border:0;padding:0;white-space:normal}
+  .score td:first-child,.score td:last-child{grid-column:1/-1}
+  .score tr.t0 td:first-child,.score tr.t1 td:first-child{border-left:0;padding-left:0}
+  .score tr.t0{border-left:3px solid var(--ally)} .score tr.t1{border-left:3px solid var(--enemy)}
+  .score tr.mine td{background:none} .score tr.mine{background:rgba(241,196,83,.08)}
+  .score td[data-l]::before{content:attr(data-l);display:block;color:var(--ink-dim);font-size:var(--fs-xs)}
+  .score .its{justify-content:flex-start}
+}
 .score .its{display:flex;gap:2px;justify-content:flex-end}
 .score .its i{width:16px;height:16px;border-radius:3px;background:var(--well);display:grid;place-items:center;color:var(--ic)}
 .score .its svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2.2}
@@ -326,6 +343,10 @@ button.go{width:100%;padding:var(--s3) var(--s4);min-height:44px;border:0;border
 .heroTag .role{font-size:var(--fs-s);color:var(--gold)}
 .heroTag h2{font:400 clamp(44px,8vw,84px)/1 var(--f-title);margin:var(--s1) 0 6px}
 .heroTag p{margin:0;color:#e2e5ea;font-size:var(--fs-m);line-height:1.45}
+/* Стрелки смены героя прямо на главной — по макетам */
+.hnav{display:flex;gap:var(--s2);margin-top:var(--s3)}
+.hnav button{width:44px;height:44px;padding:0;border-radius:var(--r2);border:1px solid var(--panel-line);background:var(--panel);color:var(--gold);font:28px/1 var(--f-title);cursor:pointer;display:grid;place-items:center}
+.hnav button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 #playBox{position:absolute;right:var(--s4);bottom:var(--s4);width:330px;padding:14px;display:flex;flex-direction:column;gap:var(--s3);box-shadow:var(--shadow)}
 .modes{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 #search{display:flex;align-items:center;gap:var(--s3);padding:var(--s3);border-radius:var(--r2);background:var(--gold-soft);border:1px solid var(--gold-line);animation:fade var(--t2)}
@@ -484,9 +505,16 @@ button.go{width:100%;padding:var(--s3) var(--s4);min-height:44px;border:0;border
   .news{display:none}
   #menu{background:linear-gradient(to top,rgba(10,14,20,.94) 0,rgba(10,14,20,.7) 42%,rgba(10,14,20,0) 68%),linear-gradient(to bottom,rgba(10,14,20,.75),rgba(10,14,20,0) 20%)}
   .pane{bottom:256px}
-  .pane:not([data-pane="home"]){right:0;bottom:256px}
-  .heroTag{left:var(--s4);right:var(--s4);max-width:none;bottom:var(--s1)}
-  .heroTag h2{font-size:clamp(40px,13vw,60px)}
+  /* На вкладках панель «Играть» сворачивается до кнопки, чтобы не съедать полэкрана */
+  .pane:not([data-pane="home"]){right:0;bottom:84px}
+  #menu:not([data-tab="home"]) #playBox :is(.modes,.lbl,.seg,#tutorBtn,#playMsg){display:none}
+  #menu:not([data-tab="home"]) #playBox{padding:10px;gap:0}
+  /* Телефон: плашка героя — под вкладками, стрелки — по бокам героя как карусель; описание прячем */
+  .heroTag{left:var(--s3);right:var(--s3);top:calc(env(safe-area-inset-top,0px) + 96px);bottom:auto;max-width:none;pointer-events:none}
+  .heroTag h2{font-size:clamp(28px,9vw,40px);margin-bottom:0}
+  .heroTag p{display:none}
+  .hnav{position:absolute;left:0;right:0;top:120px;justify-content:space-between;margin:0}
+  .hnav button{pointer-events:auto}
   #playBox{left:10px;right:10px;width:auto;bottom:10px}
   .statgrid{grid-template-columns:repeat(2,1fr)}
 }

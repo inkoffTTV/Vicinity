@@ -81,13 +81,24 @@ test('меню: вкладки и настройки', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/#debug');
   await page.waitForFunction(() => !!window.__g, null, { timeout: 30_000 });
+  // Стрелки на главной листают героев: имя в плашке меняется и по кругу возвращается
+  const heroName = page.locator('#heroTag h2');
+  const first = await heroName.textContent();
+  await page.getByRole('button', { name: 'Следующий герой' }).click();
+  await expect(heroName).not.toHaveText(first!);
+  await page.getByRole('button', { name: 'Предыдущий герой' }).click();
+  await expect(heroName).toHaveText(first!);
   await page.getByRole('tab', { name: 'Герои' }).click();
   await expect(page.locator('#heroCards .card2')).toHaveCount(24);
+  // На вкладке панель «Играть» свёрнута до кнопки (атрибут вкладки на меню)
+  await expect(page.locator('#menu')).toHaveAttribute('data-tab', 'heroes');
   await page.getByRole('tab', { name: 'Настройки' }).click();
   await expect(page.getByRole('radiogroup', { name: 'Время суток' })).toBeVisible();
   await page.getByRole('tab', { name: 'Профиль' }).click();
   await page.getByLabel('Имя игрока').fill('Тестер');
   await expect(page.locator('#meName')).toHaveText('Тестер');
+  // Режим выбирается на главной: на других вкладках панель «Играть» свёрнута до кнопки
+  await page.getByRole('tab', { name: 'Главная' }).click();
   await page.getByRole('button', { name: /С другом/ }).click();
   await expect(page.getByRole('dialog').filter({ hasText: 'Игра с другом' })).toBeVisible();
   expect(errors).toEqual([]);

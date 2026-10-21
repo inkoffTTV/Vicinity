@@ -919,6 +919,7 @@ export class App {
     });
     const tabs = [...document.querySelectorAll<HTMLButtonElement>('.tabs button')];
     const showTab = (name: string) => {
+      $('menu').dataset.tab = name;   // на телефоне панель «Играть» на вкладках сворачивается (styles.css)
       tabs.forEach((x) => x.setAttribute('aria-selected', String(x.dataset.tab === name)));
       document.querySelectorAll<HTMLElement>('.pane').forEach((p) => (p.hidden = p.dataset.pane !== name));
       if (name === 'profile') this.renderProfile();
@@ -1008,6 +1009,15 @@ export class App {
     window.addEventListener('keyup', (e) => {
       if (e.code === 'Tab') this.showBoard(false);
     });
+    // Стрелки ‹ › на главной листают героев по кругу
+    const stepHero = (d: number) => {
+      const ids = HEROES.map((h) => h.id);
+      const i = Math.max(0, ids.indexOf(this.settings.hero));   // герой ещё не выбран — считаем от первого
+      this.pickHero(ids[(i + d + ids.length) % ids.length]);
+      this.setFocus('hero');
+    };
+    $('heroPrev').addEventListener('click', () => stepHero(-1));
+    $('heroNext').addEventListener('click', () => stepHero(1));
     $('score').style.pointerEvents = 'auto';
     $('score').addEventListener('click', () => this.showBoard($('board').hidden));
     $('score').addEventListener('keydown', (e) => {
