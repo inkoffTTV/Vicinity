@@ -144,7 +144,7 @@ export function VoiceStage({ onMenu }: { onMenu: () => void }) {
         />
         <ActivitiesButton btnClass="stage-btn" channelId={live ? channelId : null} />
         <button className="stage-btn" title="Настройки звука" aria-label="Настройки звука" onClick={() => setSettings(true)}>
-          <Icon icon={Settings} anim="spin" size={22} />
+          <Icon icon={Settings} anim="spin" size={24} />
         </button>
         <button
           className="stage-btn hangup"
@@ -152,7 +152,7 @@ export function VoiceStage({ onMenu }: { onMenu: () => void }) {
           aria-label="Отключиться от голосового канала"
           onClick={v.leave}
         >
-          <Icon icon={PhoneOff} anim="ring" size={22} />
+          <Icon icon={PhoneOff} anim="ring" size={24} />
         </button>
       </div>
       {(screen || camera) && (

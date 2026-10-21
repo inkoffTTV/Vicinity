@@ -96,7 +96,7 @@ export function MusicWidget({ track }: { track: MusicTrack }) {
   const on = playing === track.preview && !!track.preview;
   return (
     <div className="pcard-music">
-      {track.artwork ? <img className="pcard-music-art" src={track.artwork} alt="" /> : <span className="pcard-music-art" aria-hidden="true"><Icon icon={Music} size={18} /></span>}
+      {track.artwork ? <img className="pcard-music-art" src={track.artwork} alt="" /> : <span className="pcard-music-art" aria-hidden="true"><Icon icon={Music} size={20} /></span>}
       <div className="grow">
         <strong className="ellipsis">{track.title}</strong>
         <span className="muted small ellipsis">{track.artist}</span>

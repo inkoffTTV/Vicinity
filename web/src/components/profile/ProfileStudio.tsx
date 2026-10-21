@@ -302,7 +302,7 @@ export function ProfileStudio() {
                   <ConnectionTile type={c.type} />
                   <span className="grow ellipsis">{c.name}</span>
                   <button type="button" className="icon-btn small" aria-label={`Убрать ${c.name}`} onClick={() => editExt({ ...ext, connections: ext.connections.filter((_, j) => j !== i) })}>
-                    <Icon icon={X} size={18} />
+                    <Icon icon={X} size={20} />
                   </button>
                 </li>
               ))}

@@ -59,7 +59,7 @@ export function ServerSettings({ serverId, tab: initial, onClose }: { serverId: 
                 e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' });
               }}
             >
-              <Icon icon={icon} size={18} anim="pop" />
+              <Icon icon={icon} size={20} anim="pop" />
               <span>{label}</span>
             </button>
           ))}

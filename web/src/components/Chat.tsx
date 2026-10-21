@@ -73,7 +73,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
     <div className="chat">
       <header className="chat-head">
         <button className="icon-btn menu-btn" onClick={onMenu} aria-label="Меню" title="Меню">
-          <Icon icon={Menu} size={22} />
+          <Icon icon={Menu} size={24} />
         </button>
         {dm ? (
           <button className="chat-title clickable" onClick={() => showProfile(dm.user_id)} {...userMenuProps(dm.user_id)}>

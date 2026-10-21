@@ -67,13 +67,13 @@ export function ProfileActions({ p, link, onChanged, onClose, onEdit }: { p: Pro
     if (status === 'pending_out')
       return (
         <button type="button" className="icon-btn pa-square pending" aria-label="Заявка отправлена — нажмите, чтобы отменить" title="Заявка отправлена — нажмите, чтобы отменить" disabled={!!busy} onClick={() => act('friend', () => api.friendRemove(p.id), 'Заявка отменена')}>
-          <Icon icon={Clock} size={18} />
+          <Icon icon={Clock} size={20} />
         </button>
       );
     if (status === 'friends')
       return (
         <button type="button" className="icon-btn pa-square friends" aria-label="Вы друзья — нажмите, чтобы удалить из друзей" title="Вы друзья" onClick={() => setConfirm('unfriend')}>
-          <Icon icon={UserCheck} size={18} />
+          <Icon icon={UserCheck} size={20} />
         </button>
       );
     return null;
@@ -110,7 +110,7 @@ export function ProfileActions({ p, link, onChanged, onClose, onEdit }: { p: Pro
         )}
         {friendBtn()}
         <button type="button" className={`icon-btn pa-square${menu ? ' open' : ''}`} aria-label="Ещё" aria-haspopup="menu" aria-expanded={!!menu} onClick={(e) => setMenu(menu ? null : e.currentTarget)}>
-          <Icon icon={MoreHorizontal} size={18} />
+          <Icon icon={MoreHorizontal} size={20} />
         </button>
       </div>
 

@@ -78,7 +78,7 @@ export function VoiceBar() {
           aria-label="Настройки звука"
           onClick={() => setSettings(true)}
         >
-          <Icon icon={Settings} anim="spin" size={18} />
+          <Icon icon={Settings} anim="spin" size={20} />
         </button>
         <button
           className="icon-btn hangup"
@@ -86,7 +86,7 @@ export function VoiceBar() {
           aria-label="Отключиться от голосового канала"
           onClick={leave}
         >
-          <Icon icon={PhoneOff} anim="ring" size={18} />
+          <Icon icon={PhoneOff} anim="ring" size={20} />
         </button>
       </div>
       <div className="voice-bar-row">
@@ -137,7 +137,7 @@ export function VoiceBar() {
           aria-label="Открыть голосовой канал"
           onClick={() => (stageOpen ? vv.closeStage() : vv.openStage())}
         >
-          <Icon icon={LayoutGrid} size={18} />
+          <Icon icon={LayoutGrid} size={20} />
         </button>
       </div>
       {users.length > 0 && (

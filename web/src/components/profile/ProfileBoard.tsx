@@ -61,7 +61,7 @@ export function ProfileBoard({
               <GameCover game={g} />
               {editable && (
                 <button type="button" className="game-remove" aria-label={`Убрать ${g.name}`} onClick={() => patch({ [list]: games.filter((x) => x.appid !== g.appid) })}>
-                  <Icon icon={X} size={18} />
+                  <Icon icon={X} size={20} />
                 </button>
               )}
             </figure>
@@ -114,7 +114,7 @@ export function ProfileBoard({
                   </div>
                   {editable && (
                     <button type="button" className="icon-btn small" aria-label="Убрать виджет" onClick={() => removeWidget(id)}>
-                      <Icon icon={X} size={18} />
+                      <Icon icon={X} size={20} />
                     </button>
                   )}
                 </div>
@@ -142,7 +142,7 @@ export function ProfileBoard({
                             {t}
                             {editable && (
                               <button type="button" aria-label={`Убрать тег ${t}`} onClick={() => patch({ favorite_game: { ...w.favorite_game!, tags: w.favorite_game!.tags.filter((x) => x !== t) } })}>
-                                <Icon icon={X} size={18} />
+                                <Icon icon={X} size={20} />
                               </button>
                             )}
                           </span>
@@ -176,7 +176,7 @@ export function ProfileBoard({
                         <Icon icon={Plus} size={14} /> Игра
                       </button>
                       <button type="button" className="icon-btn small" aria-label="Убрать виджет" onClick={() => removeWidget(id)}>
-                        <Icon icon={X} size={18} />
+                        <Icon icon={X} size={20} />
                       </button>
                     </div>
                   )}

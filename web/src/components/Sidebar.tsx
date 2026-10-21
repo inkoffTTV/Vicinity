@@ -282,7 +282,7 @@ function ServerSide({ serverId }: { serverId: number }) {
     <>
       <button className="side-head clickable" onClick={() => setMenu((v) => !v)} aria-haspopup="true" aria-expanded={menu}>
         <strong className="ellipsis">{server.name}</strong>
-        <Icon icon={ChevronDown} size={18} className={`side-head-chevron${menu ? ' open' : ''}`} />
+        <Icon icon={ChevronDown} size={20} className={`side-head-chevron${menu ? ' open' : ''}`} />
       </button>
       {menu && (
         <div className="dropdown">

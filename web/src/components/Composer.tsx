@@ -318,7 +318,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
           aria-label="Прикрепить файлы"
           onClick={() => fileInput.current?.click()}
         >
-          <Icon icon={Plus} className="anim-turn" size={22} />
+          <Icon icon={Plus} className="anim-turn" size={24} />
         </button>
         <input
           ref={fileInput}
@@ -361,7 +361,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
           aria-expanded={emojiOpen}
           onClick={() => setEmojiOpen((v) => !v)}
         >
-          <Icon icon={Smile} anim="wiggle" size={22} />
+          <Icon icon={Smile} anim="wiggle" size={24} />
         </button>
         <button
           className="icon-btn send-btn"
@@ -370,7 +370,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
           onClick={send}
           disabled={!text.trim() && !files.length}
         >
-          <Icon icon={SendHorizontal} className="anim-nudge" size={22} />
+          <Icon icon={SendHorizontal} className="anim-nudge" size={24} />
         </button>
       </div>
       <div className="typing-line" aria-live="polite">

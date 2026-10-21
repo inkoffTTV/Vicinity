@@ -371,10 +371,10 @@ function CallWindow() {
         )}
         <ActivitiesButton btnClass="call-btn" channelId={c.phase === 'active' ? dmChannel : null} />
         <button className="call-btn" title="Настройки звука" aria-label="Настройки звука" onClick={() => setSettings(true)}>
-          <Icon icon={Settings} anim="spin" size={22} />
+          <Icon icon={Settings} anim="spin" size={24} />
         </button>
         <button className="call-btn hangup" title="Завершить звонок" aria-label="Завершить звонок" onClick={c.hangup}>
-          <Icon icon={PhoneOff} anim="ring" size={22} />
+          <Icon icon={PhoneOff} anim="ring" size={24} />
         </button>
       </div>
       {settings && <AudioSettings onClose={() => setSettings(false)} micGain={false} />}

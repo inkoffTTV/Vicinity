@@ -152,7 +152,7 @@ export function EmojiPicker({ anchor, onPick, onClose, closeOnPick = true }: Pro
         <div className="emoji-panel-tabs" role="toolbar" aria-label="Разделы">
           {recentList.length > 0 && (
             <button type="button" title="Недавние" aria-label="Недавние" onClick={() => jump('recent')}>
-              <Icon icon={Clock} size={18} />
+              <Icon icon={Clock} size={20} />
             </button>
           )}
           {categories.map((c) => (

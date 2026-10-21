@@ -115,7 +115,7 @@ export function AccountScreen({ onEditProfile }: { onEditProfile: () => void }) 
         <h2 id="acc-sec" className="acc-section-title">Пароль и безопасность</h2>
         <div className="acc-box padded">
           <div className="acc-row">
-            <span className="acc-icon"><Icon icon={KeyRound} size={18} /></span>
+            <span className="acc-icon"><Icon icon={KeyRound} size={20} /></span>
             <div className="grow">
               <span className="acc-title">Пароль</span>
               <span className="muted small">{info ? ago(info.password_changed_at) : ' '}</span>
@@ -126,7 +126,7 @@ export function AccountScreen({ onEditProfile }: { onEditProfile: () => void }) 
           </div>
           <div className="acc-sep inset" />
           <button type="button" className="acc-row link" onClick={() => setDialog(info?.totp_enabled ? 'twofa-off' : 'twofa')}>
-            <span className="acc-icon"><Icon icon={ShieldCheck} size={18} /></span>
+            <span className="acc-icon"><Icon icon={ShieldCheck} size={20} /></span>
             <span className="grow">
               <span className="acc-title">Двухфакторная аутентификация</span>
               <span className="muted small acc-status">
@@ -135,28 +135,28 @@ export function AccountScreen({ onEditProfile }: { onEditProfile: () => void }) 
               </span>
             </span>
             <span className={info?.totp_enabled ? 'muted' : 'acc-action'}>{info?.totp_enabled ? 'Отключить' : 'Настроить'}</span>
-            <Icon icon={ChevronRight} size={18} />
+            <Icon icon={ChevronRight} size={20} />
           </button>
           <div className="acc-sep inset" />
           <button type="button" className="acc-row link" onClick={() => setDialog('sessions')}>
-            <span className="acc-icon"><Icon icon={MonitorSmartphone} size={18} /></span>
+            <span className="acc-icon"><Icon icon={MonitorSmartphone} size={20} /></span>
             <span className="grow">
               <span className="acc-title">Активные сеансы</span>
               <span className="muted small">Где выполнен вход в ваш аккаунт</span>
             </span>
             <span className="muted">{devicesLabel(sessions.length)}</span>
-            <Icon icon={ChevronRight} size={18} />
+            <Icon icon={ChevronRight} size={20} />
           </button>
           <div className="acc-sep inset" />
           <ProfileLinkRow />
           <div className="acc-sep inset" />
           <button type="button" className="acc-row link" onClick={() => setDialog('blocks')}>
-            <span className="acc-icon"><Icon icon={UserX} size={18} /></span>
+            <span className="acc-icon"><Icon icon={UserX} size={20} /></span>
             <span className="grow">
               <span className="acc-title">Заблокированные</span>
               <span className="muted small">Они не могут писать вам, звонить и добавлять в друзья</span>
             </span>
-            <Icon icon={ChevronRight} size={18} />
+            <Icon icon={ChevronRight} size={20} />
           </button>
         </div>
       </section>
@@ -164,7 +164,7 @@ export function AccountScreen({ onEditProfile }: { onEditProfile: () => void }) 
       {!isAdminUsername(me.username) && (
         <section className="settings-card admin-card" aria-label="Связь с администратором">
           <span className="admin-card-icon" aria-hidden="true">
-            <Icon icon={ShieldQuestion} size={22} />
+            <Icon icon={ShieldQuestion} size={24} />
           </span>
           <div className="grow">
             <strong>Вопрос, ошибка или идея?</strong>
@@ -731,7 +731,7 @@ function ProfileLinkRow() {
 
   return (
     <div className="acc-row">
-      <span className="acc-icon"><Icon icon={Link2} size={18} /></span>
+      <span className="acc-icon"><Icon icon={Link2} size={20} /></span>
       <span className="grow">
         <span className="acc-title">Ссылка на профиль</span>
         <span className="muted small">

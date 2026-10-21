@@ -11,13 +11,15 @@ interface Props extends Omit<LucideProps, 'ref'> {
   anim?: IconAnim;
 }
 
-export function Icon({ icon: Glyph, anim, size = 20, strokeWidth = 2, className, ...rest }: Props) {
+// Обводка по дизайн-системе — 1.75 (design/README.md, «Иконки»); совсем мелкие значки чуть жирнее, иначе тают
+export function Icon({ icon: Glyph, anim, size = 20, strokeWidth, className, ...rest }: Props) {
+  const n = typeof size === 'number' ? size : 20;
   return (
     <Glyph
       aria-hidden="true"
       focusable="false"
       size={size}
-      strokeWidth={strokeWidth}
+      strokeWidth={strokeWidth ?? (n <= 14 ? 2 : 1.75)}
       className={`ico${anim ? ` anim-${anim}` : ''}${className ? ` ${className}` : ''}`}
       {...rest}
     />

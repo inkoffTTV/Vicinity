@@ -14,10 +14,10 @@ export function IosInstallModal({ onClose }: { onClose: () => void }) {
           Откройте этот сайт в <strong>Safari</strong>.
         </li>
         <li>
-          Нажмите <Icon icon={Share} size={18} className="ios-step-icon" /> <strong>«Поделиться»</strong> внизу экрана (на iPad — вверху).
+          Нажмите <Icon icon={Share} size={20} className="ios-step-icon" /> <strong>«Поделиться»</strong> внизу экрана (на iPad — вверху).
         </li>
         <li>
-          Выберите <Icon icon={SquarePlus} size={18} className="ios-step-icon" /> <strong>«На экран „Домой“»</strong> и нажмите{' '}
+          Выберите <Icon icon={SquarePlus} size={20} className="ios-step-icon" /> <strong>«На экран „Домой“»</strong> и нажмите{' '}
           <strong>«Добавить»</strong>.
         </li>
         <li>Запускайте Vicinity со значка на экране — он открывается на весь экран, как обычное приложение.</li>
@@ -42,7 +42,7 @@ export function AuthAppLinks() {
     <>
       {offerDesktopApp && (
         <a className="auth-download" href={WINDOWS_INSTALLER} download>
-          <Icon icon={Download} size={18} anim="bounce" />
+          <Icon icon={Download} size={20} anim="bounce" />
           <span>
             <strong>Скачать для Windows</strong>
             <span>Приложение с уведомлениями и показом экрана</span>
@@ -51,7 +51,7 @@ export function AuthAppLinks() {
       )}
       {offerAndroidApp && (
         <a className="auth-download" href={ANDROID_APK} download>
-          <Icon icon={Smartphone} size={18} anim="bounce" />
+          <Icon icon={Smartphone} size={20} anim="bounce" />
           <span>
             <strong>Скачать для Android</strong>
             <span>Приложение с уведомлениями и звонками в фоне</span>
@@ -60,7 +60,7 @@ export function AuthAppLinks() {
       )}
       {offerIosInstall && (
         <button type="button" className="auth-download" onClick={() => setIos(true)}>
-          <Icon icon={Smartphone} size={18} anim="bounce" />
+          <Icon icon={Smartphone} size={20} anim="bounce" />
           <span>
             <strong>Установить на iPhone</strong>
             <span>Значок на экране «Домой» за пару касаний</span>

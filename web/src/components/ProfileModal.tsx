@@ -154,7 +154,7 @@ export function ProfileModal({ userId }: { userId: number }) {
     <Modal onClose={close} bare label={`Профиль ${p.display_name}`}>
       <div className="profile-view">
         <button className="icon-btn profile-close" onClick={close} aria-label="Закрыть">
-          <Icon icon={X} size={18} />
+          <Icon icon={X} size={20} />
         </button>
         <ProfileCard
           d={card}

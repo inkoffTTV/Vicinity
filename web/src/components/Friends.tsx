@@ -58,7 +58,7 @@ export function Friends({ onMenu }: { onMenu: () => void }) {
     <div className="chat">
       <header className="chat-head">
         <button className="icon-btn menu-btn" onClick={onMenu} aria-label="Меню" title="Меню">
-          <Icon icon={Menu} size={22} />
+          <Icon icon={Menu} size={24} />
         </button>
         <strong className="chat-title">
           <Icon icon={Users} size={20} className="chat-title-icon" />

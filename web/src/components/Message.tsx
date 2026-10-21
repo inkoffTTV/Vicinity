@@ -209,7 +209,7 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
             aria-expanded={picker}
             onClick={() => setPicker((v) => !v)}
           >
-            <Icon icon={SmilePlus} size={18} anim="wiggle" />
+            <Icon icon={SmilePlus} size={20} anim="wiggle" />
           </button>
           {/* Быстрые реакции сразу за кнопкой — следующие по Tab */}
           {picker && (
@@ -229,17 +229,17 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
                   setFullPicker(true);
                 }}
               >
-                <Icon icon={Plus} size={18} className="anim-turn" />
+                <Icon icon={Plus} size={20} className="anim-turn" />
               </button>
             </div>
           )}
           {mine && msg.text && (
             <button className="icon-btn small" title="Изменить" aria-label="Изменить" onClick={() => setEditing(msg.id)}>
-              <Icon icon={Pencil} size={18} anim="wiggle" />
+              <Icon icon={Pencil} size={20} anim="wiggle" />
             </button>
           )}
           <button className="icon-btn small" title="Ответить" aria-label="Ответить" onClick={() => setReplyingTo(msg.channel_id, msg)}>
-            <Icon icon={Reply} size={18} anim="bounce" />
+            <Icon icon={Reply} size={20} anim="bounce" />
           </button>
           {canPin && (
             <button
@@ -253,12 +253,12 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
           )}
           {msg.text && (
             <button className="icon-btn small" title="Копировать текст" aria-label="Копировать текст" onClick={copy}>
-              <Icon icon={Copy} size={18} anim="bounce" />
+              <Icon icon={Copy} size={20} anim="bounce" />
             </button>
           )}
           {(mine || canModerate) && (
             <button className="icon-btn small danger" title="Удалить" aria-label="Удалить" onClick={remove}>
-              <Icon icon={Trash2} size={18} anim="wiggle" />
+              <Icon icon={Trash2} size={20} anim="wiggle" />
             </button>
           )}
         </div>

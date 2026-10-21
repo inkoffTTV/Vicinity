@@ -33,11 +33,11 @@ export function IncomingCall() {
         </div>
       </div>
       <button className="btn ok call-banner-btn" onClick={() => void accept()} disabled={!secure} aria-label="Принять">
-        <Icon icon={Phone} size={18} anim="ring" className="always" />
+        <Icon icon={Phone} size={20} anim="ring" className="always" />
         <span>Принять</span>
       </button>
       <button className="btn danger call-banner-btn" onClick={decline} aria-label="Отклонить">
-        <Icon icon={PhoneOff} size={18} />
+        <Icon icon={PhoneOff} size={20} />
         <span>Отклонить</span>
       </button>
     </div>

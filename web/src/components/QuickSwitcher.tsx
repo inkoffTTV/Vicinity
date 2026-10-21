@@ -73,7 +73,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
         go: go({ kind: 'dm', channelId: d.channel_id }),
       });
     for (const g of sortRecent(s.groups))
-      list.push({ key: `g${g.id}`, label: g.name, hint: 'Беседа', icon: <Icon icon={Users} size={18} />, unread: count(g.id), go: go({ kind: 'group', channelId: g.id }) });
+      list.push({ key: `g${g.id}`, label: g.name, hint: 'Беседа', icon: <Icon icon={Users} size={20} />, unread: count(g.id), go: go({ kind: 'group', channelId: g.id }) });
     for (const srv of s.servers)
       for (const c of s.channelsByServer[srv.id] ?? [])
         if (!c.is_voice)
@@ -81,7 +81,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
             key: `c${c.id}`,
             label: c.name,
             hint: srv.name,
-            icon: <Icon icon={Hash} size={18} />,
+            icon: <Icon icon={Hash} size={20} />,
             unread: count(c.id),
             go: go({ kind: 'server', serverId: srv.id, channelId: c.id }),
           });
