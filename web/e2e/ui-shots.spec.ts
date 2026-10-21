@@ -20,11 +20,14 @@ for (const [name, viewport, colorScheme] of [
     const a = await registerUser(browser, 'Алиса', { colorScheme });
     const b = await registerUser(browser, 'Борис');
     const page = a.page;
-    // По умолчанию приложение не следует системной теме — включаем, чтобы светлые снимки были светлыми
+    // Приложение не следует системной теме по умолчанию (настройки приходят с сервера) — выбираем светлую в настройках
     if (colorScheme === 'light') {
-      await page.evaluate(() => localStorage.setItem('vicinity.appearance', JSON.stringify({ followSystem: true })));
-      await page.reload();
-      await expect(page.locator('.user-panel-me')).toBeVisible();
+      await page.locator('.user-panel-me').click();
+      await page.getByRole('button', { name: 'Настройки', exact: true }).click();
+      await settingsTab(a, 'Внешний вид').click();
+      await page.locator('.base-theme[aria-label="Светлая"]').click();
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+      await page.keyboard.press('Escape');
     }
     // Пауза — чтобы снимок не попал на середину анимации (выезд меню, появление окна)
     const shot = async (what: string) => {
