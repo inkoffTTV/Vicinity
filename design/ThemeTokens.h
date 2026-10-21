@@ -26,9 +26,12 @@ struct ThemeTable {
     QColor presenceIdle;
     QColor presenceDnd;
     QColor presenceOffline;
+    QColor onOkColor;
     QColor dangerColor;
     QColor dangerTextColor;
     QColor onDangerColor;
+    QColor scrimColor;
+    QColor onScrimColor;
     QColor mentionColor;
     QColor speakingColor;
 };
@@ -56,9 +59,12 @@ static const ThemeTable kThemes[] = {
       /* idle         */ QColor(242, 179, 61, 255),
       /* dnd          */ QColor(240, 97, 109, 255),
       /* offline      */ QColor(107, 114, 128, 255),
+      /* on-ok        */ QColor(6, 35, 28, 255),
       /* danger       */ QColor(229, 72, 77, 255),
       /* danger-text  */ QColor(242, 112, 122, 255),
       /* on-danger    */ QColor(255, 255, 255, 255),
+      /* scrim        */ QColor(0, 0, 0, 153),
+      /* on-scrim     */ QColor(255, 255, 255, 255),
       /* mention      */ QColor(43, 198, 164, 41),
       /* speaking     */ QColor(61, 214, 140, 255),
     },
@@ -84,9 +90,12 @@ static const ThemeTable kThemes[] = {
       /* idle         */ QColor(183, 121, 31, 255),
       /* dnd          */ QColor(210, 60, 72, 255),
       /* offline      */ QColor(138, 144, 156, 255),
+      /* on-ok        */ QColor(6, 35, 28, 255),
       /* danger       */ QColor(209, 44, 56, 255),
       /* danger-text  */ QColor(192, 38, 47, 255),
       /* on-danger    */ QColor(255, 255, 255, 255),
+      /* scrim        */ QColor(15, 20, 30, 128),
+      /* on-scrim     */ QColor(255, 255, 255, 255),
       /* mention      */ QColor(17, 122, 102, 31),
       /* speaking     */ QColor(26, 154, 90, 255),
     },
@@ -112,9 +121,12 @@ static const ThemeTable kThemes[] = {
       /* idle         */ QColor(242, 179, 61, 255),
       /* dnd          */ QColor(240, 97, 109, 255),
       /* offline      */ QColor(107, 114, 128, 255),
+      /* on-ok        */ QColor(6, 35, 28, 255),
       /* danger       */ QColor(229, 72, 77, 255),
       /* danger-text  */ QColor(242, 112, 122, 255),
       /* on-danger    */ QColor(255, 255, 255, 255),
+      /* scrim        */ QColor(0, 0, 0, 153),
+      /* on-scrim     */ QColor(255, 255, 255, 255),
       /* mention      */ QColor(43, 198, 164, 41),
       /* speaking     */ QColor(61, 214, 140, 255),
     },
@@ -140,9 +152,12 @@ static const ThemeTable kThemes[] = {
       /* idle         */ QColor(242, 179, 61, 255),
       /* dnd          */ QColor(240, 97, 109, 255),
       /* offline      */ QColor(107, 114, 128, 255),
+      /* on-ok        */ QColor(6, 35, 28, 255),
       /* danger       */ QColor(229, 72, 77, 255),
       /* danger-text  */ QColor(242, 112, 122, 255),
       /* on-danger    */ QColor(255, 255, 255, 255),
+      /* scrim        */ QColor(0, 0, 0, 179),
+      /* on-scrim     */ QColor(255, 255, 255, 255),
       /* mention      */ QColor(43, 198, 164, 41),
       /* speaking     */ QColor(61, 214, 140, 255),
     },

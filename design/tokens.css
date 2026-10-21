@@ -22,9 +22,12 @@
   --idle: #f2b33d;
   --dnd: #f0616d;
   --offline: #6b7280;
+  --on-ok: #06231c;
   --danger: #e5484d;
   --danger-text: #f2707a;
   --on-danger: #ffffff;
+  --scrim: #00000099;
+  --on-scrim: #ffffff;
   --mention: var(--accent-soft);
   --speaking: var(--ok);
   --shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.45);
@@ -52,9 +55,12 @@
   --idle: #b7791f;
   --dnd: #d23c48;
   --offline: #8a909c;
+  --on-ok: #06231c;
   --danger: #d12c38;
   --danger-text: #c0262f;
   --on-danger: #ffffff;
+  --scrim: #0f141e80;
+  --on-scrim: #ffffff;
   --mention: var(--accent-soft);
   --speaking: var(--ok);
   --shadow-modal: 0 12px 40px rgba(20, 30, 50, 0.16);
@@ -82,9 +88,12 @@
   --idle: #f2b33d;
   --dnd: #f0616d;
   --offline: #6b7280;
+  --on-ok: #06231c;
   --danger: #e5484d;
   --danger-text: #f2707a;
   --on-danger: #ffffff;
+  --scrim: #00000099;
+  --on-scrim: #ffffff;
   --mention: var(--accent-soft);
   --speaking: var(--ok);
   --shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.45);
@@ -112,9 +121,12 @@
   --idle: #f2b33d;
   --dnd: #f0616d;
   --offline: #6b7280;
+  --on-ok: #06231c;
   --danger: #e5484d;
   --danger-text: #f2707a;
   --on-danger: #ffffff;
+  --scrim: #000000b3;
+  --on-scrim: #ffffff;
   --mention: var(--accent-soft);
   --speaking: var(--ok);
   --shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.6);
@@ -149,6 +161,17 @@
   --font-sans: "Onest", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: "Unbounded", "Onest", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --fs-display-xl: 44px; --lh-display-xl: 48px;
+  --fs-display: 28px; --lh-display: 34px;
+  --fs-title: 20px; --lh-title: 26px;
+  --fs-heading: 15px; --lh-heading: 20px;
+  --fs-body: 15px; --lh-body: 21px;
+  --fs-author: 14px; --lh-author: 20px;
+  --fs-body-sm: 14px; --lh-body-sm: 20px;
+  --fs-label: 13px; --lh-label: 18px;
+  --fs-caption: 12px; --lh-caption: 16px;
+  --fs-micro: 11px; --lh-micro: 14px;
+  --fs-code: 13px; --lh-code: 19px;
 }
 @media (prefers-reduced-motion: reduce) {
   :root { --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-enter: 0ms; }

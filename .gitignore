@@ -38,6 +38,7 @@ possible_secrets.txt
 .vscode/
 .idea/
 tools/
+!design/tools/
 
 # AI local context
 .claude/

@@ -103,16 +103,16 @@ a {
 .rail-item {
   width: 44px;
   height: 44px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--bg-raised);
-  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.18s, border-radius 0.18s, box-shadow 0.18s;
+  transition: transform var(--dur-base) var(--ease-out-soft), background var(--dur-base), border-radius var(--dur-base), box-shadow var(--dur-base);
 }
 .rail-item:hover {
   transform: translateY(-1px) scale(1.05);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
 }
 .rail-item.active {
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 4px var(--accent);
 }
 .rail-item.active::before {
@@ -138,21 +138,21 @@ a {
   box-shadow: none;
 }
 .side-item {
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 7px 10px;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 .side-item.active {
   background: var(--bg-active);
 }
 .side-section {
   letter-spacing: 0.06em;
-  font-size: 11px;
+  font-size: var(--fs-micro);
 }
 .voice-bar {
   margin: 0 8px 8px;
   border: 0;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--bg-raised);
 }
 .user-panel {
@@ -166,7 +166,7 @@ a {
   padding: 10px;
 }
 .member {
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
 }
 
 /* Чат */
@@ -176,8 +176,8 @@ a {
 .msg {
   margin-left: 8px;
   margin-right: 8px;
-  border-radius: 12px;
-  transition: background 0.15s;
+  border-radius: var(--radius-md);
+  transition: background var(--dur-fast);
 }
 .msg-author {
   font-weight: 600;
@@ -186,10 +186,10 @@ a {
   padding: 0 14px 14px;
 }
 .composer-row {
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   padding: 6px 8px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
 .composer-row:focus-within {
   border-color: color-mix(in srgb, var(--accent) 60%, transparent);
@@ -210,8 +210,8 @@ a {
 .tier-tag {
   display: inline-block;
   padding: 1px 5px;
-  border-radius: 5px;
-  font-size: 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-micro);
   font-weight: 700;
   letter-spacing: 0.03em;
   vertical-align: 1px;
@@ -231,8 +231,8 @@ a {
 
 /* Кнопки и поля */
 .btn {
-  border-radius: 10px;
-  transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast), transform var(--dur-fast), box-shadow var(--dur-fast);
 }
 .btn:active:not(:disabled) {
   transform: scale(0.97);
@@ -241,8 +241,8 @@ a {
   font-weight: 600;
 }
 .icon-btn {
-  border-radius: 10px;
-  transition: background 0.15s, color 0.15s, transform 0.12s;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast), color var(--dur-fast), transform var(--dur-fast);
 }
 .icon-btn:active:not(:disabled) {
   transform: scale(0.92);
@@ -250,15 +250,15 @@ a {
 input,
 textarea,
 select {
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
 }
 .modal {
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
 }
 .toast {
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--bg-raised);
   border: 1px solid var(--border);
 }
@@ -307,33 +307,33 @@ select {
 /* Появление интерфейса после входа: панели по очереди. fill-mode backwards — после анимации на панели
    не остаётся transform (иначе она стала бы «рамкой» для окон внутри неё) */
 .app > .nav .rail {
-  animation: vc-rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation: vc-rise var(--dur-enter) var(--ease-out-soft) backwards;
 }
 .app > .nav .sidebar {
-  animation: vc-rise 0.35s 0.05s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation: vc-rise var(--dur-enter) 0.05s var(--ease-out-soft) backwards;
 }
 .app > .main {
-  animation: vc-rise 0.35s 0.1s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation: vc-rise var(--dur-enter) 0.1s var(--ease-out-soft) backwards;
 }
 .app > .members,
 .app > .group-panel {
-  animation: vc-rise 0.35s 0.15s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation: vc-rise var(--dur-enter) 0.15s var(--ease-out-soft) backwards;
 }
 /* Новое сообщение */
 .msg.fresh {
-  animation: vc-rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: vc-rise var(--dur-slow) var(--ease-out-soft);
 }
 .modal {
-  animation: vc-pop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: vc-pop var(--dur-base) var(--ease-out-soft);
 }
 .toast {
-  animation: vc-pop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: vc-pop var(--dur-base) var(--ease-out-soft);
 }
 .side-scroll .side-item {
-  animation: vc-slide-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation: vc-slide-in var(--dur-base) var(--ease-out-soft) backwards;
 }
 .splash {
-  animation: vc-fade 0.4s ease-out backwards;
+  animation: vc-fade var(--dur-slow) ease-out backwards;
 }
 
 /* ── Экран входа ── */
@@ -353,14 +353,14 @@ select {
 .auth-hero {
   flex: 1 1 420px;
   min-width: 0;
-  border-radius: 24px;
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
   padding: clamp(28px, 5vw, 56px);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 32px;
-  animation: vc-rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation: vc-rise var(--dur-slow) var(--ease-out-soft) backwards;
 }
 .auth-brand {
   display: flex;
@@ -373,14 +373,14 @@ select {
 .auth-mark {
   width: 44px;
   height: 44px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--on-accent);
   display: grid;
   place-items: center;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 20px;
+  font-size: var(--fs-title);
 }
 .auth-hero h1 {
   margin: 0;
@@ -391,7 +391,7 @@ select {
 .auth-hero p {
   margin: 12px 0 0;
   color: var(--text-2);
-  font-size: 17px;
+  font-size: var(--fs-body);
   line-height: 1.55;
   max-width: 480px;
 }
@@ -408,7 +408,7 @@ select {
   gap: 12px;
   align-items: flex-start;
   line-height: 1.45;
-  animation: vc-slide-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation: vc-slide-in var(--dur-slow) var(--ease-out-soft) backwards;
 }
 .auth-perks li:nth-child(1) { animation-delay: 0.15s; }
 .auth-perks li:nth-child(2) { animation-delay: 0.22s; }
@@ -426,7 +426,7 @@ select {
 }
 .auth-perks span {
   color: var(--text-2);
-  font-size: 14px;
+  font-size: var(--fs-body-sm);
 }
 .auth-side {
   flex: 1 1 400px;
@@ -436,15 +436,15 @@ select {
 }
 .auth-card {
   max-width: 420px;
-  border-radius: 24px;
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow: none;
-  animation: vc-pop 0.4s 0.08s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation: vc-pop var(--dur-slow) 0.08s var(--ease-out-soft) backwards;
 }
 .auth-card .btn.primary {
   height: 48px;
-  border-radius: 14px;
-  font-size: 16px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-body);
 }
 
 /* ── Настройки: «Тема», «Подписка», «Специальные возможности» ── */
@@ -470,7 +470,7 @@ select {
   min-width: 0;
 }
 .theme-row strong {
-  font-size: 15px;
+  font-size: var(--fs-body);
 }
 .base-themes {
   display: flex;
@@ -481,9 +481,9 @@ select {
   position: relative;
   width: 52px;
   height: 52px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 2px solid var(--border);
-  transition: transform 0.15s, border-color 0.15s;
+  transition: transform var(--dur-fast), border-color var(--dur-fast);
 }
 .base-theme:hover:not(:disabled) {
   transform: translateY(-2px);
@@ -503,7 +503,7 @@ select {
   color: var(--on-accent);
   display: grid;
   place-items: center;
-  animation: vc-pop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: vc-pop var(--dur-base) var(--ease-out-soft);
 }
 .base-theme.sync {
   display: grid;
@@ -517,7 +517,7 @@ select {
   gap: 20px;
   flex-wrap: wrap;
   padding: 18px 20px;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   background: var(--bg-raised);
   border: 1px solid var(--border);
 }
@@ -525,7 +525,7 @@ select {
   width: 120px;
   height: 72px;
   flex: none;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: linear-gradient(135deg, #2b1a8f, #a3168a 55%, #1c7ad6);
   position: relative;
   overflow: hidden;
@@ -534,7 +534,7 @@ select {
 .theme-promo-art::after {
   content: '';
   position: absolute;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.22);
 }
 .theme-promo-art::before {
@@ -556,11 +556,11 @@ select {
   gap: 4px;
 }
 .theme-promo-text strong {
-  font-size: 17px;
+  font-size: var(--fs-body);
 }
 .color-themes {
   padding: 18px;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -585,9 +585,9 @@ select {
 .color-swatch {
   position: relative;
   aspect-ratio: 1;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 2px solid transparent;
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition: transform var(--dur-fast), border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
 .color-swatch:hover {
   transform: translateY(-2px) scale(1.04);
@@ -612,10 +612,10 @@ select {
   left: 50%;
   transform: translateX(-50%);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--danger);
-  color: #fff;
-  font-size: 9px;
+  color: var(--on-danger);
+  font-size: var(--fs-micro);
   font-weight: 700;
   letter-spacing: 0.04em;
 }
@@ -628,8 +628,8 @@ select {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
+  background: var(--scrim);
+  color: var(--on-scrim);
 }
 .preview-bar {
   display: flex;
@@ -637,10 +637,10 @@ select {
   gap: 10px;
   flex-wrap: wrap;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  animation: vc-pop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: vc-pop var(--dur-base) var(--ease-out-soft);
 }
 .custom-theme-editor {
   display: flex;
@@ -651,7 +651,7 @@ select {
 .custom-theme-editor .preview {
   width: 96px;
   height: 60px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
 }
 .link-card {
@@ -660,9 +660,9 @@ select {
   gap: 14px;
   width: 100%;
   padding: 14px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   text-align: left;
-  transition: background 0.15s;
+  transition: background var(--dur-fast);
 }
 .link-card:hover {
   background: var(--bg-hover);
@@ -671,7 +671,7 @@ select {
   width: 44px;
   height: 44px;
   flex: none;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
   background: var(--bg-raised);
@@ -683,7 +683,7 @@ select {
 }
 .plan {
   padding: 16px;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   border: 2px solid var(--border);
   background: var(--bg-raised);
   display: flex;
@@ -700,7 +700,7 @@ select {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 14px;
+  font-size: var(--fs-body-sm);
 }
 .plan li::before {
   content: '✓ ';
@@ -714,15 +714,15 @@ select {
 }
 .plan-stats div {
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--bg-input);
   display: flex;
   flex-direction: column;
-  font-size: 12px;
+  font-size: var(--fs-caption);
   color: var(--text-3);
 }
 .plan-stats strong {
-  font-size: 15px;
+  font-size: var(--fs-body);
   color: var(--text);
 }
 .range-row {
@@ -770,7 +770,7 @@ select {
   width: auto;
   flex: none;
   padding: 6px 8px;
-  font-size: 13px;
+  font-size: var(--fs-label);
 }
 
 /* Логотип уже есть в левой колонке — в карточке входа вместо него заголовок */
@@ -801,10 +801,10 @@ select {
 .emoji-panel {
   z-index: 170;
   background: var(--bg-modal);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
 }
 .popover.menu button {
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 /* Уведомления — на сплошном фоне (в цветовой теме --bg-raised полупрозрачный) */
@@ -822,7 +822,7 @@ select {
   width: auto;
   min-width: 0;
   height: 34px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
 }
 .voice-bar-users {
   display: flex;
@@ -840,7 +840,7 @@ select {
 }
 .voice-bar-more {
   margin-left: 4px !important;
-  font-size: 12px;
+  font-size: var(--fs-caption);
   font-weight: 600;
   color: var(--text-2);
 }
@@ -852,13 +852,13 @@ select {
   gap: 12px;
   align-self: flex-start;
   padding: 10px 16px 10px 12px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--text);
   text-decoration: none;
-  transition: background 0.15s, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-  animation: vc-pop 0.4s 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  transition: background var(--dur-fast), transform var(--dur-base) var(--ease-out-soft);
+  animation: vc-pop var(--dur-slow) 0.55s var(--ease-out-soft) backwards;
 }
 .auth-download:hover {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
@@ -873,7 +873,7 @@ select {
   flex-direction: column;
 }
 .auth-download > span > span {
-  font-size: 12px;
+  font-size: var(--fs-caption);
   color: var(--text-2);
 }
 .settings-download {
@@ -881,9 +881,9 @@ select {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   color: var(--text-2);
-  font-size: 14px;
+  font-size: var(--fs-body-sm);
   text-decoration: none;
 }
 .settings-download:hover {
@@ -900,13 +900,13 @@ select {
   align-items: center;
   gap: 14px;
   padding: 10px 12px 10px 18px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   background: var(--bg-modal);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
   transform: translateX(-50%);
-  font-size: 14px;
-  animation: vc-pop 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  font-size: var(--fs-body-sm);
+  animation: vc-pop var(--dur-slow) var(--ease-out-soft);
 }
 
 /* Приложения для телефонов: кнопка-ссылка выглядит как ссылки на скачивание */
