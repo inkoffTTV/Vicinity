@@ -13,6 +13,7 @@ import '@fontsource/onest/500.css';
 import '@fontsource/onest/600.css';
 import '@fontsource/onest/700.css';
 import '@fontsource/unbounded/700.css';
+import '@fontsource/jetbrains-mono/400.css';
 // Шрифты стиля ника (lib/nameStyle.ts): файлы скачиваются, только когда шрифт встречается на экране
 import '@fontsource/comfortaa/700.css';
 import '@fontsource/oswald/600.css';
@@ -24,6 +25,7 @@ import '@fontsource/press-start-2p/400.css';
 import '@fontsource/lobster/400.css';
 import '@fontsource/amatic-sc/700.css';
 import '@fontsource/rubik-mono-one/400.css';
+import './tokens.css';
 import './styles.css';
 import './theme.css';
 import './profile.css';

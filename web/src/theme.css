@@ -2,129 +2,32 @@
    специальные возможности и анимации. Тему выбирает lib/prefs.ts атрибутами на <html>:
    data-theme (light | dark | graphite | black), data-gradient, data-contrast, data-saturation. */
 
-/* ── Палитры ── */
+/* ── Палитры ──
+   Цвета четырёх тем — в tokens.css, генерируется из design/tokens.json (npm run tokens).
+   Здесь только алиасы каркаса на токены. */
 
-:root,
-:root[data-theme='dark'] {
-  --bg-ground: #0e1015;
-  --bg-rail: #161920;
-  --bg-side: #161920;
-  --bg-main: #161920;
-  --bg-panel: #161920;
-  --bg-input: #1e222b;
-  --bg-raised: #1e222b;
-  --bg-modal: #181b22;
-  --bg-card: #1b1e26;
-  --bg-hover: rgba(255, 255, 255, 0.05);
-  --bg-active: rgba(255, 255, 255, 0.09);
-  --border: rgba(255, 255, 255, 0.07);
-  --text: #e8eaf0;
-  --text-2: #a3a9b7;
-  --text-3: #8c93a3;
-  --accent: #2bc6a4;
-  --accent-hover: #22a88b;
-  --on-accent: #06231c;
-  --link: #7fe3cc;
-  --ok: #3dd68c;
-  --idle: #f2b33d;
-  --dnd: #f0616d;
-  --danger: #e5484d;
-  --radius: 12px;
-  --panel-radius: 18px;
-  --gap: 8px;
-  --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-  color-scheme: dark;
+:root {
+  --radius: var(--radius-md);
+  --panel-radius: var(--radius-lg);
+  --gap: var(--space-2);
+  --shadow: var(--shadow-modal);
 }
 
-:root[data-theme='graphite'] {
-  --bg-ground: #1a1b1f;
-  --bg-rail: #232429;
-  --bg-side: #232429;
-  --bg-main: #232429;
-  --bg-panel: #232429;
-  --bg-input: #2c2d33;
-  --bg-raised: #2c2d33;
-  --bg-modal: #26272c;
-  --bg-card: #2a2b31;
-  --bg-hover: rgba(255, 255, 255, 0.05);
-  --bg-active: rgba(255, 255, 255, 0.09);
-  --border: rgba(255, 255, 255, 0.08);
-  --text: #ececf1;
-  --text-2: #b0b3bd;
-  --text-3: #9599a5;
-  color-scheme: dark;
-}
-
-:root[data-theme='black'] {
-  --bg-ground: #000000;
-  --bg-rail: #0b0b0d;
-  --bg-side: #0b0b0d;
-  --bg-main: #0b0b0d;
-  --bg-panel: #0b0b0d;
-  --bg-input: #16171a;
-  --bg-raised: #16171a;
-  --bg-modal: #0f1012;
-  --bg-card: #141518;
-  --bg-hover: rgba(255, 255, 255, 0.06);
-  --bg-active: rgba(255, 255, 255, 0.1);
-  --border: rgba(255, 255, 255, 0.08);
-  --text: #f0f1f4;
-  --text-2: #a9adb8;
-  --text-3: #8f94a1;
-  color-scheme: dark;
-}
-
-/* Светлая — и при «Как тема устройства» на светлой системе (prefs.ts ставит data-theme='light') */
-:root[data-theme='light'] {
-  --bg-ground: #e9ecf1;
-  --bg-rail: #ffffff;
-  --bg-side: #ffffff;
-  --bg-main: #ffffff;
-  --bg-panel: #ffffff;
-  --bg-input: #f0f2f5;
-  --bg-raised: #f4f5f8;
-  --bg-modal: #ffffff;
-  --bg-card: #f4f5f8;
-  --bg-hover: rgba(15, 20, 30, 0.05);
-  --bg-active: rgba(15, 20, 30, 0.09);
-  --border: rgba(15, 20, 30, 0.09);
-  --text: #14161b;
-  --text-2: #4a505c;
-  --text-3: #5f6573;
-  --accent: #138a72;
-  --accent-hover: #0f7360;
-  --on-accent: #ffffff;
-  --link: #0f7360;
-  --ok: #1a9a5a;
-  --idle: #b7791f;
-  --dnd: #d23c48;
-  --shadow: 0 12px 40px rgba(20, 30, 50, 0.16);
-  color-scheme: light;
-}
-
-/* Цветовая тема: градиент под полупрозрачными панелями */
+/* Цветовая тема: градиент под полупрозрачными панелями (альфы — константы характера, не токены) */
 :root[data-gradient] {
-  --bg-ground: var(--theme-tint, #0e1015);
+  --bg-ground: var(--theme-tint);
 }
 :root[data-gradient][data-theme='dark'] {
-  --bg-rail: rgba(8, 10, 14, 0.5);
-  --bg-side: rgba(8, 10, 14, 0.5);
-  --bg-main: rgba(8, 10, 14, 0.56);
   --bg-panel: rgba(8, 10, 14, 0.52);
   --bg-input: rgba(255, 255, 255, 0.07);
   --bg-raised: rgba(255, 255, 255, 0.06);
   --bg-modal: rgba(16, 18, 26, 0.96);
-  --bg-card: #171a22;
 }
 :root[data-gradient][data-theme='light'] {
-  --bg-rail: rgba(255, 255, 255, 0.6);
-  --bg-side: rgba(255, 255, 255, 0.6);
-  --bg-main: rgba(255, 255, 255, 0.68);
   --bg-panel: rgba(255, 255, 255, 0.64);
   --bg-input: rgba(255, 255, 255, 0.75);
   --bg-raised: rgba(255, 255, 255, 0.6);
   --bg-modal: rgba(255, 255, 255, 0.97);
-  --bg-card: #f4f5f8;
 }
 
 /* Высокий контраст: текст ярче, границы заметнее */
@@ -145,8 +48,12 @@
 /* ── Шрифты и основа ── */
 
 body {
-  font-family: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg-ground);
+}
+code,
+pre {
+  font-family: var(--font-mono);
 }
 :root[data-gradient] body {
   background: var(--theme-gradient) fixed;
@@ -157,7 +64,7 @@ a {
 .display,
 .auth-logo h1,
 .splash {
-  font-family: 'Unbounded', 'Onest', system-ui, sans-serif;
+  font-family: var(--font-display);
 }
 
 /* ── Каркас: панели-карточки с промежутками ── */
@@ -459,7 +366,7 @@ select {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-family: 'Unbounded', 'Onest', sans-serif;
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 22px;
 }
@@ -471,13 +378,13 @@ select {
   color: var(--on-accent);
   display: grid;
   place-items: center;
-  font-family: 'Unbounded', 'Onest', sans-serif;
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 20px;
 }
 .auth-hero h1 {
   margin: 0;
-  font-family: 'Unbounded', 'Onest', sans-serif;
+  font-family: var(--font-display);
   font-size: clamp(30px, 4vw, 46px);
   line-height: 1.1;
 }
@@ -873,7 +780,7 @@ select {
 .auth-hero ~ .auth-side .auth-card > p.muted.center {
   margin: 0;
   color: var(--text);
-  font-family: 'Unbounded', 'Onest', sans-serif;
+  font-family: var(--font-display);
   font-size: 22px;
   font-weight: 700;
   text-align: left;

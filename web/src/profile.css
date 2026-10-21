@@ -545,7 +545,7 @@
   gap: 18px;
 }
 .studio-title {
-  font-family: 'Unbounded', 'Onest', sans-serif;
+  font-family: var(--font-display);
   font-size: 18px;
   font-weight: 700;
 }
@@ -732,10 +732,10 @@
 
 /* Карточка всегда на сплошном фоне — цветовая тема не просвечивает сквозь неё */
 .pcard {
-  background: var(--bg-card, var(--bg-raised));
+  background: var(--bg-raised);
 }
 .pcard-avatar {
-  background: var(--bg-card, var(--bg-raised));
+  background: var(--bg-raised);
 }
 /* Точка статуса фиксированного размера (в styles.css — 34% аватара, на 96 px слишком крупно) */
 .pcard-avatar .presence-dot {
@@ -746,11 +746,11 @@
   right: 2px;
   bottom: 2px;
   transform: none;
-  border: 5px solid var(--bg-card, var(--bg-raised));
+  border: 5px solid var(--bg-raised);
 }
 .pcard-avatar.frame-rainbow .presence-dot,
 .pcard-avatar.frame-fire .presence-dot {
-  border-color: var(--bg-card, var(--bg-raised));
+  border-color: var(--bg-raised);
 }
 
 /* Кнопки карточки профиля (ProfileActions) — макет «7 · Кнопки карточки профиля» */
@@ -1238,7 +1238,7 @@
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
-  font: 700 11px/1 'Unbounded', 'Onest', sans-serif;
+  font: 700 11px/1 var(--font-display);
   letter-spacing: 0.04em;
   white-space: nowrap;
   vertical-align: middle;

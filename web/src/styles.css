@@ -1,59 +1,5 @@
-:root {
-  --bg-rail: #1e1f22;
-  --bg-side: #2b2d31;
-  --bg-main: #313338;
-  --bg-input: #383a40;
-  --bg-hover: rgba(255, 255, 255, 0.06);
-  --bg-active: rgba(255, 255, 255, 0.1);
-  --bg-modal: #313338;
-  --border: rgba(255, 255, 255, 0.07);
-  --text: #f2f3f5;
-  --text-2: #b5bac1;
-  --text-3: #80848e;
-  --accent: #5865f2;
-  --accent-hover: #4752c4;
-  /* Текст на акцентном фоне — prefs.ts подбирает по яркости акцента */
-  --on-accent: #fff;
-  --danger: #da373c;
-  --ok: #23a55a;
-  --idle: #f0b232;
-  --dnd: #f23f43;
-  --off: #80848e;
-  --radius: 8px;
-  color-scheme: dark;
-}
-
-/* Тема: «как в системе» (без data-theme) или выбранная в настройках (data-theme на <html>, lib/prefs.ts) */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
-    --bg-rail: #e3e5e8;
-    --bg-side: #f2f3f5;
-    --bg-main: #ffffff;
-    --bg-input: #ebedef;
-    --bg-hover: rgba(0, 0, 0, 0.05);
-    --bg-active: rgba(0, 0, 0, 0.09);
-    --bg-modal: #ffffff;
-    --border: rgba(0, 0, 0, 0.09);
-    --text: #060607;
-    --text-2: #4e5058;
-    --text-3: #6d6f78;
-    color-scheme: light;
-  }
-}
-:root[data-theme='light'] {
-  --bg-rail: #e3e5e8;
-  --bg-side: #f2f3f5;
-  --bg-main: #ffffff;
-  --bg-input: #ebedef;
-  --bg-hover: rgba(0, 0, 0, 0.05);
-  --bg-active: rgba(0, 0, 0, 0.09);
-  --bg-modal: #ffffff;
-  --border: rgba(0, 0, 0, 0.09);
-  --text: #060607;
-  --text-2: #4e5058;
-  --text-3: #6d6f78;
-  color-scheme: light;
-}
+/* Палитра — в tokens.css (генерируется из design/tokens.json, npm run tokens);
+   тему выбирает lib/prefs.ts атрибутом data-theme на <html>. */
 
 /* Размер шрифта ленты и поля ввода (Настройки → Внешний вид) */
 :root {
@@ -78,7 +24,7 @@ body,
 }
 
 body {
-  background: var(--bg-main);
+  background: var(--bg-panel);
   color: var(--text);
   font: 15px/1.4 'Segoe UI', system-ui, -apple-system, Roboto, 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -285,7 +231,7 @@ label select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 3px solid var(--bg-rail);
+  border: 3px solid var(--bg-panel);
   box-sizing: content-box;
 }
 .badge.inline {
@@ -332,14 +278,14 @@ label select {
   place-items: center;
   padding: 16px;
   background: radial-gradient(circle at 20% 10%, #5865f2 0%, transparent 45%),
-    radial-gradient(circle at 90% 90%, #eb459e 0%, transparent 40%), var(--bg-rail);
+    radial-gradient(circle at 90% 90%, #eb459e 0%, transparent 40%), var(--bg-panel);
   overflow: auto;
 }
 
 .auth-card {
   width: 100%;
   max-width: 420px;
-  background: var(--bg-main);
+  background: var(--bg-panel);
   border-radius: 12px;
   padding: 32px;
   display: flex;
@@ -452,14 +398,14 @@ label select {
   flex: 1;
   min-width: 0;
   display: flex;
-  background: var(--bg-main);
+  background: var(--bg-panel);
 }
 
 /* ── Рейка серверов ── */
 
 .rail {
   width: 72px;
-  background: var(--bg-rail);
+  background: var(--bg-panel);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -475,7 +421,7 @@ label select {
   height: 48px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--bg-main);
+  background: var(--bg-panel);
   display: grid;
   place-items: center;
   font-weight: 600;
@@ -537,7 +483,7 @@ label select {
 
 .sidebar {
   width: 240px;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   display: flex;
   flex-direction: column;
   position: relative;
@@ -635,7 +581,7 @@ button.side-head:hover {
   flex-shrink: 0;
   padding: 8px 8px 6px;
   border-top: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg-rail) 35%, var(--bg-side));
+  background: color-mix(in srgb, var(--bg-panel) 35%, var(--bg-panel));
 }
 .voice-bar-head {
   display: flex;
@@ -689,10 +635,10 @@ button.side-head:hover {
   flex-wrap: wrap;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--idle) 14%, var(--bg-main));
+  background: color-mix(in srgb, var(--idle) 14%, var(--bg-panel));
 }
 .voice-room.in {
-  background: color-mix(in srgb, var(--ok) 16%, var(--bg-main));
+  background: color-mix(in srgb, var(--ok) 16%, var(--bg-panel));
 }
 .voice-room-status {
   display: flex;
@@ -749,7 +695,7 @@ button.side-head:hover {
   left: 8px;
   right: 8px;
   z-index: 20;
-  background: var(--bg-rail);
+  background: var(--bg-panel);
   border-radius: 8px;
   padding: 6px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -781,7 +727,7 @@ button.side-head:hover {
   align-items: center;
   gap: 4px;
   padding: 0 8px;
-  background: color-mix(in srgb, var(--bg-rail) 60%, var(--bg-side));
+  background: color-mix(in srgb, var(--bg-panel) 60%, var(--bg-panel));
 }
 .user-panel-me {
   flex: 1;
@@ -843,7 +789,7 @@ button.side-head:hover {
   min-width: 10px;
   min-height: 10px;
   border-radius: 50%;
-  border: 3px solid var(--bg-side);
+  border: 3px solid var(--bg-panel);
   box-sizing: content-box;
   transform: translate(15%, 15%);
 }
@@ -866,7 +812,7 @@ button.side-head:hover {
 }
 .p-invisible,
 .p-offline {
-  background: var(--off);
+  background: var(--offline);
 }
 
 /* ── Чат ── */
@@ -1065,7 +1011,7 @@ button.side-head:hover {
   display: flex;
   gap: 2px;
   padding: 2px;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -1093,7 +1039,7 @@ button.side-head:hover {
   grid-template-columns: repeat(5, 36px);
   gap: 2px;
   padding: 6px;
-  background: var(--bg-rail);
+  background: var(--bg-panel);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
@@ -1154,7 +1100,7 @@ button.side-head:hover {
   position: absolute;
   top: 4px;
   right: 4px;
-  background: var(--bg-rail);
+  background: var(--bg-panel);
 }
 
 /* ── Список участников ── */
@@ -1162,7 +1108,7 @@ button.side-head:hover {
 .members {
   width: 240px;
   flex-shrink: 0;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   overflow-y: auto;
   padding: 8px;
 }
@@ -1414,7 +1360,7 @@ button.side-head:hover {
   max-height: calc(100dvh - var(--gap-top, 16px) - var(--gap-bottom, 16px));
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
@@ -1429,11 +1375,11 @@ button.side-head:hover {
   top: 70px;
   left: 16px;
   border-radius: 50%;
-  border: 6px solid var(--bg-side);
-  background: var(--bg-side);
+  border: 6px solid var(--bg-panel);
+  background: var(--bg-panel);
 }
 .profile-avatar .presence-dot {
-  border-color: var(--bg-side);
+  border-color: var(--bg-panel);
 }
 .profile-close-bar {
   position: sticky;
@@ -1498,7 +1444,7 @@ button.side-head:hover {
 .settings-media {
   border-radius: 10px;
   overflow: hidden;
-  background: var(--bg-side);
+  background: var(--bg-panel);
 }
 .settings-banner {
   height: 110px;
@@ -1518,7 +1464,7 @@ button.side-head:hover {
   margin-top: -40px;
 }
 .settings-avatar .avatar {
-  border: 5px solid var(--bg-side);
+  border: 5px solid var(--bg-panel);
   box-sizing: content-box;
 }
 .settings label.btn {
@@ -1546,7 +1492,7 @@ button.side-head:hover {
   max-width: 480px;
 }
 .toast {
-  background: var(--bg-rail);
+  background: var(--bg-panel);
   color: var(--text);
   padding: 10px 16px;
   border-radius: 8px;
@@ -1570,7 +1516,7 @@ button.side-head:hover {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--bg-rail);
+  background: var(--bg-panel);
   border-radius: 10px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
   width: max-content;
@@ -1661,7 +1607,7 @@ button.side-head:hover {
   gap: 12px;
   padding: 6px 12px;
   border-radius: 8px;
-  background: var(--bg-rail);
+  background: var(--bg-panel);
   color: var(--text-2);
   font-size: 13px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
@@ -1769,7 +1715,7 @@ button.reply-quote:hover .reply-text {
   max-width: 260px;
   padding: 6px 10px;
   border-radius: 6px;
-  background: var(--bg-rail);
+  background: var(--bg-panel);
   color: var(--text);
   font-size: 13px;
   text-align: left;
@@ -1789,7 +1735,7 @@ button.reply-quote:hover .reply-text {
 .md-code {
   padding: 1px 4px;
   border-radius: 4px;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   font: 0.86em/1.3 ui-monospace, 'Cascadia Code', Consolas, 'Liberation Mono', monospace;
 }
@@ -1798,7 +1744,7 @@ button.reply-quote:hover .reply-text {
   max-width: 100%;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   overflow: hidden;
   white-space: normal;
 }
@@ -1895,7 +1841,7 @@ mark {
   gap: 10px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
 }
 .file-icon {
@@ -1961,7 +1907,7 @@ a.file-name:hover {
   gap: 8px;
   padding: 4px 6px 4px 14px;
   border-radius: var(--radius) var(--radius) 0 0;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   border-bottom: 0;
   color: var(--text-2);
@@ -2008,7 +1954,7 @@ a.file-name:hover {
   overflow-y: auto;
   padding: 6px;
   border-radius: 8px;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
@@ -2080,7 +2026,7 @@ a.file-name:hover {
   display: flex;
   flex-direction: column;
   border-radius: 8px;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
   overflow: hidden;
@@ -2121,7 +2067,7 @@ a.file-name:hover {
   top: 0;
   margin: 0;
   padding: 8px 2px 4px;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -2152,7 +2098,7 @@ a.file-name:hover {
   min-height: 44px;
   padding: 6px 10px;
   border-top: 1px solid var(--border);
-  background: var(--bg-rail);
+  background: var(--bg-panel);
   font-size: 13px;
 }
 .emoji-panel-big {
@@ -2165,7 +2111,7 @@ a.file-name:hover {
   position: fixed;
   z-index: 60;
   border-radius: 8px;
-  background: var(--bg-rail);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
 }
@@ -2235,7 +2181,7 @@ a.file-name:hover {
   gap: 10px;
   padding: 10px;
   border-radius: 6px;
-  background: var(--bg-main);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
 }
 .pin-item + .pin-item {
@@ -2279,7 +2225,7 @@ a.file-name:hover {
   height: 28px;
   padding: 3px 26px 3px 8px;
   font-size: 13px;
-  background: var(--bg-rail);
+  background: var(--bg-panel);
 }
 .search-box input::-webkit-search-cancel-button {
   display: none;
@@ -2299,7 +2245,7 @@ a.file-name:hover {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   border-left: 1px solid var(--border);
 }
 .search-panel-head {
@@ -2339,7 +2285,7 @@ a.file-name:hover {
   padding: 8px 10px 10px;
   margin-bottom: 8px;
   border-radius: 8px;
-  background: var(--bg-main);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
   cursor: pointer;
 }
@@ -2597,7 +2543,7 @@ a.file-name:hover {
 .settings-card {
   padding: 14px;
   border-radius: 10px;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   border: 1px solid var(--border);
 }
 .account-card {
@@ -2666,7 +2612,7 @@ a.file-name:hover {
   gap: 12px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: var(--bg-main);
+  background: var(--bg-panel);
 }
 .session-icon {
   width: 36px;
@@ -2675,7 +2621,7 @@ a.file-name:hover {
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   color: var(--text-2);
 }
 
@@ -3179,7 +3125,7 @@ kbd {
   padding: 14px;
   border-radius: 10px;
   text-align: center;
-  background: var(--bg-side);
+  background: var(--bg-panel);
   border: 1px dashed var(--border);
   user-select: all;
 }
@@ -3890,7 +3836,7 @@ button:hover > .ico.anim-bounce {
   align-items: center;
   gap: 2px;
   padding: 4px 6px 4px 4px;
-  background: var(--bg-rail);
+  background: var(--bg-panel);
   border-radius: 999px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   max-width: calc(100% - 32px);
@@ -4477,7 +4423,7 @@ a:focus-visible > .ico {
   gap: 12px;
   flex-wrap: wrap;
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-side));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
 }
 .admin-card .grow {
   min-width: 180px;
@@ -4522,7 +4468,7 @@ a:focus-visible > .ico {
 @media (max-width: 760px) {
   .nav {
     padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) env(safe-area-inset-left);
-    background: var(--bg-rail);
+    background: var(--bg-panel);
     max-width: 100vw;
   }
   .sidebar {
@@ -4693,7 +4639,7 @@ a:focus-visible > .ico {
   gap: 10px;
   padding: 8px;
   border-radius: var(--radius);
-  background: var(--bg-main);
+  background: var(--bg-panel);
   min-width: 0;
 }
 .admin-users li.banned {
@@ -4746,7 +4692,7 @@ a:focus-visible > .ico {
   padding: 10px;
   border-radius: 14px;
   border: 1px solid var(--border);
-  background: var(--bg-card);
+  background: var(--bg-raised);
   color: var(--text);
   text-align: left;
   cursor: pointer;

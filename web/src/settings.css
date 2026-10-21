@@ -167,7 +167,7 @@
 }
 .settings-head h1 {
   margin: 0;
-  font-family: 'Unbounded', 'Onest', sans-serif;
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 22px;
   line-height: 28px;
@@ -184,7 +184,7 @@
   margin: 0;
   padding: 4px 20px;
   border-radius: 16px;
-  background: var(--bg-card, var(--bg-raised));
+  background: var(--bg-raised);
   border: 1px solid var(--border);
 }
 .hotkeys li {
@@ -209,7 +209,7 @@ kbd {
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-bottom-width: 2px;
-  font: 600 12px/26px 'Onest', sans-serif;
+  font: 600 12px/26px var(--font-sans);
   text-align: center;
 }
 
@@ -220,7 +220,7 @@ kbd {
 .acc-card {
   border-radius: 16px;
   overflow: hidden;
-  background: var(--bg-card, var(--bg-raised));
+  background: var(--bg-raised);
   border: 1px solid var(--border);
 }
 .acc-card-banner {
@@ -240,7 +240,7 @@ kbd {
   border-radius: 50%;
   padding: 6px;
   margin: -6px;
-  background: var(--bg-card, var(--bg-raised));
+  background: var(--bg-raised);
 }
 .acc-card-avatar .presence-dot {
   width: 20px;
@@ -250,7 +250,7 @@ kbd {
   right: 2px;
   bottom: 2px;
   transform: none;
-  border: 4px solid var(--bg-card, var(--bg-raised));
+  border: 4px solid var(--bg-raised);
 }
 .acc-card-names {
   flex: 1 1 200px;
@@ -288,7 +288,7 @@ kbd {
 }
 .acc-box {
   border-radius: 16px;
-  background: var(--bg-card, var(--bg-raised));
+  background: var(--bg-raised);
   border: 1px solid var(--border);
   padding: 4px 20px;
 }
@@ -666,7 +666,7 @@ input.invalid {
   padding: 14px;
   border-radius: 14px;
   border: 1px solid var(--border);
-  background: var(--bg-card);
+  background: var(--bg-raised);
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -684,7 +684,7 @@ input.invalid {
 .vs-profile.on {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-raised));
 }
 .vs-radio {
   flex: none;
@@ -771,7 +771,7 @@ input.invalid {
   padding: 12px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: var(--bg-card);
+  background: var(--bg-raised);
   font-size: 14px;
 }
 .vs-rung.on {
@@ -827,7 +827,7 @@ input.invalid {
   gap: 12px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-card));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-raised));
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   font-size: 13px;
 }
@@ -930,7 +930,7 @@ input.invalid {
   gap: 8px;
   padding: 16px;
   border-radius: 16px;
-  background: var(--bg-card);
+  background: var(--bg-raised);
   border: 1px solid var(--border);
 }
 .ai-preview-head {
