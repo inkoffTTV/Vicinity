@@ -2,6 +2,7 @@ import { ExternalLink } from 'lucide-react';
 import { ReactNode } from 'react';
 import { Connection, Presence } from '../../lib/api';
 import { connectionType } from '../../lib/cosmetics';
+import { badgeById } from '../../lib/badges';
 import { NameStyle, nameCss } from '../../lib/nameStyle';
 import { ProfileTheme, themeSurface } from '../../lib/profileTheme';
 import { Avatar, PRESENCE_LABEL } from '../Avatar';
@@ -25,6 +26,8 @@ export interface CardData {
   created_at: Date;
   badges: { id: string; label: string; color: string }[];
   badge: { id: number; name: string; icon: string; tag?: string; tag_icon?: string } | null;
+  /** Значок из набора (lib/badges.ts) */
+  badge_pick: string | null;
   connections: Connection[];
   frame: string | null;
   effect: string | null;
@@ -43,7 +46,27 @@ export function ConnectionTile({ type }: { type: string }) {
   const t = connectionType(type);
   return (
     <span className="conn-tile" style={{ background: t.color }} aria-hidden="true">
-      {t.mark}
+      {t.icon ? (
+        <svg viewBox="0 0 24 24" width="16" height="16">
+          <path d={t.icon} fill="currentColor" />
+        </svg>
+      ) : (
+        t.mark
+      )}
+    </span>
+  );
+}
+
+/** Значок профиля из набора — рядом с именем в карточке и в панели пользователя */
+export function BadgePick({ id, compact }: { id: string | null | undefined; compact?: boolean }) {
+  const b = badgeById(id);
+  if (!b) return null;
+  return (
+    <span className={`badge-pick${compact ? ' compact' : ''}`} title={b.label} aria-label={`Значок: ${b.label}`}>
+      <span className="badge-pick-ico" style={{ color: b.color }}>
+        <Icon icon={b.icon} size={compact ? 14 : 13} />
+      </span>
+      {!compact && b.label}
     </span>
   );
 }
@@ -76,6 +99,7 @@ export function ProfileCard({ d, actions, onBadge }: { d: CardData; actions?: Re
         <div className="pcard-sub">
           <span>@{d.username}</span>
           {d.pronouns && <span>• {d.pronouns}</span>}
+          <BadgePick id={d.badge_pick} />
           {d.badge?.tag ? (
             <ServerTag tag={d.badge.tag} icon={d.badge.tag_icon} serverId={onBadge ? d.badge.id : undefined} />
           ) : d.badge && (

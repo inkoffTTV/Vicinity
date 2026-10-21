@@ -411,6 +411,8 @@ export interface Connection {
 /** Расширенный профиль (POST /profile/extras, docs/API.md §10.1) */
 export interface ProfileExt {
   badge_server: number | null;
+  /** Значок из набора lib/badges.ts */
+  badge_pick: string | null;
   frame: string | null;
   effect: string | null;
   /** Стиль ника (lib/nameStyle.ts) */
@@ -428,6 +430,7 @@ export interface ProfileExt {
 
 export const EMPTY_EXT: ProfileExt = {
   badge_server: null,
+  badge_pick: null,
   frame: null,
   effect: null,
   name_style: null,
@@ -441,6 +444,7 @@ export function normalizeExt(e: Partial<ProfileExt> | undefined | null): Profile
   const w: Partial<ProfileExt['widgets']> = e?.widgets ?? {};
   return {
     badge_server: e?.badge_server ?? null,
+    badge_pick: typeof e?.badge_pick === 'string' && e.badge_pick ? e.badge_pick : null,
     frame: e?.frame ?? null,
     effect: e?.effect ?? null,
     name_style: parseNameStyle(e?.name_style),

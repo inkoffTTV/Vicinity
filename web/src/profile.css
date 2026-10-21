@@ -1646,3 +1646,53 @@ button.server-tag:hover {
   background: var(--bg-panel);
   font-size: var(--fs-label);
 }
+
+/* Значок профиля из набора (lib/badges.ts): цвет значка — его данные, подпись — обычный текст */
+.badge-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  color: var(--text-2);
+}
+.badge-pick.compact {
+  margin-left: var(--space-1);
+  vertical-align: -2px;
+}
+.badge-pick-ico {
+  display: inline-grid;
+  place-items: center;
+}
+.studio-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.studio-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--dur-fast), border-color var(--dur-fast);
+}
+.studio-badge:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+.studio-badge[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.conn-tile svg {
+  display: block;
+}

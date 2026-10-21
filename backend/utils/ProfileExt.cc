@@ -83,6 +83,12 @@ static const std::set<std::string>& connectionTypes() {
                                             "youtube", "github", "telegram", "vk", "website"};
     return s;
 }
+// Значки профиля — набор клиента (web/src/lib/badges.ts); свои загружать нельзя
+static const std::set<std::string>& badgePicks() {
+    static const std::set<std::string> s = {"star", "flame", "heart", "gamepad", "code", "music",
+                                            "camera", "palette", "rocket", "coffee", "moon", "leaf"};
+    return s;
+}
 static const std::set<std::string>& gameTags() {
     static const std::set<std::string> s = {"Опытный", "Новичок", "Не оторваться", "Рейджквит", "Люблю", "Ностальгия",
                                             "С друзьями", "Соревновательно", "Расслабляет", "Хардкор", "Сюжет",
@@ -160,6 +166,13 @@ bool sanitize(const Json::Value& in, int tier, const Json::Value& memberServerId
         for (const auto& id : memberServerIds) member = member || id.asInt64() == badge.asInt64();
         if (!member) { error = "Бейджиком можно поставить только сервер, в котором вы состоите"; return false; }
         out["badge_server"] = static_cast<Json::Int64>(badge.asInt64());
+    }
+
+    // Значок из набора
+    out["badge_pick"] = Json::nullValue;
+    if (in["badge_pick"].isString() && !in["badge_pick"].asString().empty()) {
+        if (!badgePicks().count(in["badge_pick"].asString())) { error = "Неизвестный значок"; return false; }
+        out["badge_pick"] = in["badge_pick"].asString();
     }
 
     Json::Value c;

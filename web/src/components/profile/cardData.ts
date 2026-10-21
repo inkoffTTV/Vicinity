@@ -47,6 +47,7 @@ export function cardFromProfile(p: Profile, ext: ProfileExt, presence: Profile['
     created_at: parseTs(p.created_at),
     badges: p.badges,
     badge: p.badge ?? null,
+    badge_pick: ext.badge_pick,
     connections: ext.connections,
     // Рамки и эффекты профиля убраны из оформления — старые значения не показываем
     frame: null,

@@ -270,6 +270,7 @@ POST `/profile/extras` — расширенный профиль целиком 
 | Поле | |
 |---|---|
 | `badge_server` | null | id сервера, где пользователь состоит (иначе 400) |
+| `badge_pick` | null | значок из набора клиента: `star`, `flame`, `heart`, `gamepad`, `code`, `music`, `camera`, `palette`, `rocket`, `coffee`, `moon`, `leaf` (иначе 400) |
 | `frame` | null | `neon`, `gold`, `ice` (Basic), `fire` (Standard), `rainbow` (Ultra) |
 | `effect` | null | `stars`, `aurora`, `snow`, `glint` (Ultra) |
 | `name_style` | null | `gradient`, `neon`, `metal`, `flame` (Standard), `aurora` (Ultra) |

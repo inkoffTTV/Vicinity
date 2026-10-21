@@ -1,3 +1,4 @@
+import { siBattledotnet, siEpicgames, siGithub, siPlaystation, siSpotify, siSteam, siTelegram, siTwitch, siVk, siYoutube } from 'simple-icons';
 // Украшения профиля и подключённые аккаунты. id и требования подписки совпадают с сервером
 // (backend/utils/ProfileExt.cc): украшение без подписки сервер не сохранит (403) и не покажет.
 
@@ -36,25 +37,27 @@ export const TIER_NAME = ['', 'Basic', 'Standard', 'Ultra'];
 export interface ConnectionType {
   id: string;
   name: string;
-  /** Короткая метка на плитке */
+  /** Короткая метка на плитке — когда нет иконки */
   mark: string;
+  /** Логотип сервиса: путь SVG 24×24 из simple-icons (CC0) */
+  icon?: string;
   color: string;
   /** Ссылка на профиль по имени, если её не указали */
   url?: (name: string) => string;
 }
 
 export const CONNECTIONS: ConnectionType[] = [
-  { id: 'steam', name: 'Steam', mark: 'St', color: '#1b2838' },
-  { id: 'spotify', name: 'Spotify', mark: 'Sp', color: '#1db954' },
-  { id: 'epic', name: 'Epic Games', mark: 'Ep', color: '#2a2a2a' },
+  { id: 'steam', name: 'Steam', mark: 'St', color: '#1b2838', icon: siSteam.path },
+  { id: 'spotify', name: 'Spotify', mark: 'Sp', color: '#1db954', icon: siSpotify.path },
+  { id: 'epic', name: 'Epic Games', mark: 'Ep', color: '#2a2a2a', icon: siEpicgames.path },
   { id: 'xbox', name: 'Xbox', mark: 'X', color: '#107c10' },
-  { id: 'playstation', name: 'PlayStation', mark: 'PS', color: '#003791' },
-  { id: 'battlenet', name: 'Battle.net', mark: 'B', color: '#148eff' },
-  { id: 'twitch', name: 'Twitch', mark: 'Tw', color: '#9146ff', url: (n) => `https://www.twitch.tv/${encodeURIComponent(n)}` },
-  { id: 'youtube', name: 'YouTube', mark: 'YT', color: '#e62117', url: (n) => `https://www.youtube.com/@${encodeURIComponent(n)}` },
-  { id: 'github', name: 'GitHub', mark: 'GH', color: '#24292e', url: (n) => `https://github.com/${encodeURIComponent(n)}` },
-  { id: 'telegram', name: 'Telegram', mark: 'Tg', color: '#229ed9', url: (n) => `https://t.me/${encodeURIComponent(n.replace(/^@/, ''))}` },
-  { id: 'vk', name: 'ВКонтакте', mark: 'VK', color: '#0077ff', url: (n) => `https://vk.com/${encodeURIComponent(n)}` },
+  { id: 'playstation', name: 'PlayStation', mark: 'PS', color: '#003791', icon: siPlaystation.path },
+  { id: 'battlenet', name: 'Battle.net', mark: 'B', color: '#148eff', icon: siBattledotnet.path },
+  { id: 'twitch', name: 'Twitch', mark: 'Tw', color: '#9146ff', icon: siTwitch.path, url: (n) => `https://www.twitch.tv/${encodeURIComponent(n)}` },
+  { id: 'youtube', name: 'YouTube', mark: 'YT', color: '#e62117', icon: siYoutube.path, url: (n) => `https://www.youtube.com/@${encodeURIComponent(n)}` },
+  { id: 'github', name: 'GitHub', mark: 'GH', color: '#24292e', icon: siGithub.path, url: (n) => `https://github.com/${encodeURIComponent(n)}` },
+  { id: 'telegram', name: 'Telegram', mark: 'Tg', color: '#229ed9', icon: siTelegram.path, url: (n) => `https://t.me/${encodeURIComponent(n.replace(/^@/, ''))}` },
+  { id: 'vk', name: 'ВКонтакте', mark: 'VK', color: '#0077ff', icon: siVk.path, url: (n) => `https://vk.com/${encodeURIComponent(n)}` },
   { id: 'website', name: 'Сайт', mark: 'www', color: '#3a3f4b' },
 ];
 

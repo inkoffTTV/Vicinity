@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { FormEvent, MouseEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { ADMIN_USERNAME, isAdminUsername, openAdminDm } from '../lib/admin';
-import { api, ApiError, LastMessage, parseTs, Presence, ServerChannel } from '../lib/api';
+import { api, ApiError, LastMessage, normalizeExt, parseTs, Presence, ServerChannel } from '../lib/api';
 import { useNotifySettings } from '../lib/notify';
 import { previewParts, sortRecent, useMinuteClock } from '../lib/recent';
 import { useStore } from '../lib/store';
@@ -24,6 +24,7 @@ import { fullWhen, shortWhen } from '../lib/time';
 import { useVoice } from '../lib/voice';
 import { useVoiceVideo } from '../lib/voiceVideo';
 import { Avatar, PRESENCE_LABEL } from './Avatar';
+import { BadgePick } from './profile/ProfileCard';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
@@ -485,6 +486,18 @@ function AddChannelDialog({ serverId, voice, onClose }: { serverId: number; voic
 function UserPanel() {
   const me = useStore((s) => s.me)!;
   const connected = useStore((s) => s.connected);
+  // Значок из расширенного профиля: me его не содержит, после сохранения в студии me обновляется и значок перечитывается
+  const [myBadge, setMyBadge] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api.profile(me.user_id).then(
+      (p) => alive && setMyBadge(normalizeExt(p.profile_ext).badge_pick),
+      () => {},
+    );
+    return () => {
+      alive = false;
+    };
+  }, [me]);
   const setPresence = useStore((s) => s.setPresence);
   const setSettingsOpen = useStore((s) => s.setSettingsOpen);
   const showProfile = useStore((s) => s.showProfile);
@@ -521,7 +534,10 @@ function UserPanel() {
       <button className="user-panel-me" onClick={() => setMenu((v) => !v)} title="Статус" aria-haspopup="true" aria-expanded={menu}>
         <Avatar name={me.display_name} src={me.avatar_path} id={me.user_id} size={34} presence={connected ? me.presence : 'offline'} />
         <span className="user-panel-names">
-          <span className="ellipsis">{me.display_name}</span>
+          <span className="ellipsis">
+            {me.display_name}
+            <BadgePick id={myBadge} compact />
+          </span>
           <span className="muted small ellipsis">{connected ? PRESENCE_LABEL[me.presence] ?? '' : 'Подключение…'}</span>
         </span>
       </button>

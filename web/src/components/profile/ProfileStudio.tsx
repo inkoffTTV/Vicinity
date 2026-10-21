@@ -1,6 +1,7 @@
-import { X } from 'lucide-react';
+import { Ban, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
+import { BADGES } from '../../lib/badges';
 import { ApiError, Connection, EMPTY_EXT, normalizeExt, parseTs, Presence, Profile, ProfileExt, api } from '../../lib/api';
 import { CONNECTIONS } from '../../lib/cosmetics';
 import { nameCss } from '../../lib/nameStyle';
@@ -159,6 +160,7 @@ export function ProfileStudio() {
     created_at: profile ? parseTs(profile.created_at) : new Date(),
     badges: profile?.badges ?? [],
     badge: badge ? { id: badge.id, name: badge.name, icon: badge.icon ?? '', tag: badge.tag, tag_icon: badge.tag_icon } : null,
+    badge_pick: ext.badge_pick,
     connections: ext.connections,
     frame: null,
     effect: null,
@@ -257,6 +259,24 @@ export function ProfileStudio() {
               Цвет профиля (ник в чатах с Basic)
               <input type="color" value={accent} onChange={(e) => touch(setAccent)(e.target.value)} />
             </label>
+          </Section>
+
+          <Section title="Значок">
+            <p className="muted small">Один значок из набора — виден рядом с именем в карточке и в панели снизу.</p>
+            <div className="studio-badges" role="radiogroup" aria-label="Значок профиля">
+              <button type="button" className="studio-badge" role="radio" aria-checked={!ext.badge_pick} onClick={() => editExt({ ...ext, badge_pick: null })}>
+                <Icon icon={Ban} size={16} />
+                Без значка
+              </button>
+              {BADGES.map((b) => (
+                <button key={b.id} type="button" className="studio-badge" role="radio" aria-checked={ext.badge_pick === b.id} onClick={() => editExt({ ...ext, badge_pick: b.id })}>
+                  <span className="badge-pick-ico" style={{ color: b.color }}>
+                    <Icon icon={b.icon} size={16} />
+                  </span>
+                  {b.label}
+                </button>
+              ))}
+            </div>
           </Section>
 
           <Section title="Подключения">
