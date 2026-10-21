@@ -25,6 +25,6 @@ fi
 case "${1:-check}" in
     check) "${ssh_cmd[@]}" 'echo "ok: $(hostname), $(uptime -p)"' ;;
     run) shift; "${ssh_cmd[@]}" "$@" ;;
-    update) "${ssh_cmd[@]}" "cd \"${VPS_REPO:-~/Vicinity}\" && git fetch origin claude/zen-feynman-rcs2s3 && git checkout claude/zen-feynman-rcs2s3 && sh deploy/update.sh" ;;
+    update) "${ssh_cmd[@]}" "cd \"${VPS_REPO:-~/vicinity}\" && git fetch origin claude/zen-feynman-rcs2s3 && git checkout claude/zen-feynman-rcs2s3 && sh deploy/update.sh" ;;
     *) echo "использование: $0 check | run '<команда>' | update" >&2; exit 2 ;;
 esac
