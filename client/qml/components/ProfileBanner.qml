@@ -22,6 +22,7 @@ Item {
         visible: root.type === "gradient"
         spec: root.gradient ? root.gradient
               : ({ type:"linear", angle:90,
+                   // Баннер по умолчанию — данные профиля, не токены
                    stops:[{pos:0,color:"#5865f2"},{pos:1,color:"#eb459e"}] })
     }
 

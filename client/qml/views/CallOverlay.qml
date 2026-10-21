@@ -175,7 +175,7 @@ Popup {
                         anchors.centerIn: parent; spacing: 8
                         Text { textFormat: Text.PlainText; text: callEngine.peerName.length > 0 ? callEngine.peerName : "Собеседник"
                             anchors.verticalCenter: parent.verticalCenter
-                            color: "#ffffff"; font.pixelSize: 13; font.bold: true }
+                            color: themeManager.onScrimColor; font.pixelSize: 13; font.bold: true }
                         Text { text: root.statusText
                             anchors.verticalCenter: parent.verticalCenter
                             color: themeManager.rgba(255, 255, 255, 0.72); font.pixelSize: 12 }

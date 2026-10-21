@@ -6,7 +6,7 @@ import QtQuick.Layouts 1.15
 // Двусторонний: родитель задаёт value, компонент обновляет value при правках.
 Column {
     id: root
-    property color value: "#5865f2"
+    property color value: themeManager.accentColor
     property bool  showAlpha: true
     spacing: 10
     width: parent ? parent.width : 240
@@ -35,6 +35,7 @@ Column {
                 anchors.fill: parent; columns: 6; rows: 5
                 Repeater { model: 30
                     Rectangle { width: 44/6; height: 38/5
+                        // Шахматка под полупрозрачным цветом — условное обозначение прозрачности, не токен
                         color: (index % 2 === (Math.floor(index/6) % 2)) ? "#ffffff" : "#bbbbbb" } }
             }
             Rectangle { anchors.fill: parent; radius: 8; color: root.value }
@@ -105,6 +106,7 @@ Column {
     Flow {
         width: root.width; spacing: 7
         Repeater {
+            // Палитра пресетов пикера — данные, не токены
             model: ["#5865f2","#f23f43","#e67e22","#f1c40f","#57f287",
                     "#1abc9c","#00b0f4","#9b59b6","#eb459e","#ffffff","#2b2d31"]
             Rectangle {

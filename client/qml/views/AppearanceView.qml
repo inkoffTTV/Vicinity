@@ -28,11 +28,13 @@ Item {
                 spacing: 10
                 Repeater {
                     model: [
-                        { label: "⚫  Чёрная", theme: 0, name: "Black" },
-                        { label: "⚪  Белая",  theme: 1, name: "White" }
+                        { label: "Тёмная",  theme: 0, name: "dark" },
+                        { label: "Светлая", theme: 1, name: "light" },
+                        { label: "Графит",  theme: 2, name: "graphite" },
+                        { label: "Чёрная",  theme: 3, name: "black" }
                     ]
                     Rectangle {
-                        width: 130; height: 44; radius: 10
+                        width: 110; height: 44; radius: themeManager.radiusSm
                         property bool active: themeManager.currentThemeName === modelData.name
                         color: active ? Qt.rgba(themeManager.accentColor.r, themeManager.accentColor.g,
                                                 themeManager.accentColor.b, 0.22)
@@ -54,6 +56,7 @@ Item {
             Flow {
                 width: parent.width - 40; spacing: 8
                 Repeater {
+                    // Пресеты пользовательского акцента — данные, не токены
                     model: ["#5865f2","#f23f43","#e67e22","#f1c40f","#57f287",
                             "#1abc9c","#00b0f4","#9b59b6","#eb459e","#ffffff"]
                     Rectangle {

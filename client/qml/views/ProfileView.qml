@@ -24,7 +24,7 @@ Dialog {
 
     // Конструктор профиля
     property string localStatusText:  ""
-    property string localStatusColor: "#57f287"
+    property string localStatusColor: themeManager.colorToHex(themeManager.presenceOnline)
     property bool   localShowStatus:  false
     property bool   localShowBio:     true
     property bool   localShowLinks:   true
@@ -43,7 +43,7 @@ Dialog {
 
     function loadProfileJson() {
         linkModel.clear()
-        var statusText = "", statusColor = "#57f287"
+        var statusText = "", statusColor = themeManager.colorToHex(themeManager.presenceOnline)
         var showStatus = false, showBio = true, showLinks = true
         var links = []
         try {
@@ -104,7 +104,7 @@ Dialog {
             Rectangle {
                 width: 28; height: 28; radius: 6
                 color: xBtn.containsMouse ? Qt.rgba(1, 0.42, 0.42, 0.2) : "transparent"
-                Text { anchors.centerIn: parent; text: "✕"; color: "#ff6b6b"; font.pixelSize: 14 }
+                Text { anchors.centerIn: parent; text: "✕"; color: themeManager.dangerTextColor; font.pixelSize: 14 }
                 MouseArea { id: xBtn; anchors.fill: parent; hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor; onClicked: root.close() }
             }
@@ -158,7 +158,7 @@ Dialog {
                     Text { text: "ОБО МНЕ"; font.pixelSize: 10; font.bold: true
                         color: Qt.rgba(themeManager.textColor.r, themeManager.textColor.g,
                                        themeManager.textColor.b, 0.5); width: parent.width - 60 }
-                    Text { text: "Бесплатно"; color: "#57f287"; font.pixelSize: 9; font.bold: true
+                    Text { text: "Бесплатно"; color: themeManager.successColor; font.pixelSize: 9; font.bold: true
                         anchors.verticalCenter: parent.children[0].verticalCenter }
                 }
                 Item { height: 6 }
@@ -182,7 +182,7 @@ Dialog {
                     Text {
                         anchors { right: parent.right; bottom: parent.bottom; margins: 6 }
                         text: bioArea.length + "/190"
-                        color: bioArea.length > 170 ? "#f23f43"
+                        color: bioArea.length > 170 ? themeManager.dangerTextColor
                                : Qt.rgba(themeManager.textColor.r, themeManager.textColor.g,
                                          themeManager.textColor.b, 0.35)
                         font.pixelSize: 9
@@ -209,6 +209,7 @@ Dialog {
                 Flow {
                     width: parent.width - 40; anchors.horizontalCenter: parent.horizontalCenter; spacing: 7
                     Repeater {
+                        // Палитра пресетов цвета профиля — данные пользователя, не токены темы
                         model: ["#f23f43","#e67e22","#f1c40f","#57f287",
                                 "#1abc9c","#00b0f4","#5865f2","#9b59b6",
                                 "#eb459e","#95a5a6","#f0f0f0","#ffd700"]
@@ -320,6 +321,7 @@ Dialog {
                 Row {
                     width: parent.width - 40; anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
                     Repeater {
+                        // Палитра пресетов цвета статуса — данные, не токены
                         model: ["#57f287","#f1c40f","#f23f43","#00b0f4","#9b59b6","#95a5a6"]
                         Rectangle {
                             width: 24; height: 24; radius: 12; color: modelData
@@ -423,7 +425,7 @@ Dialog {
                                 width: 34; height: 34; radius: 7
                                 color: delMa.containsMouse ? Qt.rgba(1, 0.42, 0.42, 0.2) : "transparent"
                                 border.color: Qt.rgba(1, 0.42, 0.42, 0.3); border.width: 1
-                                Text { anchors.centerIn: parent; text: "✕"; color: "#ff6b6b"; font.pixelSize: 12 }
+                                Text { anchors.centerIn: parent; text: "✕"; color: themeManager.dangerTextColor; font.pixelSize: 12 }
                                 MouseArea { id: delMa; anchors.fill: parent; hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: linkModel.remove(index) }
@@ -495,6 +497,7 @@ Dialog {
                             color: appState.subscriptionTier === 0
                                    ? Qt.rgba(themeManager.textColor.r, themeManager.textColor.g,
                                              themeManager.textColor.b, 0.07)
+                                   // Цвета тарифов подписки — фирменные цвета тарифов, не токены темы
                                    : appState.subscriptionTier === 1 ? "#424242"
                                    : appState.subscriptionTier === 2 ? "#0d47a1" : "#4a148c" }
                         GradientStop { position: 1.0

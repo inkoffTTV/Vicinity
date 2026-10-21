@@ -17,6 +17,7 @@ ApplicationWindow {
     GradientRect {
         anchors.fill: parent
         visible: themeManager.bgGradientEnabled
+        // Градиент по умолчанию — данные настройки (см. ThemeManager::m_bgGradientJson)
         spec: Fmt.parse(themeManager.bgGradientJson,
                         ({type:"linear",angle:135,stops:[{pos:0,color:"#1a1a2e"},{pos:1,color:"#16213e"}]}))
     }

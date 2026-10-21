@@ -7,6 +7,7 @@ import QtQuick.Layouts 1.15
 Column {
     id: root
     property var spec: ({ type: "linear", angle: 90,
+                          // Градиент по умолчанию — данные настройки, не токены
                           stops: [{pos:0, color:"#5865f2"}, {pos:1, color:"#eb459e"}] })
     spacing: 10
     width: parent ? parent.width : 280

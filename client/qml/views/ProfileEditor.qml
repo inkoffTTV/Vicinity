@@ -15,10 +15,10 @@ Item {
     property string localName: ""
     property string localPronouns: ""
     property string localBio: ""
-    property string localAccent: "#5865f2"
+    property string localAccent: themeManager.colorToHex(themeManager.accentColor)
     property string localPresence: "online"
     property string localStatusText: ""
-    property string localStatusColor: "#57f287"
+    property string localStatusColor: themeManager.colorToHex(themeManager.presenceOnline)
     property string localStatusIcon: ""
     property int    localStatusTimer: 0     // минуты, 0 = не сбрасывать
     property bool   localShowBio: true
@@ -26,7 +26,8 @@ Item {
     property bool   localShowStatus: true
     // баннер
     property string localBannerType: "solid"   // solid | gradient | image
-    property string localBannerColor: "#5865f2"
+    property string localBannerColor: themeManager.colorToHex(themeManager.accentColor)
+    // Градиент баннера по умолчанию — данные профиля, не токены
     property var    localBannerGradient: ({ type:"linear", angle:90, stops:[{pos:0,color:"#5865f2"},{pos:1,color:"#eb459e"}] })
     property string avatarFile: ""             // file:// если выбран новый
     property bool   avatarCleared: false
@@ -43,18 +44,18 @@ Item {
         localName     = appState.displayName
         localPronouns = appState.pronouns !== undefined ? appState.pronouns : ""
         localBio      = appState.bio
-        localAccent   = appState.accentColor && appState.accentColor.length > 0 ? appState.accentColor : "#5865f2"
+        localAccent   = appState.accentColor && appState.accentColor.length > 0 ? appState.accentColor : themeManager.colorToHex(themeManager.accentColor)
         avatarFile = ""; avatarCleared = false; bannerFile = ""
         var pj = Fmt.parse(appState.profileJson, {})
         localShowBio    = pj.showBio    !== false
         localShowLinks  = pj.showLinks  !== false
         localShowStatus = pj.showStatus !== false
         localStatusText  = pj.statusText  ? pj.statusText  : ""
-        localStatusColor = pj.statusColor ? pj.statusColor : "#57f287"
+        localStatusColor = pj.statusColor ? pj.statusColor : themeManager.colorToHex(themeManager.presenceOnline)
         localStatusIcon  = pj.statusIcon  ? pj.statusIcon  : ""
         localStatusTimer = 0
         localBannerType  = pj.banner && pj.banner.type ? pj.banner.type : "solid"
-        localBannerColor = pj.banner && pj.banner.color ? pj.banner.color : "#5865f2"
+        localBannerColor = pj.banner && pj.banner.color ? pj.banner.color : themeManager.colorToHex(themeManager.accentColor)
         if (pj.banner && pj.banner.gradient) localBannerGradient = pj.banner.gradient
         linkModel.clear()
         if (pj.links instanceof Array)
@@ -478,7 +479,7 @@ Item {
                                                  : Qt.darker(themeManager.successColor, 1.45)
                     Behavior on color { ColorAnimation { duration: themeManager.animDuration(120) } }
                     Text { id: saveTxt; anchors.centerIn: parent; text: "Сохранить изменения"
-                        color: "#ffffff"; font.pixelSize: 13; font.bold: true }
+                        color: themeManager.onScrimColor; font.pixelSize: 13; font.bold: true }
                     MouseArea { id: saveHov; anchors.fill: parent; hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor; onClicked: root.save() }
                 }

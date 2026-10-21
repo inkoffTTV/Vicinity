@@ -97,7 +97,7 @@ Item {
             x: sl.leftPadding + sl.visualPosition * (sl.availableWidth - width)
             y: sl.topPadding + sl.availableHeight / 2 - height / 2
             width: 12; height: 24; radius: 4
-            color: "#ffffff"
+            color: themeManager.surfaceColor
             border.color: themeManager.borderColor; border.width: 1
         }
     }
@@ -190,7 +190,7 @@ Item {
                     width: 46; height: 24; radius: 12
                     color: voiceEngine.muted ? themeManager.dangerColor : themeManager.inputColor
                     Behavior on color { ColorAnimation { duration: themeManager.animDuration(120) } }
-                    Rectangle { width: 20; height: 20; radius: 10; color: "#ffffff"
+                    Rectangle { width: 20; height: 20; radius: 10; color: themeManager.surfaceColor
                         anchors.verticalCenter: parent.verticalCenter
                         x: voiceEngine.muted ? parent.width - 22 : 2
                         Behavior on x { NumberAnimation { duration: themeManager.animDuration(120) } } }

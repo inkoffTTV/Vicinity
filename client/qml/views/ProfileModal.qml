@@ -71,7 +71,7 @@ Dialog {
                 z: 5; width: 30; height: 30; radius: 8
                 anchors { right: parent.right; top: parent.top; rightMargin: 12; topMargin: 12 }
                 color: xb.containsMouse ? themeManager.rgba(255,107,107,0.2) : themeManager.rgba(0,0,0,0.3)
-                AppIcon { anchors.centerIn: parent; name: "close"; size: 16; color: "#ffffff" }
+                AppIcon { anchors.centerIn: parent; name: "close"; size: 16; color: themeManager.onScrimColor }
                 MouseArea { id: xb; anchors.fill: parent; hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor; onClicked: root.close() }
             }

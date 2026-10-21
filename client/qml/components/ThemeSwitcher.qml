@@ -7,13 +7,15 @@ RowLayout {
 
     Repeater {
         model: [
-            { label: "⚫", theme: 0, tip: "Чёрная" },
-            { label: "⚪", theme: 1, tip: "Белая" }
+            { theme: 0, name: "dark",     tip: "Тёмная" },
+            { theme: 1, name: "light",    tip: "Светлая" },
+            { theme: 2, name: "graphite", tip: "Графит" },
+            { theme: 3, name: "black",    tip: "Чёрная" }
         ]
 
         Rectangle {
             width: 36; height: 28; radius: 6
-            property bool active: themeManager.currentThemeName === ["Black","White"][modelData.theme]
+            property bool active: themeManager.currentThemeName === modelData.name
             color: active
                    ? Qt.rgba(themeManager.accentColor.r, themeManager.accentColor.g,
                              themeManager.accentColor.b, 0.28)
@@ -23,7 +25,10 @@ RowLayout {
             border.width: 1
             Behavior on color { ColorAnimation { duration: 120 } }
 
-            Text { anchors.centerIn: parent; text: modelData.label; font.pixelSize: 14 }
+            // Образец: панель темы
+            Rectangle { anchors.centerIn: parent; width: 18; height: 14; radius: themeManager.radiusXs
+                color: themeManager.themePanelColor(modelData.theme)
+                border.color: themeManager.borderColor; border.width: 1 }
 
             ToolTip.visible: ma.containsMouse
             ToolTip.text: modelData.tip

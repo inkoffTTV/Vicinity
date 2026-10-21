@@ -30,6 +30,7 @@ Item {
             text: root.displayName.length > 0 ? root.displayName[0].toUpperCase() : "?"
             font.pixelSize: parent.width * 0.4
             font.bold: true
+            // Буква на цветном аватаре — цвет пользователя под ней, белый всегда читается
             color: "#ffffff"
         }
     }

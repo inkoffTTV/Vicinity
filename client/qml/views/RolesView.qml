@@ -9,7 +9,7 @@ Item {
     anchors.fill: parent
 
     property string newName:  ""
-    property string newColor: "#5865f2"
+    property string newColor: themeManager.colorToHex(themeManager.accentColor)
     property string newIcon:  ""
     property int    newTier:  0
     property string roleErr:  ""
@@ -105,6 +105,7 @@ Item {
                                    themeManager.textColor.b, 0.4) }
                 Flow { width: parent.width; spacing: 6
                     Repeater {
+                        // Палитра пресетов цвета роли — данные, не токены
                         model: ["#f23f43","#e67e22","#f1c40f","#57f287","#1abc9c",
                                 "#00b0f4","#5865f2","#9b59b6","#eb459e","#95a5a6","#f0f0f0","#ffd700"]
                         Rectangle {
@@ -231,6 +232,7 @@ Item {
                     Rectangle {
                         visible: isPremium > 0; anchors.verticalCenter: parent.verticalCenter
                         height: 18; radius: 9; width: pBadge.implicitWidth + 12
+                        // Цвета тарифов подписки — фирменные цвета тарифов, не токены темы
                         color: isPremium === 1 ? "#424242" : isPremium === 2 ? "#0d47a1" : "#4a148c"
                         Text { id: pBadge; anchors.centerIn: parent
                             text: ["","Basic","Standard","Ultra"][isPremium]
