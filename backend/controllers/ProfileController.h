@@ -9,6 +9,7 @@ public:
     METHOD_LIST_BEGIN
     ADD_METHOD_TO(ProfileController::updateProfile, "/api/v1/profile/update", Post, Options, "AuthFilter");
     ADD_METHOD_TO(ProfileController::uploadMedia,   "/api/v1/profile/upload", Post, Options, "AuthFilter");
+    ADD_METHOD_TO(ProfileController::uploadChatBackground, "/api/v1/profile/chat_background", Post, Options, "AuthFilter");
     ADD_METHOD_TO(ProfileController::updateBio,     "/api/v1/profile/bio",    Post, Options, "AuthFilter");
     ADD_METHOD_TO(ProfileController::updateAccent,  "/api/v1/profile/accent",    Post, Options, "AuthFilter");
     ADD_METHOD_TO(ProfileController::customize,     "/api/v1/profile/customize", Post, Options, "AuthFilter");
@@ -18,6 +19,7 @@ public:
 
     void updateProfile(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void uploadMedia  (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void uploadChatBackground(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void updateBio    (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void updateAccent (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void customize    (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);

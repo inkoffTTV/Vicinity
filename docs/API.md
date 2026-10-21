@@ -275,6 +275,18 @@ POST `/profile/extras` — расширенный профиль целиком 
 | `effect` | null | `stars`, `aurora`, `snow`, `glint` (Ultra) |
 | `name_style` | null | `gradient`, `neon`, `metal`, `flame` (Standard), `aurora` (Ultra) |
 | `connections` | до 10 × `{type, name ≤ 40, url: "" | https://…}`, type: steam, spotify, epic, xbox, playstation, battlenet, twitch, youtube, github, telegram, vk, website |
+
+### Фон чата
+
+`POST /channels/{id}/update` принимает кроме `name` поле `background` (канал сервера, только владелец):
+`{preset}` — один из `lagoon`, `dusk`, `forest`, `ember`, `night`, `dots`, `grid`, `waves`; или `{image}` — url из
+`/uploads/backgrounds/`; плюс `dim` 0–80 (затемнение, %, по умолчанию 40) и `blur` (bool). `null` — убрать. Канал в
+`GET /servers/{id}/channels` отдаёт `background` строкой JSON (или null); всем в канале уходит `channel_updated` с
+`background`. Картинка: `POST /channels/{id}/background` (multipart `image`, владелец) → `{file_url}`.
+
+Фон лички и беседы — личная настройка клиента (виден только себе), сервер хранит лишь картинку:
+`POST /profile/chat_background` (multipart `image`) → `{file_url}`. Предложение фона собеседнику — обычное сообщение
+вида `Фон чата: preset=lagoon dim=40`.
 | `widgets` | `{favorite_game: null | {appid, name, note ≤ 120, tags ≤ 6 из списка}, games: ≤ 20 × {appid, name}, wishlist: ≤ 20 × {appid, name}, order: ["favorite_game" | "games"]}` |
 
 Украшение без нужной подписки — **403**. `cover` у игр сервер ставит сам: `/api/v1/games/{appid}/cover`.

@@ -117,6 +117,8 @@ void initialize() {
     // channels могут принадлежать серверу (server_id) и быть голосовыми (is_voice)
     exec("ALTER TABLE channels ADD COLUMN server_id INTEGER DEFAULT NULL");
     exec("ALTER TABLE channels ADD COLUMN is_voice INTEGER NOT NULL DEFAULT 0");
+    // Фон канала сервера (JSON: preset | image, dim, blur) — ставит владелец, видят все
+    exec("ALTER TABLE channels ADD COLUMN background TEXT DEFAULT NULL");
 
     exec("CREATE TABLE IF NOT EXISTS messages ("
          "id INTEGER PRIMARY KEY AUTOINCREMENT,"

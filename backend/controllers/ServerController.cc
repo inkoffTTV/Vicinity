@@ -420,7 +420,7 @@ void ServerController::listServerChannels(const HttpRequestPtr& req,
             cb(errResp("Вы не участник этого сервера", k403Forbidden)); return;
         }
         auto result = db->execSqlSync(
-            "SELECT id, name, is_voice FROM channels WHERE server_id = ? "
+            "SELECT id, name, is_voice, background FROM channels WHERE server_id = ? "
             "ORDER BY is_voice ASC, id ASC", serverId);
         Json::Value arr(Json::arrayValue);
         for (const auto& row : result) {
@@ -428,6 +428,7 @@ void ServerController::listServerChannels(const HttpRequestPtr& req,
             c["id"]       = row["id"].as<int64_t>();
             c["name"]     = row["name"].as<std::string>();
             c["is_voice"] = row["is_voice"].as<int>();
+            c["background"] = row["background"].isNull() ? Json::Value(Json::nullValue) : Json::Value(row["background"].as<std::string>());
             arr.append(c);
         }
         Json::Value resp; resp["channels"] = arr;

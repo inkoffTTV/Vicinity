@@ -127,6 +127,30 @@ void ProfileController::uploadMedia(const HttpRequestPtr& req,
   }
 }
 
+// POST /api/v1/profile/chat_background (multipart image) — картинка для личного фона чата.
+// Сам фон хранится у клиента (виден только ему); сервер лишь держит файл
+void ProfileController::uploadChatBackground(const HttpRequestPtr& req,
+                                             std::function<void(const HttpResponsePtr&)>&& callback) {
+    int64_t user_id = req->attributes()->get<int64_t>("user_id");
+    try {
+        if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Upload, user_id)) {
+            callback(errResp("Слишком часто, попробуйте позже", k429TooManyRequests)); return;
+        }
+        MultiPartParser parser;
+        if (parser.parse(req) != 0 || parser.getFiles().empty()) {
+            callback(errResp("Invalid file upload", k400BadRequest)); return;
+        }
+        auto saved = Uploads::saveImage(parser.getFiles()[0], "backgrounds");
+        if (!saved.error.empty()) { callback(errResp(saved.error, saved.code)); return; }
+        Json::Value resp;
+        resp["file_url"] = saved.url;
+        callback(HttpResponse::newHttpJsonResponse(resp));
+    } catch (const std::exception& e) {
+        LOG_ERROR << "uploadChatBackground exception: " << e.what();
+        callback(errResp("Не удалось загрузить файл", k500InternalServerError));
+    }
+}
+
 void ProfileController::updateBio(const HttpRequestPtr& req,
                                   std::function<void(const HttpResponsePtr&)>&& callback) {
     int64_t user_id = req->attributes()->get<int64_t>("user_id");

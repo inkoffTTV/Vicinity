@@ -1,5 +1,6 @@
 // Лички и беседы в списке слева: свежие сверху, строка-превью последнего сообщения
 import { useEffect, useState } from 'react';
+import { parseProposal } from './chatBg';
 import { LastMessage } from './api';
 import { plainText } from './markdown';
 
@@ -29,7 +30,7 @@ export interface PreviewParts {
 
 /** Превью последнего сообщения по частям: кто, значок вложения, текст */
 export function previewParts(lm: LastMessage, meId: number | undefined, group: boolean): PreviewParts {
-  const text = plainText(lm.text).replace(/\s+/g, ' ').trim();
+  const text = parseProposal(lm.text) ? 'Предложение фона чата' : plainText(lm.text).replace(/\s+/g, ' ').trim();
   let attachment: PreviewParts['attachment'] = null;
   let body = text;
   if (lm.attachment) {

@@ -705,18 +705,23 @@ export const useStore = create<State>((set, get) => {
         s.toast(`Вас добавили в беседу «${ev.name}»`);
         void s.refreshDms();
         break;
-      case 'channel_updated':
-        if (typeof ev.name !== 'string') break;
+      case 'channel_updated': {
+        const name = typeof ev.name === 'string' ? ev.name : undefined;
+        const hasBg = 'background' in ev;
+        if (name === undefined && !hasBg) break;
+        const patch = (c: ServerChannel): ServerChannel => ({
+          ...c,
+          ...(name !== undefined ? { name } : {}),
+          ...(hasBg ? { background: typeof ev.background === 'string' ? ev.background : null } : {}),
+        });
         set({
-          groups: s.groups.map((g) => (g.id === ev.channel_id ? { ...g, name: ev.name } : g)),
+          groups: name !== undefined ? s.groups.map((g) => (g.id === ev.channel_id ? { ...g, name } : g)) : s.groups,
           channelsByServer: Object.fromEntries(
-            Object.entries(s.channelsByServer).map(([sid, chs]) => [
-              sid,
-              chs.map((c) => (c.id === ev.channel_id ? { ...c, name: ev.name } : c)),
-            ]),
+            Object.entries(s.channelsByServer).map(([sid, chs]) => [sid, chs.map((c) => (c.id === ev.channel_id ? patch(c) : c))]),
           ),
         });
         break;
+      }
       case 'channel_removed': {
         const group = s.groups.find((g) => g.id === ev.channel_id);
         if (group) s.toast(`Беседа «${group.name}» больше недоступна`);

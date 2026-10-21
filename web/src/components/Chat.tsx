@@ -1,4 +1,4 @@
-import { AudioLines, Bell, BellOff, Hash, Menu, Phone, PhoneOff, Pin, UserPlus, Users } from 'lucide-react';
+import { AudioLines, Bell, BellOff, Hash, Menu, Phone, PhoneOff, Pin, UserPlus, Users, Wallpaper } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useCall } from '../lib/call';
 import { useChannelMembers } from '../lib/channelMembers';
@@ -7,6 +7,7 @@ import { activeChannelId, useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
 import { useVoice } from '../lib/voice';
 import { AddMemberDialog } from './AddMemberDialog';
+import { ChatBgDialog } from './ChatBackground';
 import { Avatar } from './Avatar';
 import { Composer } from './Composer';
 import { Icon } from './Icon';
@@ -38,6 +39,9 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
   const joinVoice = useVoice((s) => s.join);
   const leaveVoice = useVoice((s) => s.leave);
   const [adding, setAdding] = useState(false);
+  const [bgOpen, setBgOpen] = useState(false);
+  // Фон канала сервера меняет только владелец; в личке и беседе фон — личный
+  const amOwner = useStore((s) => view.kind === 'server' && s.servers.find((x) => x.id === view.serverId)?.owner_id === s.me?.user_id);
   const [panel, setPanel] = useState<'pins' | 'notify' | null>(null);
   const pinsBtn = useRef<HTMLButtonElement>(null);
   const notifyBtn = useRef<HTMLButtonElement>(null);
@@ -110,6 +114,11 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
             <Icon icon={UserPlus} anim="bounce" />
           </button>
         )}
+        {channelId !== null && (dm || group || amOwner) && (
+          <button className="icon-btn" title="Фон чата" aria-label="Фон чата" onClick={() => setBgOpen(true)}>
+            <Icon icon={Wallpaper} />
+          </button>
+        )}
         {(view.kind === 'server' || view.kind === 'group') && (
           <button
             className={`icon-btn${membersOpen ? ' on' : ''}`}
@@ -157,6 +166,9 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
         </>
       ) : (
         <div className="empty-state">В этом сервере пока нет текстовых каналов</div>
+      )}
+      {bgOpen && channelId !== null && (
+        <ChatBgDialog channelId={channelId} mode={serverChannel ? 'channel' : 'personal'} canPropose={!!dm || !!group} onClose={() => setBgOpen(false)} />
       )}
       {adding && view.kind === 'group' && (
         <AddMemberDialog target={{ kind: 'group', channelId: view.channelId }} onClose={() => setAdding(false)} />

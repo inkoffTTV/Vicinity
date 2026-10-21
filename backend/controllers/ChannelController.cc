@@ -8,6 +8,10 @@
 #include "../utils/JsonUtils.h"
 #include "../utils/Messages.h"
 #include "../utils/TextUtils.h"
+#include "../utils/Uploads.h"
+#include "../managers/UserRateLimiter.h"
+#include <algorithm>
+#include <set>
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/drogon.h>
 
@@ -29,6 +33,36 @@ static void serverChannelsChanged(int64_t serverId) {
     Broadcast::toServer(serverId, ev);
 }
 
+// Фон канала: {preset} или {image: /uploads/backgrounds/…} плюс dim 0–80 (затемнение, %) и blur; null — убрать.
+// Пресеты — набор клиента (web/src/lib/chatBg.ts), свои картинки — через uploadBackground
+static const std::set<std::string>& bgPresets() {
+    static const std::set<std::string> s = {"lagoon", "dusk", "forest", "ember", "night", "dots", "grid", "waves"};
+    return s;
+}
+static bool cleanBackground(const Json::Value& v, std::string& out, std::string& err) {
+    if (v.isNull()) { out.clear(); return true; }
+    if (!v.isObject()) { err = "Некорректный фон"; return false; }
+    Json::Value o(Json::objectValue);
+    if (v["preset"].isString() && !v["preset"].asString().empty()) {
+        if (!bgPresets().count(v["preset"].asString())) { err = "Неизвестный фон"; return false; }
+        o["preset"] = v["preset"].asString();
+    } else if (v["image"].isString()) {
+        if (!Uploads::isUploadUrl(v["image"].asString(), "backgrounds")) { err = "Некорректная картинка фона"; return false; }
+        o["image"] = v["image"].asString();
+    } else { err = "Укажите фон"; return false; }
+    const int dim = v["dim"].isIntegral() ? v["dim"].asInt() : 40;
+    o["dim"]  = std::clamp(dim, 0, 80);
+    o["blur"] = v["blur"].isBool() && v["blur"].asBool();
+    Json::StreamWriterBuilder w;
+    w["indentation"] = "";
+    out = Json::writeString(w, o);
+    return true;
+}
+static std::string backgroundImage(const std::string& stored) {
+    Json::Value v;
+    if (stored.empty() || !JsonUtils::parse(stored, v) || !v.isObject() || !v["image"].isString()) return "";
+    return v["image"].asString();
+}
 // Управлять каналом сервера может только владелец сервера
 static bool isServerOwner(const orm::DbClientPtr& db, const Access::ChannelInfo& info, int64_t userId) {
     return info.serverId != 0 && Access::serverOwner(db, info.serverId) == userId;
@@ -126,36 +160,84 @@ void ChannelController::leave(const HttpRequestPtr& req,
     }
 }
 
-// POST /api/v1/channels/{id}/update {name} — переименовать беседу (участник) или канал сервера (владелец)
+// POST /api/v1/channels/{id}/update {name?, background?} — переименовать беседу (участник) или канал
+// сервера (владелец); фон — только у канала сервера и только владелец
 void ChannelController::update(const HttpRequestPtr& req,
                                std::function<void(const HttpResponsePtr&)>&& cb,
                                int64_t channelId) {
     int64_t userId = req->attributes()->get<int64_t>("user_id");
     auto json = req->getJsonObject();
     if (!json || !json->isObject()) { cb(error("Invalid JSON", k400BadRequest)); return; }
-    auto name = TextUtils::cleanName(JsonUtils::getStr(*json, "name"), Vicinity::MAX_NAME_LEN);
-    if (!name) { cb(error("Название — от 1 до 64 символов", k400BadRequest)); return; }
+    const bool hasName = json->isMember("name");
+    const bool hasBg   = json->isMember("background");
+    if (!hasName && !hasBg) { cb(error("Нечего менять", k400BadRequest)); return; }
+    std::optional<std::string> name;
+    if (hasName) {
+        name = TextUtils::cleanName(JsonUtils::getStr(*json, "name"), Vicinity::MAX_NAME_LEN);
+        if (!name) { cb(error("Название — от 1 до 64 символов", k400BadRequest)); return; }
+    }
+    std::string bg, bgErr;
+    if (hasBg && !cleanBackground((*json)["background"], bg, bgErr)) { cb(error(bgErr, k400BadRequest)); return; }
 
     auto db = app().getDbClient();
     try {
         Access::ChannelInfo info;
         auto acc = Access::channel(db, channelId, userId, &info);
         if (acc != Access::Result::Ok) { cb(accessError(acc)); return; }
-        if (info.type == "dm") { cb(error("Личную переписку нельзя переименовать", k400BadRequest)); return; }
+        if (hasName && info.type == "dm") { cb(error("Личную переписку нельзя переименовать", k400BadRequest)); return; }
+        if (hasBg && info.serverId == 0) { cb(error("Фон личного чата — личная настройка, она не отправляется на сервер", k400BadRequest)); return; }
         if (info.serverId != 0 && !isServerOwner(db, info, userId)) {
-            cb(error("Переименовать канал может только владелец сервера", k403Forbidden)); return;
+            cb(error("Менять канал может только владелец сервера", k403Forbidden)); return;
         }
-        db->execSqlSync("UPDATE channels SET name = ? WHERE id = ?", *name, channelId);
-
         Json::Value ev = channelEvent("channel_updated", channelId);
-        ev["name"] = *name;
-        Broadcast::toChannel(channelId, ev);
-        if (info.serverId != 0) serverChannelsChanged(info.serverId);
-
         Json::Value resp;
         resp["channel_id"] = static_cast<Json::Int64>(channelId);
-        resp["name"]       = *name;
+        if (hasName) {
+            db->execSqlSync("UPDATE channels SET name = ? WHERE id = ?", *name, channelId);
+            ev["name"] = resp["name"] = *name;
+        }
+        if (hasBg) {
+            auto prev = db->execSqlSync("SELECT background FROM channels WHERE id = ?", channelId);
+            const std::string prevStored = (!prev.empty() && !prev[0]["background"].isNull()) ? prev[0]["background"].as<std::string>() : "";
+            if (bg.empty()) db->execSqlSync("UPDATE channels SET background = NULL WHERE id = ?", channelId);
+            else            db->execSqlSync("UPDATE channels SET background = ? WHERE id = ?", bg, channelId);
+            // Прежняя своя картинка больше никому не нужна
+            const std::string prevImage = backgroundImage(prevStored);
+            if (!prevImage.empty() && prevImage != backgroundImage(bg)) Uploads::removeByUrl(prevImage);
+            ev["background"] = resp["background"] = bg.empty() ? Json::Value(Json::nullValue) : Json::Value(bg);
+        }
+        Broadcast::toChannel(channelId, ev);
+        if (info.serverId != 0) serverChannelsChanged(info.serverId);
         cb(HttpUtils::json(std::move(resp)));
+    } catch (const std::exception& e) {
+        cb(error(e.what(), k500InternalServerError));
+    }
+}
+
+// POST /api/v1/channels/{id}/background (multipart image) — картинка для фона канала, владелец сервера.
+// Возвращает file_url; фон ставится отдельным update {background: {image}}
+void ChannelController::uploadBackground(const HttpRequestPtr& req,
+                                         std::function<void(const HttpResponsePtr&)>&& cb,
+                                         int64_t channelId) {
+    int64_t userId = req->attributes()->get<int64_t>("user_id");
+    auto db = app().getDbClient();
+    try {
+        Access::ChannelInfo info;
+        auto acc = Access::channel(db, channelId, userId, &info);
+        if (acc != Access::Result::Ok) { cb(accessError(acc)); return; }
+        if (info.serverId == 0 || !isServerOwner(db, info, userId)) {
+            cb(error("Фон канала может загрузить только владелец сервера", k403Forbidden)); return;
+        }
+        if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Upload, userId)) {
+            cb(error("Слишком часто, попробуйте позже", k429TooManyRequests)); return;
+        }
+        MultiPartParser parser;
+        if (parser.parse(req) != 0 || parser.getFiles().empty()) { cb(error("Invalid file upload", k400BadRequest)); return; }
+        auto saved = Uploads::saveImage(parser.getFiles()[0], "backgrounds");
+        if (!saved.error.empty()) { cb(error(saved.error, saved.code)); return; }
+        Json::Value resp;
+        resp["file_url"] = saved.url;
+        cb(HttpUtils::json(std::move(resp), k201Created));
     } catch (const std::exception& e) {
         cb(error(e.what(), k500InternalServerError));
     }

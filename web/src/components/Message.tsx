@@ -1,4 +1,6 @@
 import { Copy, Paperclip, Pencil, Pin, PinOff, Plus, Reply, SmilePlus, Trash2 } from 'lucide-react';
+import { parseProposal } from '../lib/chatBg';
+import { BgProposal } from './ChatBackground';
 import { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent, useEffect, useRef, useState } from 'react';
 import { Message, parseTs, Reaction } from '../lib/api';
 import { copyText } from '../lib/clipboard';
@@ -106,6 +108,7 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
   const [fresh] = useState(() => Date.now() - time.getTime() < 8000);
   if (fresh) classes.push('fresh');
   const nameStyle = authorNameStyle(msg);
+  const bgProposal = parseProposal(msg.text);
 
   return (
     <div className={classes.join(' ')} data-mid={msg.id} onClick={onClick} onMouseLeave={() => setPicker(false)}>
@@ -155,7 +158,7 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
           ) : (
             msg.text && (
               <div className={`msg-text${isEmojiOnly(msg.text) ? ' jumbo' : ''}`}>
-                <Markdown text={msg.text} />
+                {bgProposal ? <BgProposal bg={bgProposal} channelId={msg.channel_id} /> : <Markdown text={msg.text} />}
                 {msg.edited && (
                   <span
                     className="msg-edited"

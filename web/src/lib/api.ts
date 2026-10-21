@@ -278,6 +278,16 @@ export interface ServerChannel {
   id: number;
   name: string;
   is_voice: number;
+  /** Фон канала (JSON ChatBg) — ставит владелец, видят все; нет у старых серверов */
+  background?: string | null;
+}
+
+/** Фон чата: готовый пресет (lib/chatBg.ts) или своя картинка из /uploads/backgrounds/, затемнение 0–80 % и размытие */
+export interface ChatBg {
+  preset?: string;
+  image?: string;
+  dim?: number;
+  blur?: boolean;
 }
 
 export interface Member extends UserSummary {
@@ -636,6 +646,21 @@ export const api = {
   /** Переименовать беседу или канал сервера */
   renameChannel: (channelId: number, name: string) =>
     post<{ channel_id: number; name: string }>(`/channels/${channelId}/update`, { name }),
+  /** Фон канала сервера (владелец); null — убрать */
+  setChannelBackground: (channelId: number, background: ChatBg | null) =>
+    post<{ channel_id: number; background: string | null }>(`/channels/${channelId}/update`, { background }),
+  /** Картинка для фона канала (владелец) → её url для setChannelBackground */
+  uploadChannelBackground: (channelId: number, file: File) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return request<{ file_url: string }>('POST', `/channels/${channelId}/background`, fd);
+  },
+  /** Картинка для личного фона чата → url; сам фон хранится у клиента */
+  uploadChatBackground: (file: File) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return request<{ file_url: string }>('POST', '/profile/chat_background', fd);
+  },
   /** Удалить канал сервера (владелец) или беседу (её владелец) */
   deleteChannel: (channelId: number) => del(`/channels/${channelId}`),
   leaveGroup: (channelId: number) => post(`/channels/${channelId}/leave`),

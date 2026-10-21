@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp } from 'lucide-react';
+import { ChatBgLayer } from './ChatBackground';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Message, parseTs } from '../lib/api';
 import { canManagePins, usePins } from '../lib/pins';
@@ -206,6 +207,7 @@ export function MessageList({ channelId }: { channelId: number }) {
 
   return (
     <div className="messages-wrap">
+      <ChatBgLayer channelId={channelId} />
       <div className="messages" ref={scrollRef} onScroll={onScroll} role="log" aria-label="Сообщения">
         {messages.length === 0 && <div className="empty-state">Здесь пока пусто — напишите первым!</div>}
         {hasMore === true && (
