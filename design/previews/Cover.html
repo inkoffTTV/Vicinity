@@ -1,0 +1,36 @@
+<!-- @dsCard height=288 -->
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400&family=Unbounded:wght@700&display=swap">
+<style>
+  html,body{margin:0;background:var(--bg-ground);color:var(--text)}
+  .cover{position:relative;width:960px;height:288px;overflow:hidden}
+  .name{position:absolute;left:32px;bottom:56px;width:440px;font-family:var(--font-display);font-weight:700;font-size:88px;line-height:.92;letter-spacing:-1px;color:var(--text)}
+  .tag{position:absolute;left:34px;bottom:20px;width:440px;font-family:var(--font-sans);font-size:13px;line-height:16px;color:var(--text-2)}
+  svg{position:absolute;inset:0}
+  .acc{fill:var(--accent)} .on{fill:var(--on-accent)} .idle{fill:var(--idle)} .raised{fill:var(--bg-raised)} .dnd{fill:var(--dnd)}
+  .ring{fill:none;stroke:var(--accent);stroke-width:2}
+  .ringon{fill:none;stroke:var(--on-accent);stroke-width:2}
+  .tile{rx:var(--radius-md)} .slab{rx:var(--radius-lg)} .chip{rx:var(--radius-sm)}
+</style></head><body>
+<div class="cover">
+<!--
+blocks: accent slab 192×288 (space-12×4 × height) at x=480 bleeding off the top, rx radius-lg; on-accent tile 96×96 (space-12×2) rx radius-md; idle tile 144×96 (space-12×3 × space-12×2) rx radius-md; bg-raised slab 192×144 rx radius-lg; dnd chip 48×24 (space-12 × space-6) rx radius-sm — ≈ 45% of the cover
+arrangement: one tall accent slab with satellites staggered to its right, grid pitch space-2 (8px), blocks bleeding off top and right edges — panels on a ground with a gap, as the app itself
+pattern: concentric arcs (quarter-rings) — Vicinity means «окрестность»: the radius around you; chosen because the README's identity is proximity, and the arcs are built from the radius scale (18/36/54/72 = radius-lg × 1..4)
+scales: space-2 gap, space-6/space-12 sides, radius-sm / radius-md / radius-lg; strokes 2px = presence ring width
+-->
+<svg viewBox="0 0 960 288" width="960" height="288" aria-hidden="true">
+  <defs><clipPath id="slab"><rect x="480" y="-18" width="192" height="306" rx="18"/></clipPath><clipPath id="raised"><rect x="680" y="112" width="296" height="144" rx="18"/></clipPath></defs>
+  <rect class="acc slab" x="480" y="-18" width="192" height="306"/>
+  <g class="ringon" clip-path="url(#slab)"><circle cx="480" cy="288" r="18"/><circle cx="480" cy="288" r="36"/><circle cx="480" cy="288" r="54"/><circle cx="480" cy="288" r="72"/></g>
+  <rect class="on tile" x="680" y="8" width="96" height="96"/>
+  <rect class="idle tile" x="784" y="8" width="192" height="96"/>
+  <rect class="raised slab" x="680" y="112" width="296" height="144"/>
+  <g class="ring" clip-path="url(#raised)"><circle cx="976" cy="256" r="18"/><circle cx="976" cy="256" r="36"/><circle cx="976" cy="256" r="54"/><circle cx="976" cy="256" r="72"/><circle cx="976" cy="256" r="90"/></g>
+  <rect class="dnd chip" x="680" y="264" width="48" height="24"/>
+  <rect class="acc chip" x="736" y="264" width="24" height="24"/>
+</svg>
+<div class="name">Vicinity</div>
+<div class="tag">Панели на земле и воздух между ними — для web и Qt.</div>
+</div>
+</body></html>

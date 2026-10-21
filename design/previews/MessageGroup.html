@@ -1,0 +1,43 @@
+<!-- @dsCard group="Лента" height=400 subtitle="Плоская лента: группа, упоминание, ответ, реакции, статусы" -->
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="../components.css"></head><body>
+
+<div class="vc-stage" style="padding:16px"><div class="vc-panel vc-panel--tight vc-feed" style="position:relative;padding-bottom:16px">
+  <div class="vc-divider">Сегодня</div>
+  <div class="vc-msg-group">
+    <div class="vc-avatar " style="background:var(--idle)">А<i class="vc-presence vc-presence--online"></i></div>
+    <div>
+      <div class="vc-msg-head"><span class="vc-msg-author">Аня</span><span class="vc-msg-time">18:40</span></div>
+      <div class="vc-msg-text">Скинула макеты в <a href="#">figma.com/file/vicinity</a>, посмотрите панель участников — там новая сетка.</div>
+    </div>
+  </div>
+  <div class="vc-msg">
+    <div class="vc-msg-gutter">18:41</div>
+    <div class="vc-msg-text">И ещё: кнопка rail теперь <code>radius-md</code> в активном состоянии <span class="vc-msg-edited">(изменено)</span></div>
+    <div class="vc-msg-actions vc-msg-actions--show"><button aria-label="Реакция"><svg class="vc-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 10h.01M15 10h.01"/></svg></button><button aria-label="Ответить"><svg class="vc-icon" viewBox="0 0 24 24"><path d="M9 7 4 12l5 5M4 12h9a6 6 0 0 1 6 6v1"/></svg></button><button aria-label="Закрепить"><svg class="vc-icon" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3H7l3-3zM12 13v7"/></svg></button><button aria-label="Ещё"><svg class="vc-icon" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/></svg></button></div>
+  </div>
+  <div class="vc-msg-group vc-msg--mention">
+    <div class="vc-avatar " style="background:var(--dnd)">М<i class="vc-presence vc-presence--dnd"></i></div>
+    <div>
+      <div class="vc-msg-head"><span class="vc-msg-author">Миша</span><span class="vc-msg-time">18:44</span></div>
+      <div class="vc-reply"><div class="vc-reply-body"><div class="vc-reply-author">Аня</div><div class="vc-reply-text">Скинула макеты в figma.com/file/vicinity, посмотрите панель участников</div></div></div>
+      <div class="vc-msg-text"><span class="vc-mention">@Степан</span> глянь сетку, у тебя в QML она на 4px сдвинута</div>
+      <div class="vc-reactions"><button class="vc-reaction vc-reaction--mine"><span class="vc-emoji">👀</span>3</button><button class="vc-reaction"><span class="vc-emoji">🔥</span>1</button><button class="vc-reaction vc-reaction--add"><svg class="vc-icon" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+    </div>
+  </div>
+  <div class="vc-divider vc-divider--unread">Непрочитанные</div>
+  <div class="vc-msg-group vc-msg--new">
+    <div class="vc-avatar " >С<i class="vc-presence vc-presence--online"></i></div>
+    <div>
+      <div class="vc-msg-head"><span class="vc-msg-author">Степан</span><span class="vc-msg-time">18:46</span></div>
+      <div class="vc-msg-text">Вижу, поправлю после созвона</div>
+      <div class="vc-msg-status vc-msg-status--read"><svg class="vc-icon" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg><svg class="vc-icon" style="width:14px;height:14px;margin-left:-9px" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg> прочитано</div>
+    </div>
+  </div>
+  <div class="vc-msg">
+    <div class="vc-msg-gutter"></div>
+    <div><div class="vc-msg-text">А вот это не ушло</div>
+    <div class="vc-msg-status vc-msg-status--failed"><svg class="vc-icon" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M12 3 2 20h20zM12 9v5M12 17h.01"/></svg> Не отправлено · <button>Повторить</button></div></div>
+  </div>
+  <button class="vc-jump"><svg class="vc-icon" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M12 5v14m-6-6 6 6 6-6"/></svg> 3 новых</button>
+</div></div>
+</body></html>

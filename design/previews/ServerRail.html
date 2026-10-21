@@ -1,0 +1,15 @@
+<!-- @dsCard group="Навигация" height=300 subtitle="Дом, серверы, бейджи; активный — radius-md" -->
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="../components.css"></head><body>
+
+<div class="vc-stage">
+  <div class="vc-rail">
+    <button class="vc-rail-item vc-rail-item--home" aria-label="Личные сообщения"><img src="../vicinity-mark.svg" alt="" style="width:28px;height:28px;border-radius:0"></button>
+    <div class="vc-rail-sep"></div>
+    <button class="vc-rail-item vc-rail-item--active" aria-label="Vicinity">V</button>
+    <button class="vc-rail-item" aria-label="Клякса" style="background:var(--idle);color:var(--on-accent)">К<span class="vc-badge vc-badge--mention">3</span></button>
+    <button class="vc-rail-item" aria-label="Игры">И</button>
+    <button class="vc-rail-item" aria-label="Добавить сервер" style="color:var(--accent)"><svg class="vc-icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+  </div>
+  <div class="vc-panel" style="max-width:300px;font-size:14px;line-height:20px;color:var(--text-2)">Неактивный сервер — круг. При наведении и в активном состоянии форма сжимается до <b style="color:var(--text);font-weight:500">radius-md</b> за <b style="color:var(--text);font-weight:500">dur-base</b>; слева вырастает маркер. Упоминания — бейдж <b style="color:var(--text);font-weight:500">dnd</b>, просто непрочитанное — маркер без числа.</div>
+</div>
+</body></html>
