@@ -557,7 +557,7 @@ button.side-head:hover {
   width: 24px;
   text-align: center;
   color: var(--text-3);
-  font-size: 18px;
+  font-size: var(--fs-title);
   flex-shrink: 0;
 }
 
@@ -2729,7 +2729,7 @@ label.plain-label {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--bg-panel);
   transition: transform var(--dur-fast);
 }
 .switch:checked {
@@ -2872,7 +2872,7 @@ label.plain-label {
 }
 .invite-card h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--fs-title);
   overflow-wrap: anywhere;
 }
 .invite-card-icon {
@@ -3506,10 +3506,10 @@ button:hover > .ico.anim-bounce {
   z-index: 120;
   display: flex;
   flex-direction: column;
-  background: #111214;
-  color: #f2f3f5;
+  background: var(--bg-ground);
+  color: var(--text);
   border-radius: var(--radius-md);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-modal);
   overflow: hidden;
   animation: fade var(--dur-fast) ease-out;
 }
@@ -3534,11 +3534,11 @@ button:hover > .ico.anim-bounce {
   flex-wrap: wrap;
 }
 .call-top .icon-btn {
-  color: #b5bac1;
+  color: var(--text-2);
 }
 .call-top .icon-btn.on {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  background: var(--bg-active);
 }
 .call-status {
   font-variant-numeric: tabular-nums;
@@ -3552,13 +3552,13 @@ button:hover > .ico.anim-bounce {
 .call-net.net-good { color: var(--ok); }
 .call-net.net-fair { color: var(--idle); }
 .call-net.net-poor { color: var(--dnd); }
-.call-net.net-unknown { color: #949ba4; }
+.call-net.net-unknown { color: var(--text-3); }
 .call-tag {
   font-size: var(--fs-micro);
   padding: 0 6px;
   border-radius: var(--radius-xs);
-  background: rgba(255, 255, 255, 0.1);
-  color: #b5bac1;
+  background: var(--bg-hover);
+  color: var(--text-2);
 }
 .call-stage {
   position: relative;
@@ -3568,7 +3568,7 @@ button:hover > .ico.anim-bounce {
   place-items: center;
   margin: 0 12px;
   border-radius: var(--radius-md);
-  background: #0b0c0e;
+  background: var(--bg-ground);
   overflow: hidden;
 }
 .call-stage.full {
@@ -3592,7 +3592,7 @@ button:hover > .ico.anim-bounce {
   text-align: center;
 }
 .call-peer-avatar .avatar {
-  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.04);
+  box-shadow: 0 0 0 6px var(--border);
 }
 .call-peer-avatar.ringing .avatar {
   animation: ring-pulse 1.4s ease-out infinite;
@@ -3636,8 +3636,8 @@ button:hover > .ico.anim-bounce {
   aspect-ratio: 16 / 9;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background: #1e1f22;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-modal);
   outline: 2px solid transparent;
   transition: outline-color var(--dur-fast), transform var(--dur-fast);
   display: grid;
@@ -3710,24 +3710,24 @@ button:hover > .ico.anim-bounce {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  background: #2b2d31;
-  color: #f2f3f5;
+  background: var(--bg-raised);
+  color: var(--text);
   display: inline-grid;
   place-items: center;
   transition: background var(--dur-fast), color var(--dur-fast);
 }
 .call-btn:hover,
 .stage-btn:hover {
-  background: #3f4147;
+  background: var(--bg-active);
 }
 .call-btn.on,
 .stage-btn.on {
-  background: #f2f3f5;
-  color: #111214;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 .call-btn.off,
 .stage-btn.off {
-  background: color-mix(in srgb, var(--danger) 45%, #2b2d31);
+  background: color-mix(in srgb, var(--danger) 45%, var(--bg-raised));
 }
 .call-btn.hangup,
 .stage-btn.hangup {
@@ -3738,7 +3738,7 @@ button:hover > .ico.anim-bounce {
 }
 .call-btn.hangup:hover,
 .stage-btn.hangup:hover {
-  background: #a12828;
+  background: color-mix(in srgb, var(--danger) 80%, var(--bg-ground));
 }
 .stage-btn:disabled {
   opacity: 0.45;
@@ -3758,8 +3758,8 @@ button:hover > .ico.anim-bounce {
   transform: translateX(-50%);
   padding: 0 5px;
   border-radius: var(--radius-xs);
-  background: #4e5058;
-  color: #fff;
+  background: var(--bg-raised);
+  color: var(--text);
   font-size: var(--fs-micro);
   font-weight: 800;
   line-height: 14px;
@@ -3776,11 +3776,11 @@ button:hover > .ico.anim-bounce {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #4e5058;
-  color: #fff;
+  background: var(--bg-raised);
+  color: var(--text);
   display: grid;
   place-items: center;
-  box-shadow: 0 0 0 2px #111214;
+  box-shadow: 0 0 0 2px var(--bg-ground);
 }
 .screen-ctl-more:hover {
   background: var(--accent);
@@ -3926,16 +3926,16 @@ button:hover > .ico.anim-bounce {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: #111214;
-  color: #f2f3f5;
+  background: var(--bg-ground);
+  color: var(--text);
 }
 .voice-stage .chat-head {
-  background: #111214;
-  border-bottom-color: rgba(255, 255, 255, 0.06);
-  color: #f2f3f5;
+  background: var(--bg-ground);
+  border-bottom-color: var(--border);
+  color: var(--text);
 }
 .voice-stage .icon-btn {
-  color: #b5bac1;
+  color: var(--text-2);
   display: inline-grid;
   place-items: center;
 }
@@ -3959,7 +3959,7 @@ button:hover > .ico.anim-bounce {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #b5bac1;
+  color: var(--text-2);
   font-size: var(--fs-label);
   margin-right: 6px;
 }
@@ -4014,7 +4014,7 @@ button:hover > .ico.anim-bounce {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #b5bac1;
+  color: var(--text-2);
 }
 .stage-stream-bar {
   position: absolute;
@@ -4082,7 +4082,7 @@ button:hover > .ico.anim-bounce {
   position: relative;
   aspect-ratio: 16 / 10;
   border-radius: var(--radius-md);
-  background: #1e1f22;
+  background: var(--bg-panel);
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -4097,7 +4097,7 @@ button:hover > .ico.anim-bounce {
   outline-color: var(--ok);
 }
 .stage-tile.live {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--dnd) 18%, #1e1f22), #1e1f22 60%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--dnd) 18%, var(--bg-panel)), var(--bg-panel) 60%);
 }
 .stage-tile-video {
   position: absolute;
@@ -4133,7 +4133,7 @@ button:hover > .ico.anim-bounce {
   color: var(--dnd);
 }
 .stage-tile-flag:has(.lucide-video) {
-  color: #b5bac1;
+  color: var(--text-2);
 }
 .stage-live {
   position: absolute;
@@ -4145,7 +4145,7 @@ button:hover > .ico.anim-bounce {
   top: 8px;
   right: 8px;
   font-size: var(--fs-micro);
-  color: #b5bac1;
+  color: var(--text-2);
 }
 .stage-watch {
   position: absolute;
@@ -4171,10 +4171,10 @@ button:hover > .ico.anim-bounce {
 .stage-viewers {
   text-align: center;
   padding: 0 16px 10px;
-  color: #949ba4;
+  color: var(--text-3);
 }
 .voice-stage .screen-ctl-more {
-  box-shadow: 0 0 0 2px #111214;
+  box-shadow: 0 0 0 2px var(--bg-ground);
 }
 @media (max-width: 760px) {
   .stage-body {
@@ -4550,7 +4550,7 @@ a:focus-visible > .ico {
     margin-bottom: 10px;
   }
   .settings-modal > .modal-head h2 {
-    font-size: 18px;
+    font-size: var(--fs-title);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -4616,7 +4616,7 @@ a:focus-visible > .ico {
   gap: 2px;
 }
 .admin-stats strong {
-  font-size: 22px;
+  font-size: var(--fs-title);
   font-variant-numeric: tabular-nums;
 }
 .admin-search {
@@ -4705,7 +4705,7 @@ a:focus-visible > .ico {
   display: grid;
   place-items: center;
   border-radius: var(--radius-sm);
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text);
 }
 .act-cover.md {
   aspect-ratio: 16 / 9;
@@ -4729,7 +4729,7 @@ a:focus-visible > .ico {
   display: grid;
   place-items: center;
   padding: 16px;
-  background: rgba(8, 10, 14, 0.72);
+  background: var(--scrim);
   animation: vc-fade var(--dur-base) ease;
 }
 .act-window {
@@ -4739,7 +4739,7 @@ a:focus-visible > .ico {
   height: min(860px, 100%);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: #0d0a12;
+  background: var(--bg-ground);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
 }
@@ -4762,13 +4762,13 @@ a:focus-visible > .ico {
   flex: 1;
   width: 100%;
   border: 0;
-  background: #0d0a12;
+  background: var(--bg-ground);
 }
 /* Игра на весь экран (или на всё окно, где браузер не даёт полноэкранный режим) */
 .act-layer.full {
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px)
     env(safe-area-inset-left, 0px);
-  background: #0d0a12;
+  background: var(--bg-ground);
 }
 .act-layer.full .act-window {
   width: 100%;

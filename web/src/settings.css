@@ -169,7 +169,7 @@
   margin: 0;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 22px;
+  font-size: var(--fs-title);
   line-height: 28px;
 }
 .settings-head p {

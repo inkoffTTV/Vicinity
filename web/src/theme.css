@@ -368,7 +368,7 @@ select {
   gap: 12px;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 22px;
+  font-size: var(--fs-title);
 }
 .auth-mark {
   width: 44px;
@@ -781,7 +781,7 @@ select {
   margin: 0;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: var(--fs-title);
   font-weight: 700;
   text-align: left;
 }
