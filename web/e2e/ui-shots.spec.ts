@@ -52,9 +52,14 @@ for (const [name, viewport, colorScheme] of [
     await shot('settings-account');
     await page.locator('.settings-main-body').evaluate((el) => (el.scrollTop = el.scrollHeight));
     await shot('settings-account-bottom');
-    await settingsTab(a, 'Тема').click();
+    // Телефон показывает либо список разделов, либо раздел: к следующему — через «К разделам»
+    const toTab = async (name: string) => {
+      if (mobile) await page.locator('.settings-main').getByRole('button', { name: 'К разделам' }).click();
+      await settingsTab(a, name).click();
+    };
+    await toTab('Внешний вид');
     await shot('settings-appearance');
-    await settingsTab(a, 'Голос и видео').click();
+    await toTab('Голос и видео');
     await shot('settings-voice');
     await page.keyboard.press('Escape');
 
