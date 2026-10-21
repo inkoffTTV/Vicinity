@@ -48,6 +48,7 @@ export function cardFromProfile(p: Profile, ext: ProfileExt, presence: Profile['
     badges: p.badges,
     badge: p.badge ?? null,
     badge_pick: ext.badge_pick,
+    music: ext.music,
     connections: ext.connections,
     // Рамки и эффекты профиля убраны из оформления — старые значения не показываем
     frame: null,

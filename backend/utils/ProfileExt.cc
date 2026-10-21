@@ -99,6 +99,20 @@ static const std::set<std::string>& gameTags() {
 static const char* tierName(int t) { return t >= 3 ? "Ultra" : t == 2 ? "Standard" : "Basic"; }
 
 // Короткая строка без управляющих символов; пустая — допустима
+// https-ссылка на один из хостов каталога (обложки — mzstatic.com, превью и страница — apple.com)
+static bool catalogUrl(const Json::Value& v, std::string& out, bool required) {
+    out.clear();
+    if (!v.isString()) return !required;
+    const std::string s = v.asString();
+    if (s.empty()) return !required;
+    if (s.size() > 500 || s.rfind("https://", 0) != 0 || s.find_first_of(" \"'<>") != std::string::npos) return false;
+    const size_t hostEnd = s.find('/', 8);
+    const std::string host = s.substr(8, hostEnd == std::string::npos ? std::string::npos : hostEnd - 8);
+    auto ends = [&](const char* suf) { const std::string x(suf); return host.size() > x.size() && host.compare(host.size() - x.size(), x.size(), x) == 0; };
+    if (!ends(".mzstatic.com") && !ends(".apple.com")) return false;
+    out = s;
+    return true;
+}
 static bool cleanText(const Json::Value& v, size_t maxChars, std::string& out) {
     if (v.isNull()) { out.clear(); return true; }
     if (!v.isString()) return false;
@@ -166,6 +180,27 @@ bool sanitize(const Json::Value& in, int tier, const Json::Value& memberServerId
         for (const auto& id : memberServerIds) member = member || id.asInt64() == badge.asInt64();
         if (!member) { error = "Бейджиком можно поставить только сервер, в котором вы состоите"; return false; }
         out["badge_server"] = static_cast<Json::Int64>(badge.asInt64());
+    }
+
+    // Трек в профиле — из каталога через /music/search; только ссылки на хосты каталога
+    out["music"] = Json::nullValue;
+    if (in["music"].isObject()) {
+        const Json::Value& m = in["music"];
+        Json::Value t(Json::objectValue);
+        std::string title, artist, album, artwork, preview, url;
+        if (!cleanText(m["title"], 120, title) || title.empty() || !cleanText(m["artist"], 120, artist) || artist.empty()
+            || !cleanText(m["album"], 120, album)) { error = "Некорректный трек"; return false; }
+        if (!catalogUrl(m["artwork"], artwork, false) || !catalogUrl(m["preview"], preview, false) || !catalogUrl(m["url"], url, false)) {
+            error = "Некорректные ссылки трека"; return false;
+        }
+        t["id"]      = m["id"].isIntegral() ? static_cast<Json::Int64>(m["id"].asInt64()) : 0;
+        t["title"]   = title;
+        t["artist"]  = artist;
+        t["album"]   = album;
+        t["artwork"] = artwork;
+        t["preview"] = preview;
+        t["url"]     = url;
+        out["music"] = t;
     }
 
     // Значок из набора

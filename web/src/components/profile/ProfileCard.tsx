@@ -1,6 +1,6 @@
-import { ExternalLink } from 'lucide-react';
-import { ReactNode } from 'react';
-import { Connection, Presence } from '../../lib/api';
+import { ExternalLink, Music, Pause, Play } from 'lucide-react';
+import { ReactNode, useEffect, useState } from 'react';
+import { Connection, MusicTrack, Presence } from '../../lib/api';
 import { connectionType } from '../../lib/cosmetics';
 import { badgeById } from '../../lib/badges';
 import { NameStyle, nameCss } from '../../lib/nameStyle';
@@ -28,6 +28,8 @@ export interface CardData {
   badge: { id: number; name: string; icon: string; tag?: string; tag_icon?: string } | null;
   /** Значок из набора (lib/badges.ts) */
   badge_pick: string | null;
+  /** Трек из каталога */
+  music: MusicTrack | null;
   connections: Connection[];
   frame: string | null;
   effect: string | null;
@@ -54,6 +56,62 @@ export function ConnectionTile({ type }: { type: string }) {
         t.mark
       )}
     </span>
+  );
+}
+
+/* Один общий плеер превью: второй трек останавливает первый */
+let player: HTMLAudioElement | null = null;
+let playing = '';
+const listeners = new Set<() => void>();
+function togglePreview(url: string) {
+  if (!player) {
+    player = new Audio();
+    player.addEventListener('ended', () => {
+      playing = '';
+      listeners.forEach((l) => l());
+    });
+  }
+  if (playing === url) {
+    player.pause();
+    playing = '';
+  } else {
+    player.src = url;
+    playing = url;
+    void player.play().catch(() => {
+      playing = '';
+      listeners.forEach((l) => l());
+    });
+  }
+  listeners.forEach((l) => l());
+}
+
+/** Трек в карточке: обложка, название, 30-секундное превью и ссылка на страницу в каталоге */
+export function MusicWidget({ track }: { track: MusicTrack }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const l = () => tick((n) => n + 1);
+    listeners.add(l);
+    return () => void listeners.delete(l);
+  }, []);
+  const on = playing === track.preview && !!track.preview;
+  return (
+    <div className="pcard-music">
+      {track.artwork ? <img className="pcard-music-art" src={track.artwork} alt="" /> : <span className="pcard-music-art" aria-hidden="true"><Icon icon={Music} size={18} /></span>}
+      <div className="grow">
+        <strong className="ellipsis">{track.title}</strong>
+        <span className="muted small ellipsis">{track.artist}</span>
+      </div>
+      {track.preview && (
+        <button type="button" className="icon-btn" aria-label={on ? 'Пауза' : 'Слушать превью'} aria-pressed={on} onClick={() => togglePreview(track.preview)}>
+          <Icon icon={on ? Pause : Play} size={18} />
+        </button>
+      )}
+      {track.url && (
+        <a className="icon-btn" href={track.url} target="_blank" rel="noopener noreferrer nofollow" aria-label="Открыть в каталоге" title="Открыть в каталоге">
+          <Icon icon={ExternalLink} size={16} />
+        </a>
+      )}
+    </div>
   );
 }
 
@@ -134,6 +192,12 @@ export function ProfileCard({ d, actions, onBadge }: { d: CardData; actions?: Re
           <h4>В Vicinity с</h4>
           <p>{d.created_at.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </section>
+        {d.music && (
+          <section>
+            <h4>Музыка</h4>
+            <MusicWidget track={d.music} />
+          </section>
+        )}
         {d.connections.length > 0 && (
           <section>
             <h4>Подключения</h4>

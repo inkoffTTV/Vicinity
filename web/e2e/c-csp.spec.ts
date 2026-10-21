@@ -10,7 +10,8 @@ test('nginx config: backend resolved per request, gzip, security headers', () =>
   expect(nginxConf).toMatch(/resolver 127\.0\.0\.11 valid=10s ipv6=off;/);
   const proxied = [...nginxConf.matchAll(/proxy_pass (\S+);/g)].map((m) => m[1]);
   expect(proxied.length).toBeGreaterThanOrEqual(3);
-  expect(new Set(proxied)).toEqual(new Set(['$backend']));
+  // Бэкенд — через переменную (адрес резолвится на каждый запрос); Переправа — свой контейнер, только ws
+  expect(new Set(proxied)).toEqual(new Set(['$backend', '$pereprava/ws']));
   expect(nginxConf).toMatch(/location = \/ws \{[^}]*proxy_set_header Upgrade \$http_upgrade;[^}]*access_log off;/);
   expect(nginxConf).toMatch(/gzip on;/);
   expect(nginxConf).toMatch(/set_real_ip_from 172\.16\.0\.0\/12;\s+real_ip_header X-Forwarded-For;/);

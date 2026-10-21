@@ -1696,3 +1696,79 @@ button.server-tag:hover {
 .conn-tile svg {
   display: block;
 }
+
+/* Музыка в профиле: обложка из каталога, превью, ссылка */
+.pcard-music {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+}
+.pcard-music .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pcard-music-art {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--bg-input);
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+}
+.pcard-music .icon-btn[aria-pressed='true'] {
+  color: var(--accent);
+}
+.studio-music-current {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.studio-music-current .pcard-music {
+  flex: 1;
+  min-width: 0;
+}
+.music-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.music-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.music-results li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.music-results li:hover {
+  background: var(--bg-hover);
+}
+.music-results img {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-xs);
+  object-fit: cover;
+  background: var(--bg-input);
+}
+.music-results .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}

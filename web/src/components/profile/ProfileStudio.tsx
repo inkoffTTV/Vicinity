@@ -2,6 +2,8 @@ import { Ban, X } from 'lucide-react';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { BADGES } from '../../lib/badges';
+import { MusicSearch } from './MusicSearch';
+import { MusicWidget } from './ProfileCard';
 import { ApiError, Connection, EMPTY_EXT, normalizeExt, parseTs, Presence, Profile, ProfileExt, api } from '../../lib/api';
 import { CONNECTIONS } from '../../lib/cosmetics';
 import { nameCss } from '../../lib/nameStyle';
@@ -161,6 +163,7 @@ export function ProfileStudio() {
     badges: profile?.badges ?? [],
     badge: badge ? { id: badge.id, name: badge.name, icon: badge.icon ?? '', tag: badge.tag, tag_icon: badge.tag_icon } : null,
     badge_pick: ext.badge_pick,
+    music: ext.music,
     connections: ext.connections,
     frame: null,
     effect: null,
@@ -259,6 +262,19 @@ export function ProfileStudio() {
               Цвет профиля (ник в чатах с Basic)
               <input type="color" value={accent} onChange={(e) => touch(setAccent)(e.target.value)} />
             </label>
+          </Section>
+
+          <Section title="Музыка">
+            <p className="muted small">Трек из каталога — с обложкой и 30-секундным превью в карточке.</p>
+            {ext.music ? (
+              <div className="studio-music-current">
+                <MusicWidget track={ext.music} />
+                <button type="button" className="btn small" onClick={() => editExt({ ...ext, music: null })}>
+                  Убрать
+                </button>
+              </div>
+            ) : null}
+            <MusicSearch onPick={(t) => editExt({ ...ext, music: t })} />
           </Section>
 
           <Section title="Значок">

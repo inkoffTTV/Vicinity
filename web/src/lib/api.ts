@@ -418,11 +418,32 @@ export interface Connection {
   url: string;
 }
 
+/** Трек из каталога: 30-секундное превью и обложка (GET /music/search) */
+export interface MusicTrack {
+  id: number;
+  title: string;
+  artist: string;
+  album: string;
+  artwork: string;
+  preview: string;
+  url: string;
+}
+
+export function parseTrack(v: unknown): MusicTrack | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.title !== 'string' || !o.title || typeof o.artist !== 'string') return null;
+  const str = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : '');
+  return { id: typeof o.id === 'number' ? o.id : 0, title: o.title, artist: o.artist, album: str('album'), artwork: str('artwork'), preview: str('preview'), url: str('url') };
+}
+
 /** Расширенный профиль (POST /profile/extras, docs/API.md §10.1) */
 export interface ProfileExt {
   badge_server: number | null;
   /** Значок из набора lib/badges.ts */
   badge_pick: string | null;
+  /** Трек в карточке профиля — из каталога (api.musicSearch) */
+  music: MusicTrack | null;
   frame: string | null;
   effect: string | null;
   /** Стиль ника (lib/nameStyle.ts) */
@@ -441,6 +462,7 @@ export interface ProfileExt {
 export const EMPTY_EXT: ProfileExt = {
   badge_server: null,
   badge_pick: null,
+  music: null,
   frame: null,
   effect: null,
   name_style: null,
@@ -455,6 +477,7 @@ export function normalizeExt(e: Partial<ProfileExt> | undefined | null): Profile
   return {
     badge_server: e?.badge_server ?? null,
     badge_pick: typeof e?.badge_pick === 'string' && e.badge_pick ? e.badge_pick : null,
+    music: parseTrack(e?.music),
     frame: e?.frame ?? null,
     effect: e?.effect ?? null,
     name_style: parseNameStyle(e?.name_style),
@@ -765,6 +788,8 @@ export const api = {
   },
   clearMedia: (field: 'avatar' | 'banner') => post('/profile/clear_media', { field }),
   saveProfileExt: (ext: ProfileExt) => post<ProfileExt>('/profile/extras', ext),
+  /** Поиск трека для профиля по каталогу (через сервер) */
+  musicSearch: (q: string) => get<{ tracks: MusicTrack[] }>(`/music/search?q=${encodeURIComponent(q)}`).then((r) => r.tracks),
   searchGames: (q: string) => get<{ games: Game[] }>(`/games/search?q=${encodeURIComponent(q)}`).then((r) => r.games),
 
   // ── Ответы, прочитанное, поиск, закрепы, участники бесед (docs/API.md §2–§7) ──

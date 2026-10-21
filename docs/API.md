@@ -271,6 +271,7 @@ POST `/profile/extras` — расширенный профиль целиком 
 |---|---|
 | `badge_server` | null | id сервера, где пользователь состоит (иначе 400) |
 | `badge_pick` | null | значок из набора клиента: `star`, `flame`, `heart`, `gamepad`, `code`, `music`, `camera`, `palette`, `rocket`, `coffee`, `moon`, `leaf` (иначе 400) |
+| `music` | null | трек из каталога `{id, title ≤ 120, artist ≤ 120, album ≤ 120, artwork, preview, url}`; ссылки — только https на `*.mzstatic.com` / `*.apple.com` (иначе 400). Поиск: `GET /music/search?q=…` → `{tracks: [...]}` (через сервер, кэш 10 мин, лимит как у поиска) |
 | `frame` | null | `neon`, `gold`, `ice` (Basic), `fire` (Standard), `rainbow` (Ultra) |
 | `effect` | null | `stars`, `aurora`, `snow`, `glint` (Ultra) |
 | `name_style` | null | `gradient`, `neon`, `metal`, `flame` (Standard), `aurora` (Ultra) |

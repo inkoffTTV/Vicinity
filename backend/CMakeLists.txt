@@ -21,6 +21,7 @@ add_executable(VicinityServer
     controllers/ReadController.cc
     controllers/RoleController.cc
     controllers/RtcController.cc
+    controllers/MusicController.cc
     controllers/SearchController.cc
     controllers/ServerController.cc
     controllers/SettingsController.cc
