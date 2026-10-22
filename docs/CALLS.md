@@ -104,6 +104,11 @@ WebSocket binary message = raw PCM payload, nothing else
 
 **Capture path**
 1. `getUserMedia({audio:{channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:true}})`. Do this from a user gesture ("Join") and resume the `AudioContext` there.
+   Optional RNNoise (Settings → Voice → «Нейросетевое шумоподавление»): `openMic()` in `web/src/lib/media.ts` routes the
+   microphone through `public/worklets/voice-denoise.js` (RNNoise wasm from `@shiguredo/rnnoise-wasm`, served as
+   `/worklets/rnnoise.js`, 480-sample frames at 48 kHz, one frame of latency); the same processed stream feeds voice
+   channels and 1:1 calls. If the worklet or the model fails to load, the raw microphone is used and the settings screen
+   shows the error.
 2. `AudioWorklet` capture processor: downmix to mono, resample to 16 000 Hz, then build 320-sample `Int16Array`s.
    - Clamp with `Math.max(-1, Math.min(1, x)) * 32767`.
    - Apply the mic-gain slider before converting.

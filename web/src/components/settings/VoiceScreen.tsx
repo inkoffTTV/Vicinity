@@ -12,6 +12,7 @@ import {
   micConstraints,
   NoiseMode,
   stopStream,
+  useDenoise,
   TIER_NAMES,
   useMediaPrefs,
 } from '../../lib/media';
@@ -185,6 +186,7 @@ const SCREEN_FALLBACK = [
 
 /** Настройки → Голос и видео (макет 03): устройства, проверка, профиль ввода, обработка, рация, камера, экран */
 export function VoiceScreen() {
+  const denoise = useDenoise();
   const prefs = useMediaPrefs();
   const set = prefs.set;
   const devices = useDevices();
@@ -335,6 +337,20 @@ export function VoiceScreen() {
             onChange={(noise) => set({ noise })}
           />
           <span className="muted small vs-hint">Убирает клавиатуру, вентилятор и фоновые голоса</span>
+          <Toggle
+            label="Нейросетевое шумоподавление (RNNoise)"
+            hint={
+              denoise.status === 'on'
+                ? 'Работает: голос проходит через модель RNNoise'
+                : denoise.status === 'loading'
+                  ? 'Загружается модель…'
+                  : denoise.status === 'error'
+                    ? `Не удалось: ${denoise.error}`
+                    : 'Поверх браузерного: лучше убирает шум улицы и клавиатуры, модель ~5 МБ грузится при входе в голос'
+            }
+            checked={prefs.denoise}
+            onChange={(denoise) => set({ denoise })}
+          />
           <div className="acc-sep" />
           <Toggle label="Эхоподавление" hint="Собеседники не услышат себя из ваших динамиков" checked={eff.echo} onChange={(echo) => set({ echo })} />
           <Toggle label="Автоусиление" hint="Выравнивает громкость, если вы отходите от микрофона" checked={eff.agc} onChange={(agc) => set({ agc })} />

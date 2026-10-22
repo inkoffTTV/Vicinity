@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -33,8 +34,28 @@ function serviceWorker(): Plugin {
   };
 }
 
+// RNNoise (@shiguredo/rnnoise-wasm): worklet /worklets/voice-denoise.js импортирует ./rnnoise.js —
+// файл берётся из node_modules без правок: в dev отдаётся промежуточным обработчиком, в сборке копируется
+function rnnoise(): Plugin {
+  const file = createRequire(import.meta.url).resolve('@shiguredo/rnnoise-wasm/dist/rnnoise.js');
+  const path = '/worklets/rnnoise.js';
+  return {
+    name: 'vicinity-rnnoise',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.split('?')[0] !== path) return next();
+        res.setHeader('Content-Type', 'text/javascript');
+        res.end(readFileSync(file));
+      });
+    },
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'worklets/rnnoise.js', source: readFileSync(file) });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), serviceWorker()],
+  plugins: [react(), serviceWorker(), rnnoise()],
   server: {
     proxy: {
       '/api': backend,

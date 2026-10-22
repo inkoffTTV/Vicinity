@@ -51,7 +51,7 @@ export function effectiveProcessing(p: MediaPrefs): Processing {
 }
 
 /** Ключ обработки: поменялся — микрофон надо открыть заново */
-export const processingKey = (p: MediaPrefs) => JSON.stringify(effectiveProcessing(p));
+export const processingKey = (p: MediaPrefs) => JSON.stringify({ ...effectiveProcessing(p), denoise: p.denoise });
 
 /** Порог «говорит» в единицах RMS 16-битного звука; автоматический — как раньше (≈ −39 дБ) */
 export const AUTO_SPEAK_RMS = 380;
@@ -59,17 +59,84 @@ export function speakThreshold(p: MediaPrefs = useMediaPrefs.getState()): number
   return effectiveProcessing(p).autoSens ? AUTO_SPEAK_RMS : 32768 * Math.pow(10, p.thresholdDb / 20);
 }
 
+// Поток, собранный из другого (RNNoise): остановить его — значит остановить и исходный микрофон, и контекст
+const cleanups = new WeakMap<MediaStream, () => void>();
+
 export function stopStream(s: MediaStream | null) {
-  s?.getTracks().forEach((t) => t.stop());
+  if (!s) return;
+  s.getTracks().forEach((t) => t.stop());
+  cleanups.get(s)?.();
+  cleanups.delete(s);
 }
 
-/** Микрофон с выбранного устройства; выбранное пропало — с устройства по умолчанию */
+/** Микрофон с выбранного устройства; выбранное пропало — с устройства по умолчанию.
+ *  С включённым RNNoise поток проходит через worklet шумоподавления (голосовые каналы и звонки) */
 export async function openMic(deviceId: string): Promise<MediaStream> {
+  let mic: MediaStream;
   try {
-    return await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) });
+    mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) });
   } catch (e) {
     if (!deviceId || !(e instanceof DOMException) || e.name !== 'OverconstrainedError') throw e;
-    return navigator.mediaDevices.getUserMedia({ audio: micConstraints('') });
+    mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints('') });
+  }
+  return useMediaPrefs.getState().denoise ? denoise(mic) : mic;
+}
+
+// ── RNNoise: нейросетевое шумоподавление (public/worklets/voice-denoise.js) ──
+
+export type DenoiseStatus = 'off' | 'loading' | 'on' | 'error';
+/** Состояние RNNoise — для подсказки в настройках голоса */
+export const useDenoise = create<{ status: DenoiseStatus; error: string }>(() => ({ status: 'off', error: '' }));
+
+const DENOISE_URL = `${import.meta.env.BASE_URL}worklets/voice-denoise.js`;
+const canDenoise = () => typeof AudioWorkletNode !== 'undefined' && typeof WebAssembly !== 'undefined';
+
+/** Пропустить микрофон через RNNoise; не получилось (нет worklet, не загрузился wasm) — отдать как есть */
+async function denoise(mic: MediaStream): Promise<MediaStream> {
+  if (!canDenoise()) {
+    useDenoise.setState({ status: 'error', error: 'Браузер не поддерживает AudioWorklet' });
+    return mic;
+  }
+  useDenoise.setState({ status: 'loading', error: '' });
+  let ctx: AudioContext | null = null;
+  try {
+    // RNNoise обучен на 48 кГц; Firefox не примет микрофон в контекст с другой частотой — тогда родная частота
+    try {
+      ctx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
+      ctx.createMediaStreamSource(mic).disconnect();
+    } catch {
+      void ctx?.close().catch(() => {});
+      ctx = new AudioContext({ latencyHint: 'interactive' });
+    }
+    void ctx.resume().catch(() => {});
+    await ctx.audioWorklet.addModule(DENOISE_URL);
+    const node = new AudioWorkletNode(ctx, 'vicinity-denoise', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+    const ready = new Promise<void>((resolve, reject) => {
+      node.port.onmessage = (e) => {
+        if (e.data?.ready) resolve();
+        else if (e.data?.error) reject(new Error(String(e.data.error)));
+      };
+      window.setTimeout(() => reject(new Error('Модель не загрузилась за 20 с')), 20_000);
+    });
+    const source = ctx.createMediaStreamSource(mic);
+    const dest = ctx.createMediaStreamDestination();
+    source.connect(node).connect(dest);
+    await ready;
+    const out = dest.stream;
+    const audioCtx = ctx;
+    cleanups.set(out, () => {
+      mic.getTracks().forEach((t) => t.stop());
+      void audioCtx.close().catch(() => {});
+      if (useDenoise.getState().status === 'on') useDenoise.setState({ status: 'off' });
+    });
+    // Исходный микрофон отвалился (устройство отключили) — выходная дорожка тоже должна закончиться
+    mic.getAudioTracks()[0]?.addEventListener('ended', () => out.getAudioTracks().forEach((t) => t.stop()));
+    useDenoise.setState({ status: 'on', error: '' });
+    return out;
+  } catch (e) {
+    void ctx?.close().catch(() => {});
+    useDenoise.setState({ status: 'error', error: e instanceof Error ? e.message : 'Не удалось загрузить RNNoise' });
+    return mic;
   }
 }
 
@@ -122,6 +189,8 @@ export interface MediaPrefs {
   screenAudio: boolean;
   /** Усиление микрофона, 0…2 */
   micGain: number;
+  /** Нейросетевое шумоподавление RNNoise поверх браузерного (загружает ~5 МБ модели) */
+  denoise: boolean;
   /** Громкость собеседников, 0…2 (в звонке выше 1 не бывает — так устроен <audio>) */
   volume: number;
 }
@@ -148,6 +217,7 @@ const DEFAULTS: MediaPrefs = {
   screenAudio: true,
   micGain: 1,
   volume: 1,
+  denoise: false,
 };
 const clampNum = (v: unknown, min: number, max: number, def: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def;
@@ -175,6 +245,7 @@ function loadPrefs(): MediaPrefs {
       screenAudio: bool(raw.screenAudio, DEFAULTS.screenAudio),
       micGain: clampLevel(raw.micGain, DEFAULTS.micGain),
       volume: clampLevel(raw.volume, DEFAULTS.volume),
+      denoise: bool(raw.denoise, DEFAULTS.denoise),
     };
   } catch {
     return DEFAULTS;

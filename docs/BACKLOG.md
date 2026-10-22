@@ -5,6 +5,10 @@
 ## Vicinity
 
 Сделано: значок профиля из набора (`web/src/lib/badges.ts`), логотипы сервисов у подключений (simple-icons, CC0), фоны чатов (личные и у канала сервера, `web/src/lib/chatBg.ts`), музыка в профиле (`/music/search`), обводка иконок 1.75 и шкала 20/24.
+Сделано (октябрь): push на телефон (`backend/utils/WebPush.cc`, `web/src/lib/push.ts`, docs/API.md §14), история звонков в личке с «Перезвонить» (`backend/utils/Calls.cc`), голосовые сообщения (`web/src/lib/voiceNote.ts`, `VoiceMessage.tsx`), поиск FTS5, RNNoise в AudioWorklet (`public/worklets/voice-denoise.js`).
+
+- **Папки чатов** (архив, непрочитанные, свои) в боковой панели.
+- **Рейтинг и история матчей Переправы** в профиле Vicinity.
 
 - **Иконки** — набор lucide оставлен; если какие-то формы не нравятся, назвать конкретные — заменим точечно.
 
