@@ -24,7 +24,7 @@ class DenoiseProcessor extends AudioWorkletProcessor {
       (r) => {
         this.frameSize = r.frameSize;
         this.inBuf = new Float32Array(r.frameSize);
-        this.outBuf = new Float32Array(r.frameSize * 2);
+        this.outBuf = new Float32Array(r.frameSize * 4);
         this.state = r.createDenoiseState();
         this.port.postMessage({ ready: true, frameSize: r.frameSize, rate: sampleRate });
       },
@@ -50,8 +50,8 @@ class DenoiseProcessor extends AudioWorkletProcessor {
       if (this.inLen === this.frameSize) {
         this.inLen = 0;
         this.state.processFrame(this.inBuf);
-        // Очередь не длиннее двух кадров: вход и выход идут одним темпом
-        if (this.outLen + this.frameSize > this.outBuf.length) {
+        // Вход и выход идут одним темпом, очередь не длиннее пары кадров; упираемся в конец буфера — сдвигаем к началу
+        if (this.outRead + this.outLen + this.frameSize > this.outBuf.length) {
           this.outBuf.copyWithin(0, this.outRead, this.outRead + this.outLen);
           this.outRead = 0;
         }

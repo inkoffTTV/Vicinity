@@ -101,6 +101,12 @@ export async function send(u: User, text: string) {
 
 /** Создать сервер, вернуть код приглашения. */
 export async function createServer(u: User, name: string): Promise<string> {
+  // На телефоне панель серверов спрятана за кнопкой «Меню»
+  const menu = u.page.getByRole('button', { name: 'Меню' }).first();
+  if ((await u.page.locator('.app.nav-open').count()) === 0 && (await menu.isVisible())) {
+    await menu.click();
+    await expect(u.page.locator('.app.nav-open')).toBeVisible();
+  }
   await u.page.locator('.rail-item.add').click();
   await u.page.locator('.modal input').first().fill(name);
   await u.page.locator('.modal').getByRole('button', { name: 'Создать' }).click();

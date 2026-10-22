@@ -130,7 +130,8 @@ test('server settings, dialogs and menus on a 360×640 phone stay within the scr
   await expectOnScreen(page, page.locator('.dropdown.up'), 'меню статуса');
   await page.locator('.user-panel-me').click();
   await page.locator('.nav-scrim').click({ position: { x: 350, y: 300 } });
-  await expectOnScreen(page, page.getByRole('button', { name: 'Отправить' }), 'отправить');
+  // Пустое поле — вместо «Отправить» кнопка записи голосового
+  await expectOnScreen(page, page.getByRole('button', { name: /Отправить|Записать голосовое/ }), 'отправить');
   await expectOnScreen(page, page.getByRole('button', { name: 'Прикрепить файлы' }), 'прикрепить');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(PHONE.width);
 

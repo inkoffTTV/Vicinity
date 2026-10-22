@@ -14,19 +14,18 @@ using HttpUtils::error;
 static constexpr size_t  kMinQueryLen = 2;
 static constexpr int64_t kMaxResults  = 50;
 
-// Запрос FTS5 из слов пользователя: кавычки экранируются, каждое слово ищется как префикс
+// Запрос FTS5 из слов пользователя: только буквы и цифры (как у токенизатора unicode61), каждое слово —
+// префикс. Пустой результат (одни знаки) — искать только через LIKE.
 static std::string ftsQuery(const std::string& q) {
     std::string out, word;
     auto flush = [&] {
-        if (word.empty()) return;
-        std::string esc;
-        for (const char c : word) { if (c == '"') esc += '"'; esc += c; }
-        out += (out.empty() ? "" : " ") + ("\"" + esc + "\"*");
+        if (!word.empty()) out += (out.empty() ? "" : " ") + ("\"" + word + "\"*");
         word.clear();
     };
     for (const char c : q) {
-        if (std::isspace(static_cast<unsigned char>(c)) || c == '*' || c == '(' || c == ')' || c == ':' || c == '^') flush();
-        else word += c;
+        const auto u = static_cast<unsigned char>(c);
+        if (std::isalnum(u) || u >= 0x80) word += c;
+        else flush();
     }
     flush();
     return out;
@@ -49,10 +48,12 @@ void SearchController::search(const HttpRequestPtr& req,
     auto db = app().getDbClient();
     try {
         // Название канала для выдачи: у лички — имя собеседника
-        // FTS5: каждое слово запроса — префикс ("прив"* найдёт «привет»); без FTS5 — LIKE по подстроке
+        // LIKE по подстроке (как раньше: «o_b» найдёт foo_bar) плюс FTS5 по началу слов без учёта регистра
+        // и для кириллицы («прив» найдёт «Привет»)
         const std::string fts = Database::ftsAvailable() ? ftsQuery(q) : "";
-        const std::string textCond = fts.empty() ? "m.text LIKE ? ESCAPE '\\'"
-                                                 : "m.id IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?)";
+        const std::string textCond = fts.empty()
+            ? "m.text LIKE ? ESCAPE '\\'"
+            : "(m.text LIKE ? ESCAPE '\\' OR m.id IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?))";
         const std::string select =
             "SELECT " + Messages::kColumns + ", c.name AS channel_name, c.type AS channel_type, "
             "c.server_id AS server_id, "
@@ -61,7 +62,7 @@ void SearchController::search(const HttpRequestPtr& req,
             "FROM " + Messages::kFrom + " JOIN channels c ON c.id = m.channel_id "
             "WHERE " + textCond + " AND ";
         const std::string tail = " ORDER BY m.id DESC LIMIT " + std::to_string(kMaxResults);
-        const std::string pattern = fts.empty() ? "%" + TextUtils::escapeLike(q) + "%" : fts;
+        const std::string pattern = "%" + TextUtils::escapeLike(q) + "%";
 
         if (channelId > 0) {
             auto acc = Access::channel(db, channelId, userId);
@@ -72,12 +73,19 @@ void SearchController::search(const HttpRequestPtr& req,
                 cb(error("Вы не участник этого сервера", k403Forbidden)); return;
             }
         }
-        auto rows = channelId > 0
-            ? db->execSqlSync(select + "m.channel_id = ?" + tail, userId, pattern, channelId)
-            : serverId > 0
-            ? db->execSqlSync(select + "c.server_id = ?" + tail, userId, pattern, serverId)
-            : db->execSqlSync(select + "m.channel_id IN (" + std::string(Access::kAccessibleChannels) + ")" + tail,
-                              userId, pattern, userId, userId);
+        auto rows = fts.empty()
+            ? (channelId > 0
+                   ? db->execSqlSync(select + "m.channel_id = ?" + tail, userId, pattern, channelId)
+                   : serverId > 0
+                   ? db->execSqlSync(select + "c.server_id = ?" + tail, userId, pattern, serverId)
+                   : db->execSqlSync(select + "m.channel_id IN (" + std::string(Access::kAccessibleChannels) + ")" + tail,
+                                     userId, pattern, userId, userId))
+            : (channelId > 0
+                   ? db->execSqlSync(select + "m.channel_id = ?" + tail, userId, pattern, fts, channelId)
+                   : serverId > 0
+                   ? db->execSqlSync(select + "c.server_id = ?" + tail, userId, pattern, fts, serverId)
+                   : db->execSqlSync(select + "m.channel_id IN (" + std::string(Access::kAccessibleChannels) + ")" + tail,
+                                     userId, pattern, fts, userId, userId));
 
         Json::Value arr(Json::arrayValue);
         for (const auto& row : rows) {

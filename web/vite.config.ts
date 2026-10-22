@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -37,7 +37,8 @@ function serviceWorker(): Plugin {
 // RNNoise (@shiguredo/rnnoise-wasm): worklet /worklets/voice-denoise.js импортирует ./rnnoise.js —
 // файл берётся из node_modules без правок: в dev отдаётся промежуточным обработчиком, в сборке копируется
 function rnnoise(): Plugin {
-  const file = createRequire(import.meta.url).resolve('@shiguredo/rnnoise-wasm/dist/rnnoise.js');
+  // exports пакета открывают только «.» — его import-вход и есть dist/rnnoise.js
+  const file = fileURLToPath(import.meta.resolve('@shiguredo/rnnoise-wasm'));
   const path = '/worklets/rnnoise.js';
   return {
     name: 'vicinity-rnnoise',
