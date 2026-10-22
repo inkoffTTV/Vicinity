@@ -1793,8 +1793,7 @@ button.server-tag:hover {
 }
 .profile-studio.inline .studio-preview {
   align-self: start;
-  position: sticky;
-  top: 0;
+  position: static;
   padding: var(--space-4);
   border-radius: var(--radius-md);
 }

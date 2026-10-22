@@ -125,6 +125,11 @@ std::string attachmentType(const std::string& url) {
     return "";
 }
 
+bool isAudioName(const std::string& name) {
+    static const std::set<std::string> kAudio = {"webm", "ogg", "opus", "m4a", "mp4", "mp3", "wav", "aac", "weba"};
+    return kAudio.count(nameExtension(name)) > 0;
+}
+
 int64_t fileSize(const std::string& url) {
     if (attachmentType(url).empty()) return 0;
     std::error_code ec;

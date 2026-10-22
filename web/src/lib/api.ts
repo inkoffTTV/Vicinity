@@ -157,6 +157,19 @@ export interface ReplyPreview {
 
 export type AttachmentType = 'image' | 'file' | '';
 
+/** Вид сообщения: voice — голосовое, call — запись о звонке в личке; '' — обычное */
+export type MessageKind = 'voice' | 'call' | '';
+/** Голосовое: длительность в секундах и до 128 пиков 0..1 для волны */
+export interface VoiceMeta {
+  duration: number;
+  peaks: number[];
+}
+/** Звонок: ok — поговорили (duration — секунды), missed — не ответили, declined — отклонили */
+export interface CallMeta {
+  result: 'ok' | 'missed' | 'declined';
+  duration: number;
+}
+
 export interface Message {
   id: number;
   channel_id: number;
@@ -184,6 +197,8 @@ export interface Message {
   reply_to?: number;
   /** null — ответа нет или исходное сообщение удалено */
   reply?: ReplyPreview | null;
+  kind?: MessageKind;
+  meta?: VoiceMeta | CallMeta | null;
   /** Когда правку увидел этот клиент (сервер время правки не хранит) */
   edited_at?: number;
   /** Доля загрузки вложения своего ещё не отправленного сообщения (0..1) */
@@ -309,6 +324,7 @@ export interface LastMessage {
   text: string;
   attachment: string;
   created_at: string;
+  kind?: MessageKind;
 }
 
 export interface Dm {
@@ -709,13 +725,27 @@ export const api = {
   },
   send: (
     channelId: number,
-    body: { text: string; attachment: string; nonce: string; attachment_name?: string; reply_to?: number },
+    body: {
+      text: string;
+      attachment: string;
+      nonce: string;
+      attachment_name?: string;
+      reply_to?: number;
+      kind?: 'voice';
+      meta?: VoiceMeta;
+    },
   ) =>
     post<
       { id: number; created_at: string; nonce?: string } & Partial<
-        Pick<Message, 'reply_to' | 'reply' | 'attachment_name' | 'attachment_size' | 'attachment_type'>
+        Pick<Message, 'reply_to' | 'reply' | 'attachment_name' | 'attachment_size' | 'attachment_type' | 'kind' | 'meta'>
       >
     >(`/channels/${channelId}/messages`, body),
+
+  // ── Web Push (§14) ──
+  pushVapid: () => get<{ key: string }>('/push/vapid'),
+  pushSubscribe: (body: { endpoint: string; keys: { p256dh?: string; auth?: string }; prefs: unknown }) =>
+    post<{ ok: boolean }>('/push/subscribe', body),
+  pushUnsubscribe: (endpoint: string) => request<{ ok: boolean }>('DELETE', '/push/subscribe', { endpoint }),
   edit: (channelId: number, mid: number, text: string) =>
     post(`/channels/${channelId}/messages/${mid}/edit`, { text }),
   remove: (channelId: number, mid: number) => del(`/channels/${channelId}/messages/${mid}`),

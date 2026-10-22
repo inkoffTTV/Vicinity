@@ -130,6 +130,8 @@ PATCH `/settings/appearance` `{любые поля settings}` → то же. `se
 | `reply_to` | int | **[new]** id сообщения, на которое ответ, или 0 |
 | `reply` | object\|null | **[new]** `{id, author_id, author_name, text (≤200 симв.), attachment}`; `null` если ответа нет или исходное удалено. Здесь (как и в `last_message`, §7) `attachment` — URL вложения любого типа: эти объекты старые десктопы не читают |
 | `nonce` | string | **[new]** только в WS `new_message` и в ответе POST: эхо клиентского `nonce` |
+| `kind` | string | **[new]** `"voice"` — голосовое сообщение, `"call"` — запись о звонке в личке (§12), `""` — обычное |
+| `meta` | object\|null | **[new]** у `voice`: `{duration: сек, peaks: [0..1, до 128]}`; у `call`: `{result: "ok"\|"missed"\|"declined", duration: сек}` |
 
 ### GET `/channels/{id}/messages`
 Параметры (все необязательны):
@@ -145,7 +147,9 @@ PATCH `/settings/appearance` `{любые поля settings}` → то же. `se
 
 ### POST `/channels/{id}/messages`
 `{"text": "...", "attachment": "/uploads/...", "reply_to": 123, "nonce": "abc"}` — всё кроме `text`/`attachment`
-необязательно. `reply_to` должен принадлежать тому же каналу (иначе 400). `nonce` ≤ 64 символов.
+необязательно. **[new]** Голосовое сообщение: `"kind": "voice", "meta": {"duration": 3.2, "peaks": [0.1, ...]}` при
+`attachment` — аудиофайле из `/uploads/files/` (webm/ogg/opus/m4a/mp4/mp3/wav/aac), иначе 400; `duration` 0..1200,
+`peaks` — до 128 чисел 0..1 (лишнее обрезается). `reply_to` должен принадлежать тому же каналу (иначе 400). `nonce` ≤ 64 символов.
 Ответ 201: `{id, created_at, status:"sent", nonce}` + **[new]** `reply_to`, `reply`, `attachment_url`, `attachment_name`,
 `attachment_size`, `attachment_type` (как в объекте сообщения).
 Лимит частоты: не более 10 сообщений за 5 секунд на пользователя (429).
@@ -357,10 +361,31 @@ POST `/profile/extras` — расширенный профиль целиком 
 **[new]** Пересылается, только если у собеседников есть общая личка или они друзья. Если адресат не в сети —
 отправителю `{"type":"call_unavailable","user_id":U}`.
 **[new]** Адресату уходят только `type`, `to`, `from` (ставит сервер), `name` (у `call_invite`, ставит сервер) и строковые
-`sdp` (≤ 32 КБ), `sdpType` (≤ 16), `candidate` (≤ 1024), `mid` (≤ 64); остальные поля отбрасываются, сообщение с более
+`sdp` (≤ 32 КБ), `sdpType` (≤ 16), `candidate` (≤ 1024), `mid` (≤ 64), `reason` (≤ 16); остальные поля отбрасываются, сообщение с более
 длинным значением не пересылается.
+**[new]** История звонков: когда звонок заканчивается, сервер кладёт в личку этих двоих сообщение `kind:"call"` от
+звонящего (`new_message` обоим): `result:"ok"` + `duration` в секундах — поговорили (`call_end` после `call_accept`);
+`"declined"` — адресат отклонил (`call_reject` без `reason:"timeout"`); `"missed"` — не ответили (`call_reject` с
+`reason:"timeout"`, `call_end` звонящего до ответа, `call_busy`) или адресата не было в сети (тогда ему ещё уходит push §14).
+Личка создаётся, если её не было.
 **[new]** GET `/rtc/ice` → `{"ice_servers":[{"urls":["stun:..."]},{"urls":["turn:host:3478?transport=udp","turn:host:3478?transport=tcp"],"username":"<expiry>:<uid>","credential":"<base64 HMAC-SHA1>"}]}` —
 TURN с временными учётками coturn `use-auth-secret`, если в конфиге задан секрет; иначе только STUN.
+
+## 14. Push-уведомления (Web Push) **[new]**
+Телефон получает уведомления, когда приложение закрыто: RFC 8030/8291/8292, полезная нагрузка шифруется
+`aes128gcm`, подпись VAPID (ключи сервер создаёт при первом запуске, таблица `kv`). Нужен libcurl при сборке;
+`custom_config.push.subject` / `VICINITY_PUSH_SUBJECT` — контакт в подписи.
+- GET `/push/vapid` → `{"key": "<base64url 65 байт>"}`; пустой `key` — сервер не умеет отправлять.
+- POST `/push/subscribe` `{"endpoint": "https://...", "keys": {"p256dh", "auth"}, "prefs": {"muted": [channel_id...],
+  "servers": {"<server_id>": "all"|"mentions"|"none"}}}` → `{"ok":true}`. Подписка принадлежит браузеру: тот же
+  `endpoint` от другого аккаунта переписывается на него. `endpoint` — только https (loopback по http — для тестов).
+- DELETE `/push/subscribe` `{"endpoint"}` — снять подписку (выход, выключение в настройках).
+
+Когда отправляется: новое сообщение в канале — участникам **без единого WS-подключения**; личка и беседа — всегда,
+канал сервера — по `prefs.servers` (по умолчанию `mentions`: только `@ник`, `@everyone`, `@here`); каналы из `prefs.muted`
+пропускаются. Входящий звонок адресату не в сети — сразу, с `Urgency: high`, TTL 60 с.
+Полезная нагрузка (JSON): `{"t":"msg"|"call", "title", "body" (≤160 симв.), "icon", "tag", "url", "from"?}`.
+Ответ сервиса 404/410 — подписка удаляется.
 
 ## 13. Лимиты
 Помимо входа/регистрации/смены пароля — по пользователю: отправка сообщений (10/5 с), загрузки (20/мин),

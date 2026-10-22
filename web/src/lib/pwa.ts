@@ -26,6 +26,11 @@ export function registerServiceWorker() {
   sw.addEventListener('controllerchange', () => {
     if (reloadOnChange) location.reload();
   });
+  // Щелчок по push-уведомлению при открытом окне: service worker просит перейти к чату
+  sw.addEventListener('message', (e) => {
+    const d = e.data;
+    if (d && d.type === 'open-url' && typeof d.url === 'string') onOpenUrl?.(d.url);
+  });
   const register = () =>
     sw.register('/sw.js').then(
       (reg) => {
@@ -49,6 +54,12 @@ export function registerServiceWorker() {
     );
   if (document.readyState === 'complete') void register();
   else window.addEventListener('load', () => void register(), { once: true });
+}
+
+let onOpenUrl: ((url: string) => void) | null = null;
+/** Кто обрабатывает переход по адресу из уведомления (store подключает роутер) */
+export function setOpenUrlHandler(fn: (url: string) => void) {
+  onOpenUrl = fn;
 }
 
 /** Перейти на новую версию: она активируется, вкладка перезагрузится */

@@ -4,6 +4,34 @@
 
 namespace Database {
 
+static bool gFts = false;
+
+bool ftsAvailable() { return gFts; }
+
+// Полнотекстовый индекс сообщений (FTS5, внешнее содержимое — таблица messages). Без FTS5 в sqlite
+// поиск работает через LIKE. Триггеры держат индекс в актуальном состоянии; при первом создании
+// индекс строится по всей истории.
+static void initFts() {
+    auto db = drogon::app().getDbClient();
+    try {
+        const bool existed = !db->execSqlSync(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'").empty();
+        db->execSqlSync("CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5("
+                        "text, content='messages', content_rowid='id', tokenize='unicode61 remove_diacritics 2')");
+        db->execSqlSync("CREATE TRIGGER IF NOT EXISTS messages_fts_ai AFTER INSERT ON messages BEGIN "
+                        "INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text); END");
+        db->execSqlSync("CREATE TRIGGER IF NOT EXISTS messages_fts_ad AFTER DELETE ON messages BEGIN "
+                        "INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', old.id, old.text); END");
+        db->execSqlSync("CREATE TRIGGER IF NOT EXISTS messages_fts_au AFTER UPDATE OF text ON messages BEGIN "
+                        "INSERT INTO messages_fts(messages_fts, rowid, text) VALUES ('delete', old.id, old.text); "
+                        "INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text); END");
+        if (!existed) db->execSqlSync("INSERT INTO messages_fts(messages_fts) VALUES ('rebuild')");
+        gFts = true;
+    } catch (const std::exception& e) {
+        LOG_WARN << "FTS5 недоступен, поиск по сообщениям через LIKE: " << e.what();
+    }
+}
+
 void initialize() {
     auto db = drogon::app().getDbClient();
 
@@ -137,6 +165,10 @@ void initialize() {
     exec("ALTER TABLE messages ADD COLUMN attachment_name TEXT DEFAULT NULL");
     exec("ALTER TABLE messages ADD COLUMN attachment_size INTEGER DEFAULT NULL");
     exec("ALTER TABLE messages ADD COLUMN attachment_type TEXT DEFAULT NULL");
+
+    // Migration: вид сообщения (voice — голосовое, call — запись о звонке) и его метаданные (JSON)
+    exec("ALTER TABLE messages ADD COLUMN kind TEXT DEFAULT NULL");
+    exec("ALTER TABLE messages ADD COLUMN meta TEXT DEFAULT NULL");
     exec("ALTER TABLE messages ADD COLUMN reply_to INTEGER DEFAULT NULL");
 
     // Реакции на сообщения (эмодзи)
@@ -335,6 +367,26 @@ void initialize() {
 
     // Индексы под частые выборки: история канала, «мои» беседы/серверы/сессии,
     // реакции сообщения, входящие заявки в друзья
+    // Служебные значения сервера (ключи VAPID для push и т.п.)
+    exec("CREATE TABLE IF NOT EXISTS kv ("
+         "key TEXT PRIMARY KEY,"
+         "value TEXT NOT NULL)");
+
+    // Web Push: подписки браузеров; prefs — настройки уведомлений клиента (JSON), чтобы не будить
+    // телефон заглушёнными каналами
+    exec("CREATE TABLE IF NOT EXISTS push_subscriptions ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+         "user_id INTEGER NOT NULL,"
+         "endpoint TEXT UNIQUE NOT NULL,"
+         "p256dh TEXT NOT NULL,"
+         "auth TEXT NOT NULL,"
+         "prefs TEXT DEFAULT NULL,"
+         "created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
+    exec("CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id)");
+
+    initFts();
+
     exec("CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id)");
     exec("CREATE INDEX IF NOT EXISTS idx_channel_members_user ON channel_members(user_id)");
     exec("CREATE INDEX IF NOT EXISTS idx_server_members_user ON server_members(user_id)");

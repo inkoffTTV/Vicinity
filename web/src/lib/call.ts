@@ -210,8 +210,8 @@ function teardown(sound = true) {
 }
 
 /** Сообщить собеседнику и закончить у себя */
-function endWith(type: 'call_end' | 'call_reject') {
-  socket.send({ type, to: useCall.getState().peerId });
+function endWith(type: 'call_end' | 'call_reject', reason?: 'timeout') {
+  socket.send({ type, to: useCall.getState().peerId, ...(reason ? { reason } : {}) });
   teardown();
 }
 
@@ -669,7 +669,7 @@ function ringIncoming(s: Session, name: string) {
   s.ringTimer = window.setTimeout(() => {
     if (sess !== s) return;
     toast(`Пропущенный звонок от ${name}`);
-    endWith('call_reject');
+    endWith('call_reject', 'timeout');
   }, RING_TIMEOUT);
 }
 

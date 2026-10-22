@@ -4,6 +4,7 @@
 #include <iostream>
 #include <sstream>
 #include "models/Database.h"
+#include "utils/WebPush.h"
 #include "managers/SessionManager.h"
 #include "utils/Uploads.h"
 #ifdef VICINITY_HAVE_CURL
@@ -33,6 +34,8 @@ static void applyEnvOverrides(Json::Value& config) {
     if (const auto v = env("VICINITY_TURN_URLS"); !v.empty())       custom["rtc"]["turn"] = list(v);
     if (const auto v = env("VICINITY_STUN_URLS"); !v.empty())       custom["rtc"]["stun"] = list(v);
     if (const auto v = env("VICINITY_TRUSTED_PROXIES"); !v.empty()) custom["trusted_proxies"] = list(v);
+    // Web Push: контакт администратора в подписи VAPID (сервисы пушей пишут туда при проблемах)
+    if (const auto v = env("VICINITY_PUSH_SUBJECT"); !v.empty())    custom["push"]["subject"] = v;
 
     // Регистрация и почта (deploy/env.example, раздел «Регистрация»)
     if (const auto v = env("VICINITY_REGISTRATION"); !v.empty())    custom["registration"]["mode"] = v;
@@ -101,6 +104,7 @@ int main() {
         })
         .registerBeginningAdvice([]() {
             Database::initialize();
+            WebPush::init();
             // Токен проверяется только при подключении к /ws: раз в 5 минут закрываем
             // сокеты истёкших сессий
             drogon::app().getLoop()->runEvery(300.0, [] {

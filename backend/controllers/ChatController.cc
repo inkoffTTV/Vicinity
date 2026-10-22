@@ -8,9 +8,11 @@
 #include "../utils/TextUtils.h"
 #include "../utils/Tiers.h"
 #include "../utils/Uploads.h"
+#include "../utils/WebPush.h"
 #include "../models/User.h"
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/drogon.h>
+#include <cmath>
 #include <json/json.h>
 #include <algorithm>
 #include <optional>
@@ -169,6 +171,25 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
         cb(error("Invalid nonce", k400BadRequest)); return;
     }
     if (replyTo < 0) { cb(error("Invalid reply_to", k400BadRequest)); return; }
+    // Голосовое сообщение: вложение-файл с записью + meta {duration, peaks} для волны в плеере
+    std::optional<std::string> kind, meta;
+    if (JsonUtils::getStr(*json, "kind") == "voice") {
+        if (attachmentType != "file" || !Uploads::isAudioName(JsonUtils::getStr(*json, "attachment_name"))) {
+            cb(error("Голосовое сообщение — это аудиофайл", k400BadRequest)); return;
+        }
+        const Json::Value& m = (*json)["meta"];
+        const double duration = m.isObject() && m["duration"].isNumeric() ? m["duration"].asDouble() : -1;
+        if (duration < 0 || duration > 1200) { cb(error("Некорректная длительность", k400BadRequest)); return; }
+        Json::Value peaks(Json::arrayValue);
+        if (m["peaks"].isArray() && m["peaks"].size() <= 128)
+            for (const auto& v : m["peaks"])
+                peaks.append(v.isNumeric() ? std::round(std::clamp(v.asDouble(), 0.0, 1.0) * 100) / 100 : 0.0);
+        Json::Value clean;
+        clean["duration"] = std::round(duration * 10) / 10;
+        clean["peaks"]    = peaks;
+        kind = "voice";
+        meta = JsonUtils::write(clean);
+    }
 
     auto db = app().getDbClient();
     try {
@@ -200,9 +221,9 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
 
         auto ins = db->execSqlSync(
             "INSERT INTO messages(channel_id, author_id, text, attachment, "
-            "attachment_name, attachment_size, attachment_type, reply_to) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-            channelId, userId, text, attachment, attName, attSize, attType, reply);
+            "attachment_name, attachment_size, attachment_type, reply_to, kind, meta) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            channelId, userId, text, attachment, attName, attSize, attType, reply, kind, meta);
         Json::Value msg = Messages::load(db, ins[0]["id"].as<int64_t>());
         msg["nonce"] = nonce;
 
@@ -210,13 +231,15 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
         Json::Value ws = msg;
         ws["type"] = "new_message";
         Broadcast::toChannel(channelId, ws);
+        // Тем, кого нет в сети, — на телефон
+        WebPush::notifyMessage(msg, channelId);
 
         Json::Value resp;
         resp["id"]         = msg["id"];
         resp["created_at"] = msg["created_at"];
         resp["status"]     = "sent";
         resp["nonce"]      = nonce;
-        for (const char* key : {"reply_to", "reply", "attachment_url", "attachment_name", "attachment_size", "attachment_type"})
+        for (const char* key : {"reply_to", "reply", "attachment_url", "attachment_name", "attachment_size", "attachment_type", "kind", "meta"})
             resp[key] = msg[key];
         cb(HttpUtils::json(std::move(resp), k201Created));
     } catch (const std::exception& e) {

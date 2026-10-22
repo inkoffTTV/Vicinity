@@ -97,7 +97,12 @@ export function notifyMessage(msg: Message, ctx: NotifyContext) {
   if (focused || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   try {
     const n = new Notification(ctx.mentioned ? `${msg.author_name} упоминает вас` : msg.author_name, {
-      body: plainText(msg.text) || (msg.attachment_type === 'file' ? `Файл: ${msg.attachment_name || 'без имени'}` : 'Изображение'),
+      body:
+        msg.kind === 'voice'
+          ? 'Голосовое сообщение'
+          : msg.kind === 'call'
+            ? 'Пропущенный звонок'
+            : plainText(msg.text) || (msg.attachment_type === 'file' ? `Файл: ${msg.attachment_name || 'без имени'}` : 'Изображение'),
       icon: msg.author_avatar || '/favicon.svg',
       tag: `ch-${msg.channel_id}`,
     });

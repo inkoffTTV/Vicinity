@@ -2,6 +2,7 @@ import { ChevronLeft, LogOut, Search, X } from 'lucide-react';
 import { FormEvent, useCallback, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { NOTIFY_LEVELS, serverLevel, useNotifySettings } from '../lib/notify';
+import { setPushEnabled, supported as pushSupported, usePush } from '../lib/push';
 import { usePlan } from '../lib/plan';
 import { useStore } from '../lib/store';
 import { AdminPanel } from './AdminPanel';
@@ -279,6 +280,7 @@ function NotificationsTab() {
   const groups = useStore((s) => s.groups);
   const channelsByServer = useStore((s) => s.channelsByServer);
   const notify = useNotifySettings();
+  const push = usePush();
   const [permission, setPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
 
   const channelName = (id: number) => {
@@ -315,6 +317,22 @@ function NotificationsTab() {
           </button>
         )}
       </div>
+      {pushSupported() && (
+        <Toggle
+          label="На этом устройстве, когда приложение закрыто"
+          hint={
+            push.status === 'on'
+              ? 'Включено — сообщения и звонки придут как уведомления телефона'
+              : push.status === 'error'
+                ? 'Не удалось подписаться — проверьте разрешение на уведомления'
+                : permission === 'denied'
+                  ? 'Сначала разрешите уведомления для этого сайта'
+                  : 'Выключено'
+          }
+          checked={!push.disabled && push.status === 'on'}
+          onChange={(v) => void setPushEnabled(v).then(() => setPermission(Notification.permission))}
+        />
+      )}
       <Toggle label="Звук новых сообщений" checked={notify.sound} onChange={notify.setSound} />
       {servers.length > 0 && (
         <section className="stack">

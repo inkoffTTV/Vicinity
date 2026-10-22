@@ -1,8 +1,10 @@
-import { Copy, Paperclip, Pencil, Pin, PinOff, Plus, Reply, SmilePlus, Trash2 } from 'lucide-react';
+import { Copy, Paperclip, Pencil, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Pin, PinOff, Plus, Reply, SmilePlus, Trash2 } from 'lucide-react';
 import { parseProposal } from '../lib/chatBg';
 import { BgProposal } from './ChatBackground';
 import { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent, useEffect, useRef, useState } from 'react';
-import { Message, parseTs, Reaction } from '../lib/api';
+import { CallMeta, Message, parseTs, Reaction } from '../lib/api';
+import { useCall } from '../lib/call';
+import { formatClock } from '../lib/voiceNote';
 import { copyText } from '../lib/clipboard';
 import { isEmojiOnly, mentionsUser, plainText } from '../lib/markdown';
 import { usePins } from '../lib/pins';
@@ -11,6 +13,7 @@ import { useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
 import { useUserDirectory } from '../lib/users';
 import { Attachment } from './Attachment';
+import { VoiceMessage } from './VoiceMessage';
 import { Avatar } from './Avatar';
 import { EmojiPicker } from './EmojiPicker';
 import { Icon } from './Icon';
@@ -171,7 +174,13 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
               </div>
             )
           )}
-          <Attachment msg={msg} onImage={onImage} onMediaLoad={onMediaLoad} />
+          {msg.kind === 'voice' ? (
+            <VoiceMessage msg={msg} />
+          ) : msg.kind === 'call' ? (
+            <CallNote msg={msg} meId={me.user_id} />
+          ) : (
+            <Attachment msg={msg} onImage={onImage} onMediaLoad={onMediaLoad} />
+          )}
           {msg.reactions.length > 0 && (
             <div className="reactions">
               {msg.reactions.map((r) => (
@@ -390,6 +399,51 @@ function EditBox({ msg, onDone }: { msg: Message; onDone: () => void }) {
           сохранить
         </button>
       </div>
+    </div>
+  );
+}
+
+// Запись о звонке в личке (docs/CALLS.md §3.4): кто кому звонил, чем кончилось, «Перезвонить»
+function CallNote({ msg, meId }: { msg: Message; meId: number }) {
+  const meta = (msg.meta ?? { result: 'missed', duration: 0 }) as CallMeta;
+  const dm = useStore((s) => s.dms.find((d) => d.channel_id === msg.channel_id));
+  const callIdle = useCall((s) => s.phase === 'idle');
+  const startCall = useCall((s) => s.start);
+  const outgoing = msg.author_id === meId;
+  const label =
+    meta.result === 'ok'
+      ? outgoing
+        ? 'Исходящий звонок'
+        : 'Входящий звонок'
+      : meta.result === 'declined'
+        ? outgoing
+          ? 'Звонок отклонён'
+          : 'Вы отклонили звонок'
+        : outgoing
+          ? 'Нет ответа'
+          : 'Пропущенный звонок';
+  const icon = meta.result === 'ok' ? (outgoing ? PhoneOutgoing : PhoneIncoming) : PhoneMissed;
+  const missed = meta.result !== 'ok';
+  return (
+    <div className={`call-note${missed && !outgoing ? ' missed' : ''}`} data-testid="call-note">
+      <span className="call-note-icon" aria-hidden="true">
+        <Icon icon={icon} size={18} />
+      </span>
+      <span className="call-note-text">
+        <span>{label}</span>
+        <span className="muted small">{meta.result === 'ok' ? formatClock(meta.duration) : formatTime(parseTs(msg.created_at))}</span>
+      </span>
+      {dm && (
+        <button
+          className="btn small"
+          disabled={!callIdle}
+          onClick={() => void startCall(dm.user_id, dm.display_name)}
+          aria-label={`Перезвонить: ${dm.display_name}`}
+        >
+          <Icon icon={Phone} size={14} className="inline-ico" />
+          Перезвонить
+        </button>
+      )}
     </div>
   );
 }

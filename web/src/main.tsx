@@ -1,7 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { registerServiceWorker } from './lib/pwa';
+import { registerServiceWorker, setOpenUrlHandler } from './lib/pwa';
+import { parsePath, viewForRoute } from './lib/routes';
+import { useStore } from './lib/store';
 // Приложение для Android: уведомления и звонок в свёрнутом виде через мост WebView
 import './lib/android';
 // Автостатус «Не активен» при простое
@@ -38,3 +40,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 );
 
 registerServiceWorker();
+// Щелчок по push-уведомлению при открытом окне — перейти к чату
+setOpenUrlHandler((url) => {
+  const r = parsePath(new URL(url, location.origin).pathname);
+  const s = useStore.getState();
+  const v = r && r.kind !== 'invite' ? viewForRoute(s, r) : null;
+  if (v) s.open(v);
+  else history.pushState(null, '', url);
+});

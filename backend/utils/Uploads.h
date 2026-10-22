@@ -39,6 +39,8 @@ bool isUploadUrl(const std::string& url, const std::string& subDir);
 
 // Тип вложения по URL: "image" — /uploads/attachments/, "file" — /uploads/files/, "" — не вложение
 std::string attachmentType(const std::string& url);
+// Имя файла с расширением аудиозаписи (голосовое сообщение): webm, ogg, opus, m4a, mp4, mp3, wav, aac
+bool isAudioName(const std::string& name);
 
 // Размер вложения по его URL; 0 — это не вложение или файла нет
 int64_t fileSize(const std::string& url);

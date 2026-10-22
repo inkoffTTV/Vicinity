@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Plus, SendHorizontal, Smile, X } from 'lucide-react';
+import { Mic, Plus, SendHorizontal, Smile, X } from 'lucide-react';
 import { useChannelMembers } from '../lib/channelMembers';
 import { formatSize, uploadProblem } from '../lib/files';
 import { drafts, isImageFile, useStore } from '../lib/store';
@@ -18,6 +18,8 @@ import { Avatar } from './Avatar';
 import { EmojiPicker } from './EmojiPicker';
 import { Icon } from './Icon';
 import { composing } from './Message';
+import { VoiceRecorder } from './VoiceRecorder';
+import { canRecordVoice } from '../lib/voiceNote';
 
 // Файлов в очереди на отправку за раз — каждый уходит отдельным сообщением
 const MAX_QUEUE = 10;
@@ -53,6 +55,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
   const [files, setFiles] = useState<Staged[]>([]);
   const [dragging, setDragging] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
   // @упоминание, которое сейчас набирается: где начинается и что набрано после @
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [selected, setSelected] = useState(0);
@@ -363,16 +366,32 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
         >
           <Icon icon={Smile} anim="wiggle" size={24} />
         </button>
-        <button
-          className="icon-btn send-btn"
-          title="Отправить"
-          aria-label="Отправить"
-          onClick={send}
-          disabled={!text.trim() && !files.length}
-        >
-          <Icon icon={SendHorizontal} className="anim-nudge" size={24} />
-        </button>
+        {!text.trim() && !files.length && canRecordVoice() ? (
+          <button className="icon-btn" title="Голосовое сообщение" aria-label="Записать голосовое сообщение" onClick={() => setRecording(true)}>
+            <Icon icon={Mic} anim="wiggle" size={24} />
+          </button>
+        ) : (
+          <button
+            className="icon-btn send-btn"
+            title="Отправить"
+            aria-label="Отправить"
+            onClick={send}
+            disabled={!text.trim() && !files.length}
+          >
+            <Icon icon={SendHorizontal} className="anim-nudge" size={24} />
+          </button>
+        )}
       </div>
+      {recording && (
+        <VoiceRecorder
+          onCancel={() => setRecording(false)}
+          onDone={(r) => {
+            setRecording(false);
+            sendMessage(channelId, '', r.file, reply ?? null, r.meta);
+            if (reply) setReplyingTo(channelId, null);
+          }}
+        />
+      )}
       <div className="typing-line" aria-live="polite">
         {typists?.length ? (
           <>

@@ -4958,3 +4958,138 @@ a:focus-visible > .ico {
   gap: var(--space-2);
   flex-wrap: wrap;
 }
+
+/* ── Голосовые сообщения ── */
+.voice-msg {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: min(360px, 100%);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.voice-play {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out-soft);
+}
+.voice-play:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.voice-play:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.voice-wave {
+  flex: 1;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  min-width: 0;
+}
+.voice-wave i {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 2px;
+  background: var(--text-faint);
+  transition: background var(--dur-fast) var(--ease-out-soft);
+}
+.voice-wave i.done {
+  background: var(--accent);
+}
+.voice-time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.6em;
+  text-align: right;
+}
+.voice-rate {
+  flex: none;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-2);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  font-size: var(--fs-caption);
+  cursor: pointer;
+}
+.voice-rate:hover {
+  color: var(--text);
+  border-color: var(--text-3);
+}
+
+/* Строка записи голосового вместо поля ввода */
+.composer-rec {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-2);
+}
+.rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: rec-blink 1s ease-in-out infinite;
+}
+.rec-time {
+  font-variant-numeric: tabular-nums;
+  min-width: 3em;
+}
+@keyframes rec-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rec-dot {
+    animation: none;
+  }
+}
+
+/* ── Запись о звонке в личке ── */
+.call-note {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  max-width: 100%;
+}
+.call-note-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  flex: none;
+}
+.call-note.missed .call-note-icon {
+  color: var(--danger-text);
+}
+.call-note-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}

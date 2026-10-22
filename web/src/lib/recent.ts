@@ -33,7 +33,9 @@ export function previewParts(lm: LastMessage, meId: number | undefined, group: b
   const text = parseProposal(lm.text) ? 'Предложение фона чата' : plainText(lm.text).replace(/\s+/g, ' ').trim();
   let attachment: PreviewParts['attachment'] = null;
   let body = text;
-  if (lm.attachment) {
+  if (lm.kind === 'voice') body = 'Голосовое сообщение';
+  else if (lm.kind === 'call') body = lm.author_id === meId ? 'Исходящий звонок' : 'Звонок';
+  else if (lm.attachment) {
     attachment = lm.attachment.startsWith('/uploads/files/') ? 'file' : 'image';
     if (!text) body = attachment === 'file' ? 'Файл' : 'Изображение';
   }

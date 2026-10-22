@@ -30,6 +30,54 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Push с сервера (docs/API.md §14): {t:"msg"|"call", title, body, icon, tag, url}
+self.addEventListener('push', (event) => {
+  let data = null;
+  try {
+    data = event.data ? event.data.json() : null;
+  } catch {
+    data = null;
+  }
+  if (!data || typeof data !== 'object') return;
+  const call = data.t === 'call';
+  const options = {
+    body: typeof data.body === 'string' ? data.body : '',
+    icon: typeof data.icon === 'string' && data.icon ? data.icon : '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: typeof data.tag === 'string' ? data.tag : undefined,
+    renotify: call,
+    requireInteraction: call,
+    vibrate: call ? [300, 150, 300, 150, 300] : [120],
+    data: { url: typeof data.url === 'string' ? data.url : '/' },
+    actions: call ? [{ action: 'open', title: 'Открыть' }] : [],
+  };
+  const title = typeof data.title === 'string' && data.title ? data.title : 'Vicinity';
+  event.waitUntil(
+    // Если приложение открыто и на экране — оно само покажет уведомление; дублировать не нужно
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      if (!call && list.some((c) => c.visibilityState === 'visible' && c.focused)) return;
+      return self.registration.showNotification(title, options);
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const target = new URL(url, self.location.origin).href;
+      const open = list.find((c) => 'focus' in c);
+      if (open) {
+        // Открытое окно: перейти к чату без перезагрузки — приложение слушает это сообщение
+        open.postMessage({ type: 'open-url', url });
+        return open.focus();
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});
+
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'skip-waiting') self.skipWaiting();
 });

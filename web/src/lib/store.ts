@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { dropPush, syncPush } from './push';
 import { Reach,
   api,
   ApiError,
@@ -16,6 +17,7 @@ import { Reach,
   setUnauthorizedHandler,
   UploadedFile,
   UserSummary,
+  VoiceMeta,
 } from './api';
 import { startAppearanceSync, stopAppearanceSync } from './appearanceSync';
 import { mentionsUser } from './markdown';
@@ -120,7 +122,7 @@ interface State {
   openDmWith: (userId: number, via?: Reach) => Promise<void>;
   loadMessages: (channelId: number) => Promise<void>;
   loadOlder: (channelId: number) => Promise<void>;
-  sendMessage: (channelId: number, text: string, file: File | null, replyTo?: Message | null) => void;
+  sendMessage: (channelId: number, text: string, file: File | null, replyTo?: Message | null, voice?: VoiceMeta) => void;
   retrySend: (nonce: string) => void;
   discardSend: (nonce: string) => void;
   editMessage: (channelId: number, id: number, text: string) => Promise<boolean>;
@@ -236,6 +238,8 @@ function messageFromEvent(ev: WsEvent): Message {
     attachment_type: ev.attachment_type,
     reply_to: ev.reply_to,
     reply: ev.reply,
+    kind: ev.kind,
+    meta: ev.meta,
   };
 }
 
@@ -570,6 +574,7 @@ export const useStore = create<State>((set, get) => {
               text: [...String(ev.text ?? '')].slice(0, REPLY_PREVIEW).join(''),
               attachment: ev.attachment_url || ev.attachment || '',
               created_at: ev.created_at,
+              kind: ev.kind,
             };
       if (!lm || lm.id !== ev.id) return lm;
       if (ev.type === 'message_edited') return { ...lm, text: [...String(ev.text ?? '')].slice(0, REPLY_PREVIEW).join('') };
@@ -849,6 +854,7 @@ export const useStore = create<State>((set, get) => {
     }
     // Интерфейс показываем только с загруженными данными нового пользователя
     set({ me, presence: { ...get().presence, [me.user_id]: me.presence } });
+    void syncPush();
     get().open(v);
     // Ссылка на профиль (/users/<id>) — открыть его поверх последнего экрана
     if (route?.kind === 'user') get().showProfile(route.userId);
@@ -986,6 +992,7 @@ export const useStore = create<State>((set, get) => {
         nonce,
         ...(up ? { attachment_name: up.name } : {}),
         ...(item.replyTo ? { reply_to: item.replyTo } : {}),
+        ...(item.voice && up ? { kind: 'voice' as const, meta: item.voice } : {}),
       });
       if (outbox.get(nonce) !== item) return;
       if (r.nonce) modernServer = true;
@@ -999,6 +1006,8 @@ export const useStore = create<State>((set, get) => {
           attachment_size: r.attachment_size ?? local.attachment_size,
           attachment_type: r.attachment_type ?? local.attachment_type,
           reply: r.reply !== undefined ? r.reply : local.reply,
+          kind: r.kind ?? local.kind,
+          meta: r.meta !== undefined ? r.meta : local.meta,
           nonce: undefined,
           local: undefined,
           progress: undefined,
@@ -1081,6 +1090,7 @@ export const useStore = create<State>((set, get) => {
     },
 
     logout: async () => {
+      await dropPush();
       try {
         await api.logout();
       } catch {
@@ -1246,14 +1256,14 @@ export const useStore = create<State>((set, get) => {
 
     // Сообщение сразу появляется в ленте как «отправляется», подтверждается ответом REST
     // или эхом по WS (что придёт раньше) — без дублей
-    sendMessage: (channelId, text, file, replyTo) => {
+    sendMessage: (channelId, text, file, replyTo, voice) => {
       const me = get().me;
       if (!me) return;
       // Открыто окно старой истории — своё сообщение показываем среди последних
       if (get().hasNewer[channelId]) void get().jumpToPresent(channelId);
       const nonce = makeNonce();
       const preview = file ? URL.createObjectURL(file) : '';
-      outbox.set(nonce, { channelId, text, file, preview, replyTo: replyTo?.id });
+      outbox.set(nonce, { channelId, text, file, preview, replyTo: replyTo?.id, voice });
       const msg: Message = {
         id: -++localSeq,
         channel_id: channelId,
@@ -1275,6 +1285,7 @@ export const useStore = create<State>((set, get) => {
               progress: 0,
             }
           : {}),
+        ...(voice ? { kind: 'voice' as const, meta: voice } : {}),
         ...(replyTo
           ? {
               reply_to: replyTo.id,
@@ -1570,6 +1581,8 @@ interface OutboxItem {
   file: File | null;
   preview: string;
   replyTo?: number;
+  /** Голосовое сообщение: длительность и волна */
+  voice?: VoiceMeta;
   /** Файл уже на сервере — при повторе не загружаем заново */
   uploaded?: UploadedFile;
   upload?: AbortController;

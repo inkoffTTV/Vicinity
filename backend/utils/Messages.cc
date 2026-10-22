@@ -1,4 +1,5 @@
 #include "Messages.h"
+#include "JsonUtils.h"
 #include "ProfileExt.h"
 #include "TextUtils.h"
 #include <map>
@@ -17,7 +18,7 @@ const std::string kColumns =
     "JOIN server_members bm ON bm.server_id = bs.id AND bm.user_id = u.id "
     "WHERE bs.id = json_extract(u.profile_ext, '$.badge_server') AND bs.tag IS NOT NULL) AS author_badge, "
     "m.text, m.created_at, m.edited, m.attachment, m.attachment_name, m.attachment_size, "
-    "m.attachment_type, m.reply_to, "
+    "m.attachment_type, m.reply_to, m.kind, m.meta, "
     "rm.id AS reply_id, rm.author_id AS reply_author_id, ru.display_name AS reply_author_name, "
     "rm.text AS reply_text, rm.attachment AS reply_attachment";
 
@@ -28,7 +29,7 @@ const std::string kFrom =
 
 const std::string kLastColumns =
     "lm.id AS lm_id, lm.author_id AS lm_author_id, lu.display_name AS lm_author_name, "
-    "lm.text AS lm_text, lm.attachment AS lm_attachment, lm.created_at AS lm_created_at";
+    "lm.text AS lm_text, lm.attachment AS lm_attachment, lm.created_at AS lm_created_at, lm.kind AS lm_kind";
 
 const std::string kLastJoin =
     "LEFT JOIN messages lm ON lm.id = (SELECT MAX(id) FROM messages WHERE channel_id = c.id) "
@@ -80,6 +81,11 @@ Json::Value fromRow(const drogon::orm::Row& row) {
     msg["attachment_name"] = str(row, "attachment_name");
     msg["attachment_size"] = int64(row, "attachment_size");
     msg["attachment_type"] = type;
+    // Вид сообщения: voice — голосовое (meta: duration, peaks), call — запись о звонке (meta: result, duration)
+    msg["kind"] = str(row, "kind");
+    Json::Value meta(Json::nullValue);
+    if (!row["meta"].isNull() && !JsonUtils::parse(row["meta"].as<std::string>(), meta)) meta = Json::nullValue;
+    msg["meta"] = meta;
     msg["reactions"] = Json::Value(Json::arrayValue);
     msg["reply_to"]  = int64(row, "reply_to");
     if (row["reply_id"].isNull()) {
@@ -105,6 +111,7 @@ Json::Value lastFromRow(const drogon::orm::Row& row) {
     last["text"]        = TextUtils::utf8Truncate(str(row, "lm_text"), kPreviewLen);
     last["attachment"]  = str(row, "lm_attachment");
     last["created_at"]  = str(row, "lm_created_at");
+    last["kind"]        = str(row, "lm_kind");
     return last;
 }
 

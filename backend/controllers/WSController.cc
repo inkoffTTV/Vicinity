@@ -5,6 +5,7 @@
 #include "../managers/UserRateLimiter.h"
 #include "../utils/Access.h"
 #include "../utils/Broadcast.h"
+#include "../utils/Calls.h"
 #include "../utils/CryptoUtils.h"
 #include "../utils/JsonUtils.h"
 #include <drogon/drogon.h>
@@ -33,7 +34,7 @@ static constexpr int64_t kCongestedHoldMs = 500;
 // Пересылаемые поля сигналинга звонка (docs/CALLS.md §3.2) и их максимальная длина.
 // Всё остальное от клиента отбрасывается: адресату не уходит чужой мусор на сотню килобайт.
 static const std::map<std::string, size_t> kCallFields = {
-    {"sdp", 32 * 1024}, {"sdpType", 16}, {"candidate", 1024}, {"mid", 64},
+    {"sdp", 32 * 1024}, {"sdpType", 16}, {"candidate", 1024}, {"mid", 64}, {"reason", 16},
 };
 
 static int64_t steadyMs() {
@@ -224,8 +225,10 @@ static void handleCallSignal(int64_t userId, const WebSocketConnectionPtr& conn,
         ev["type"]    = "call_unavailable";
         ev["user_id"] = static_cast<Json::Int64>(to);
         conn->send(JsonUtils::write(ev));
+        if (type == "call_invite") Calls::onSignal(type, userId, to, "", false);
         return;
     }
+    Calls::onSignal(type, userId, to, JsonUtils::getStr(out, "reason"), true);
     out["from"] = static_cast<Json::Int64>(userId);
     if (type == "call_invite") {
         auto r = db->execSqlSync("SELECT display_name FROM users WHERE id = ?", userId);

@@ -18,6 +18,7 @@ add_executable(VicinityServer
     controllers/GamesController.cc
     controllers/PlayController.cc
     controllers/ProfileController.cc
+    controllers/PushController.cc
     controllers/ReadController.cc
     controllers/RoleController.cc
     controllers/RtcController.cc
@@ -40,6 +41,7 @@ add_executable(VicinityServer
     utils/Access.cc
     utils/Altcha.cc
     utils/Broadcast.cc
+    utils/Calls.cc
     utils/CryptoUtils.cc
     utils/EmailUtils.cc
     utils/FileSystem.cc
@@ -52,6 +54,7 @@ add_executable(VicinityServer
     utils/Totp.cc
     utils/TwoFactor.cc
     utils/Uploads.cc
+    utils/WebPush.cc
 )
 
 target_include_directories(VicinityServer PRIVATE
