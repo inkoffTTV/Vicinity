@@ -1777,8 +1777,11 @@ button.server-tag:hover {
 .profile-studio.inline {
   width: auto;
   height: auto;
+  /* Редактор и доска — в левой колонке, карточка — в правой на всю высоту: в Chrome sticky-элемент
+     держится в пределах всей сетки, а не своей ячейки, поэтому карточка не должна делить колонку с доской */
   grid-template-columns: minmax(0, 1fr) 380px;
   grid-template-rows: auto auto auto;
+  column-gap: var(--space-6);
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -1786,23 +1789,33 @@ button.server-tag:hover {
   overflow: visible;
   animation: none;
 }
+.settings-main-body > .profile-studio.inline {
+  max-width: 1120px;
+}
 .profile-studio.inline .studio-editor {
+  grid-column: 1;
+  grid-row: 1;
   overflow: visible;
-  padding: 0 var(--space-4) 0 0;
+  padding: 0;
   border-right: 0;
 }
 .profile-studio.inline .studio-preview {
+  grid-column: 2;
+  grid-row: 1 / span 2;
   align-self: start;
-  position: static;
+  position: sticky;
+  top: 0;
   padding: var(--space-4);
   border-radius: var(--radius-md);
 }
 .profile-studio.inline .studio-board {
-  grid-column: 1 / -1;
-  padding: var(--space-4) 0 0;
+  grid-column: 1;
+  grid-row: 2;
+  padding: var(--space-5) 0 0;
 }
 .profile-studio.inline .studio-bar {
   grid-column: 1 / -1;
+  grid-row: 3;
   position: sticky;
   bottom: calc(-1 * var(--space-4));
   background: var(--bg-modal);
@@ -1817,10 +1830,13 @@ button.server-tag:hover {
     max-height: none;
     overflow: visible;
   }
-  .profile-studio.inline .studio-editor {
-    padding-right: 0;
-  }
   .profile-studio.inline .studio-preview {
     position: static;
+    align-self: stretch;
+    padding: var(--space-4) 0;
+    background: transparent;
+  }
+  .profile-studio.inline .studio-preview .pcard {
+    margin: 0 auto;
   }
 }
