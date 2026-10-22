@@ -45,7 +45,11 @@ if qf["status"] != "WAITING" or not qf["team1_id"] or not qf["team2_id"]:
 fed = row("select count(*) n from tournament_matches where winner_to_match_id = ?", qf["id"])["n"]
 if fed:
     sys.exit(f"В {qf_key} уже ведут {fed} матч(а) — он не из команд без игры")
-if any(r["team1_id"] in (t1["id"], t2["id"]) or r["team2_id"] in (t1["id"], t2["id"]) for r in c.execute("select team1_id, team2_id from tournament_matches where stage_id = ?", (stage["id"],))):
+# Если между ними уже есть дополнительный матч вне сетки (bracket extra), он станет матчем 1/8 — время сохраняется
+extra = row("select * from tournament_matches where stage_id = ? and bracket = 'extra' and status != 'FINISHED' and winner_to_match_id is null "
+            "and ((team1_id = ? and team2_id = ?) or (team1_id = ? and team2_id = ?))", stage["id"], t1["id"], t2["id"], t2["id"], t1["id"])
+if any(r["team1_id"] in (t1["id"], t2["id"]) or r["team2_id"] in (t1["id"], t2["id"])
+       for r in c.execute("select id, team1_id, team2_id from tournament_matches where stage_id = ?", (stage["id"],)) if not extra or r["id"] != extra["id"]):
     sys.exit("Одна из команд уже стоит в сетке")
 # Позиции 1/8 для этого четвертьфинала: позиция p четвертьфинала собирает победителей 1/8 с позиций 2p-1 и 2p
 p = int(qf["position"])
@@ -67,7 +71,8 @@ if l3["bracket"] != "lower" or l3["round_no"] != 3:
 top = row("select max(match_no) n from tournament_matches where stage_id = ?", stage["id"])["n"]
 
 plan = [
-    f"{k1}: {t1['name']} — {t2['name']} (BO{qf['best_of']}), победитель → {qf_key} слот 1, проигравший → {l1_key}",
+    f"{k1}: {t1['name']} — {t2['name']} (BO{qf['best_of']}), победитель → {qf_key} слот 1, проигравший → {l1_key}"
+    + (f" — из дополнительного матча {extra['plan_key']} (id {extra['id']}, время и статус сохраняются)" if extra else ""),
     f"{k2}: {names[qf['team1_id']]} — {names[qf['team2_id']]} (BO{qf['best_of']}), победитель → {qf_key} слот 2, проигравший → {l1_key}",
     f"{qf_key}: команды очищены, ждёт победителей {k1} и {k2}",
     f"{l1_key}: проигравшие {k1} и {k2}, победитель → {l2_key}",
@@ -104,7 +109,16 @@ with c:
     l1 = insert(l1_key, "lower", 1, p, top + 3, "Раунд 1", None, None, bo, None, None, None, None, None)
     l2 = insert(l2_key, "lower", 2, p, top + 4, "Раунд 2", None, None, bo, None, l3["id"], donor["loser_to_slot"], None, None)
     c.execute("update tournament_matches set winner_to_match_id = ?, winner_to_slot = 1 where id = ?", (l2["id"], l1["id"]))
-    u3 = insert(k1, "upper", 1, 2 * p - 1, top + 1, "1/8 финала", t1["id"], t2["id"], bo, when1, qf["id"], 1, l1["id"], 1)
+    if extra:
+        sched = when1 or extra["scheduled_at"]
+        c.execute("update tournament_matches set plan_key = ?, bracket = 'upper', round_no = 1, position = ?, round_name = '1/8 финала', "
+                  "winner_to_match_id = ?, winner_to_slot = 1, loser_to_match_id = ?, loser_to_slot = 1, scheduled_at = ?, status = ?, "
+                  "version = version + 1, updated_at = ? where id = ?",
+                  (k1, 2 * p - 1, qf["id"], l1["id"], sched, "SCHEDULED" if sched else "WAITING", now, extra["id"]))
+        u3 = row("select * from tournament_matches where id = ?", extra["id"])
+        log(u3["id"], "links", {"plan_key": extra["plan_key"], "bracket": extra["bracket"]}, {"plan_key": k1, "bracket": "upper", "winner_to_match_id": qf["id"], "loser_to_match_id": l1["id"]})
+    else:
+        u3 = insert(k1, "upper", 1, 2 * p - 1, top + 1, "1/8 финала", t1["id"], t2["id"], bo, when1, qf["id"], 1, l1["id"], 1)
     u4 = insert(k2, "upper", 1, 2 * p, top + 2, "1/8 финала", qf["team1_id"], qf["team2_id"], bo, when2, qf["id"], 2, l1["id"], 2)
     old_qf = snap(qf)
     c.execute("update tournament_matches set team1_id = NULL, team2_id = NULL, status = 'WAITING', scheduled_at = NULL, version = version + 1, updated_at = ? where id = ?", (now, qf["id"]))
