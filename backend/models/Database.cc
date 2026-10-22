@@ -385,6 +385,44 @@ void initialize() {
          "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
     exec("CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id)");
 
+    // Приватность (utils/Privacy.cc) — рядом с оформлением
+    exec("ALTER TABLE user_settings ADD COLUMN privacy TEXT DEFAULT NULL");
+
+    // Активность и награды (utils/Activity.cc)
+    exec("CREATE TABLE IF NOT EXISTS activity ("
+         "user_id INTEGER PRIMARY KEY,"
+         "xp INTEGER NOT NULL DEFAULT 0,"
+         "msgs INTEGER NOT NULL DEFAULT 0,"
+         "call_sec INTEGER NOT NULL DEFAULT 0,"
+         "voice_sec INTEGER NOT NULL DEFAULT 0,"
+         "games INTEGER NOT NULL DEFAULT 0,"
+         "wins INTEGER NOT NULL DEFAULT 0,"
+         "streak INTEGER NOT NULL DEFAULT 0,"
+         "best_streak INTEGER NOT NULL DEFAULT 0,"
+         "last_day TEXT DEFAULT NULL,"
+         "title TEXT DEFAULT NULL,"
+         "emblem TEXT DEFAULT NULL,"
+         "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
+    exec("CREATE TABLE IF NOT EXISTS awards ("
+         "user_id INTEGER NOT NULL,"
+         "award_id TEXT NOT NULL,"
+         "earned_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "PRIMARY KEY(user_id, award_id),"
+         "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
+
+    // Подарочные коды подписки (utils/Gifts.cc) и срок подписки
+    exec("ALTER TABLE users ADD COLUMN subscription_until DATETIME DEFAULT NULL");
+    exec("CREATE TABLE IF NOT EXISTS gift_codes ("
+         "code TEXT PRIMARY KEY,"
+         "tier INTEGER NOT NULL,"
+         "days INTEGER NOT NULL,"
+         "note TEXT DEFAULT NULL,"
+         "created_by INTEGER,"
+         "created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "redeemed_by INTEGER DEFAULT NULL,"
+         "redeemed_at DATETIME DEFAULT NULL)");
+
     initFts();
 
     exec("CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id)");

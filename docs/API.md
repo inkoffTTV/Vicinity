@@ -387,6 +387,40 @@ TURN с временными учётками coturn `use-auth-secret`, если
 Полезная нагрузка (JSON): `{"t":"msg"|"call", "title", "body" (≤160 симв.), "icon", "tag", "url", "from"?}`.
 Ответ сервиса 404/410 — подписка удаляется.
 
+## 15. Приватность **[new]**
+GET/PATCH `/settings/privacy` → `{status, stats, dm, friend_requests}` (хранится в `user_settings.privacy`):
+- `status`: `everyone` | `friends` | `nobody` — кому виден статус в сети. Остальным — `offline` везде: в профиле,
+  списках друзей и участников, в событии `presence` (сервер шлёт каждому получателю своё значение).
+- `stats`: `everyone` | `friends` | `nobody` — кому виден блок `activity` в профиле (§16) целиком; остальным только
+  `{level, streak, title, emblem, hidden:true}`.
+- `dm`: `everyone` | `friends` — POST `/dms` от не-друга → 403 «принимает сообщения только от друзей» (старые лички живут).
+- `friend_requests`: `everyone` | `friends_of_friends` | `nobody` — POST `/friends/request` → 403.
+Некорректное значение — 400.
+
+## 16. Активность и награды **[new]**
+Опыт: сообщение +2, минута звонка +1 (до 120 за звонок), минута в голосовом канале +1 (до 240 за заход),
+партия в Активностях +10, победа +15. Уровень = ⌊√(xp/40)⌋+1. Серия — дни подряд с хоть одним событием (UTC),
+обнуляется после пропуска дня. Таблицы `activity`, `awards`.
+- GET `/activity/me` → `{activity:{xp, level, level_xp, next_xp, streak, best_streak, msgs, call_min, voice_min, games, wins,
+  title, emblem, awards:[{id, kind:"title"|"emblem", name, rarity, desc, earned_at}]}, catalog:[...все награды]}`.
+- GET `/activity/leaderboard` → `{users:[{id, username, display_name, avatar_path, xp, level, streak, title, emblem}]}` —
+  друзья и я по убыванию опыта.
+- POST `/activity/equip` `{title, emblem}` — надеть заработанные (`""` — снять); не заработано → 400.
+- WS `{type:"activity", activity:{...}, fresh:[новые награды], level_up:bool}` — пользователю при заметных событиях.
+- Титул и эмблема автора — в объекте сообщения (`author_title`, `author_emblem`) и в `GET /users/{id}/profile`
+  (`activity`, с учётом приватности §15). Эмблемы — имена иконок клиента: sparkles, flame, crown, gem, mic, swords, calendar.
+  Редкость: common / rare / epic / legendary.
+
+## 17. Подарочные коды подписки **[new]**
+Код — 12 символов (`XXXX-XXXX-XXXX`, без 0/O/1/I), один раз. Срок подписки — `users.subscription_until`; истёкшие
+снимаются раз в час (`Gifts::expire`). Ручной уровень из админ-панели — бессрочный (`until` = null).
+- POST `/admin/gifts` `{tier 1..3, days 1..3650, count 1..50, note}` → `{codes:[{code, tier, days}]}`; GET `/admin/gifts` →
+  `{gifts:[{code, tier, days, note, created_at, redeemed_by, redeemed_by_name, redeemed_at}]}` (developer only).
+- GET `/gifts/{code}` → `{code, tier, name, days, redeemed}`; 404 — нет такого.
+- POST `/gifts/redeem` `{code}` → `{tier, name, until, days}`. Уровень поднимается до `tier`; тот же уровень со сроком —
+  продлевается от конца срока; выше текущего → 409; уже активирован → 409; формат неверный → 400.
+- GET `/subscription` отдаёт ещё `until`. Ссылка `/gift/<код>` открывает в клиенте карточку активации.
+
 ## 13. Лимиты
 Помимо входа/регистрации/смены пароля — по пользователю: отправка сообщений (10/5 с), загрузки (20/мин),
 заявки в друзья (20/мин), поиск (30/мин); превышение — 429. WS `typing` чаще раза в 2 с молча отбрасывается.

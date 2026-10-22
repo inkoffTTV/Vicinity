@@ -3,6 +3,7 @@
 #include "../managers/WSManager.h"
 #include "../models/Cascade.h"
 #include "../utils/Access.h"
+#include "../utils/Privacy.h"
 #include "../utils/Broadcast.h"
 #include "../utils/HttpUtils.h"
 #include "../utils/JsonUtils.h"
@@ -93,15 +94,13 @@ void ChannelController::members(const HttpRequestPtr& req,
         Json::Value arr(Json::arrayValue);
         for (const auto& r : rows) {
             const int64_t uid = r["id"].as<int64_t>();
-            const std::string pres = r["presence"].isNull() ? "online" : r["presence"].as<std::string>();
-            // Эффективное присутствие: онлайн только при активном WS и не «невидимке»
-            const bool online = WSManager::instance().isOnline(uid) && pres != "invisible";
             Json::Value m;
             m["id"]           = static_cast<Json::Int64>(uid);
             m["username"]     = r["username"].as<std::string>();
             m["display_name"] = r["display_name"].as<std::string>();
             m["avatar_path"]  = r["avatar_path"].isNull() ? "" : r["avatar_path"].as<std::string>();
-            m["presence"]     = online ? pres : "offline";
+            // Эффективное присутствие с учётом приватности зрителя (utils/Privacy.h)
+            m["presence"]     = Privacy::presenceFor(db, uid, userId);
             m["is_owner"]     = !r["owner_id"].isNull() && r["owner_id"].as<int64_t>() == uid;
             arr.append(m);
         }

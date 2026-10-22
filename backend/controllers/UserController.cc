@@ -1,6 +1,8 @@
 #include "UserController.h"
 #include "../models/User.h"
 #include "../utils/Access.h"
+#include "../utils/Activity.h"
+#include "../utils/Privacy.h"
 #include "../utils/PresenceUtil.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/Messages.h"
@@ -164,10 +166,15 @@ void UserController::profile(const HttpRequestPtr& req,
     resp["badges"]            = computeBadges(*u);
     // Расширенный профиль сайта: украшения без подписки не показываются (utils/ProfileExt.h)
     resp["profile_ext"]       = ProfileExt::forDisplay(u->profileExt, u->subscriptionTier);
-    resp["presence"]          = (id == self) ? u->presence : effectivePresence(id);
-    resp["friendship_status"] = (id == self) ? "self" : friendshipStatus(self, id);
-
     auto db = app().getDbClient();
+    resp["presence"]          = (id == self) ? u->presence : Privacy::presenceFor(db, id, self);
+    resp["friendship_status"] = (id == self) ? "self" : friendshipStatus(self, id);
+    // Уровень, серия, титул и награды — если владелец не скрыл статистику
+    try {
+        if (Privacy::allows(db, id, self, "stats")) resp["activity"] = Activity::summary(id);
+        else resp["activity"] = Activity::brief(id), resp["activity"]["hidden"] = true;
+    } catch (...) {}
+    resp["subscription_until"] = u->subscriptionUntil;
     // Общие серверы
     Json::Value servers(Json::arrayValue);
     try {
@@ -325,6 +332,8 @@ void UserController::startDm(const HttpRequestPtr& req,
         if (Access::blockedBetween(db, selfId, targetId)) {
             cb(errResp("Нельзя написать: один из вас заблокировал другого", k403Forbidden)); return;
         }
+        // Приватность адресата: «только от друзей» — незнакомым новую личку не открыть
+        if (std::string why; !Privacy::canDm(db, selfId, targetId, why)) { cb(errResp(why, k403Forbidden)); return; }
 
         // Существующая личка ровно этих двоих: канал с третьим участником (подсунутый
         // кем-то «dm») не подходит — иначе переписка шла бы через чужой канал

@@ -113,6 +113,7 @@ void SettingsController::subscription(const HttpRequestPtr& req, std::function<v
     const int tier = Tiers::clamp(me ? me->subscriptionTier : 0);
     Json::Value resp;
     resp["tier"]    = tier;
+    resp["until"]   = me ? me->subscriptionUntil : std::string();
     resp["current"] = Tiers::describe(tier);
     for (int t = 0; t <= 3; ++t) resp["plans"].append(Tiers::describe(t));
     cb(jsonResp(std::move(resp)));

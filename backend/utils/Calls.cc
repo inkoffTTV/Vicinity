@@ -3,6 +3,7 @@
 #include "JsonUtils.h"
 #include "Messages.h"
 #include "WebPush.h"
+#include "Activity.h"
 #include <drogon/drogon.h>
 #include <chrono>
 #include <map>
@@ -119,6 +120,10 @@ void record(int64_t caller, int64_t callee, const std::string& result, int64_t d
         Broadcast::toChannel(channelId, ws);
         // Пропущенный — ещё и на телефон; про отклонённый или состоявшийся напоминать не о чем
         if (result == "missed") WebPush::notifyMessage(msg, channelId);
+        if (result == "ok" && durationSec > 0) {
+            Activity::bump(caller, Activity::Kind::CallSeconds, durationSec);
+            Activity::bump(callee, Activity::Kind::CallSeconds, durationSec);
+        }
     } catch (const std::exception& e) {
         LOG_WARN << "calls: не удалось записать звонок: " << e.what();
     }

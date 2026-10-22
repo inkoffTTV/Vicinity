@@ -1,0 +1,68 @@
+/* Оверлей для игр (/overlay): прозрачный фон, карточки в углу. Окно ПК-приложения кладёт его поверх
+   всего и пропускает клики, поэтому здесь ничего нельзя нажать — только читать. */
+:root[data-overlay],
+:root[data-overlay] body {
+  background: transparent !important;
+  overflow: hidden;
+}
+.ov {
+  position: fixed;
+  inset: 0;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  pointer-events: none;
+  font-size: var(--fs-body-sm);
+}
+.ov-card {
+  width: min(320px, 100%);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  box-shadow: var(--shadow-modal);
+  animation: fade var(--dur-fast) ease-out;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.6);
+}
+.ov-voice {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+.ov-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--text-2);
+}
+.ov-user.speaking {
+  color: var(--text);
+}
+.ov-flag {
+  margin-left: auto;
+  color: var(--text-3);
+  flex: none;
+}
+.ov-flag.on {
+  color: var(--speaking);
+}
+.ov-sub {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.ov-call {
+  border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+}
+.ov-note strong {
+  font-size: var(--fs-body-sm);
+}

@@ -32,6 +32,8 @@ public:
     std::vector<int64_t> usersIn(int64_t channelId);
     // Участники канала с их голосовыми подключениями.
     std::vector<Member> membersIn(int64_t channelId);
+    // Сколько секунд пользователь сидит в текущем голосовом канале (0 — не в голосе)
+    int64_t secondsIn(int64_t userId);
     // В каком голосовом канале пользователь (0 если ни в каком).
     int64_t channelOf(int64_t userId);
     // Голосовое подключение пользователя (nullptr — не в голосе).
@@ -48,6 +50,7 @@ private:
         int                             proto = 1;
         bool                            screen = false;
         bool                            camera = false;
+        int64_t                         joinedMs = 0;   // steady_clock, для учёта времени в голосе
     };
     int64_t leaveLocked(int64_t userId);
 

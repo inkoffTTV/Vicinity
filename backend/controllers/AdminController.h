@@ -14,6 +14,8 @@ public:
     ADD_METHOD_TO(AdminController::listBlocked,   "/api/v1/admin/blocked-ips",         Get,    Options, "AuthFilter");
     ADD_METHOD_TO(AdminController::blockIp,       "/api/v1/admin/blocked-ips",         Post,   Options, "AuthFilter");
     ADD_METHOD_TO(AdminController::unblockIp,     "/api/v1/admin/blocked-ips/{ip}",    Delete, Options, "AuthFilter");
+    ADD_METHOD_TO(AdminController::createGifts,   "/api/v1/admin/gifts",               Post,   Options, "AuthFilter");
+    ADD_METHOD_TO(AdminController::listGifts,     "/api/v1/admin/gifts",               Get,    Options, "AuthFilter");
     METHOD_LIST_END
 
     void listUsers  (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
@@ -23,4 +25,6 @@ public:
     void listBlocked(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void blockIp    (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void unblockIp  (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, const std::string& ip);
+    void createGifts(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void listGifts  (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
 };

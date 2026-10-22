@@ -21,6 +21,16 @@ export function parseProfileJson(raw: string | undefined | null): DesktopProfile
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
+// Имя титула по id: в полном ответе есть список наград, в скрытом — только id, тогда подставляем из каталога
+const TITLE_NAMES: Record<string, string> = {
+  novice: 'Новичок', talker: 'Болтун', orator: 'Оратор', chronicler: 'Летописец', caller: 'На связи', marathon: 'Марафонец',
+  veteran: 'Ветеран эфира', week: 'Неделя подряд', month: 'Месяц подряд', hundred: 'Сто дней', gamer: 'Игрок', winner: 'Победитель',
+  champion: 'Чемпион', legend: 'Легенда',
+};
+export function titleName(id: string, awards?: { id: string; name: string }[]): string {
+  return awards?.find((a) => a.id === id)?.name ?? TITLE_NAMES[id] ?? '';
+}
+
 export function bannerColorOf(pj: DesktopProfileJson, accent: string): string {
   const c = pj.banner?.color;
   if (typeof c === 'string' && HEX.test(c)) return c;
@@ -55,5 +65,8 @@ export function cardFromProfile(p: Profile, ext: ProfileExt, presence: Profile['
     effect: null,
     name_style: ext.name_style,
     theme: ext.profile_theme,
+    title: p.activity?.title ? titleName(p.activity.title, p.activity.awards) : '',
+    emblem: p.activity?.emblem ?? '',
+    level: p.activity?.level,
   };
 }

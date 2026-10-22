@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { dropPush, syncPush } from './push';
+import { useActivity } from './awards';
 import { Reach,
   api,
   ApiError,
@@ -746,6 +747,14 @@ export const useStore = create<State>((set, get) => {
       case 'profile_updated':
         void s.refreshMe();
         break;
+      case 'activity': {
+        // Уровень и награды (§16): новые титулы/эмблемы и новый уровень — тостом
+        const fresh = Array.isArray(ev.fresh) ? (ev.fresh as { kind: string; name: string }[]) : [];
+        fresh.forEach((a) => s.toast(`${a.kind === 'emblem' ? 'Новая эмблема' : 'Новый титул'}: ${a.name}`));
+        if (ev.level_up && ev.activity?.level) s.toast(`Уровень ${ev.activity.level}!`);
+        useActivity.setState({ me: ev.activity ?? null });
+        break;
+      }
       case 'user_updated':
         applyUserUpdate(ev);
         break;
@@ -842,7 +851,7 @@ export const useStore = create<State>((set, get) => {
     // Экран из адреса (прямая ссылка, перезагрузка), иначе последний открытый — если он ещё доступен
     const route = parsePath(location.pathname);
     const s = get();
-    let v: View | null = route && route.kind !== 'invite' ? viewForRoute(s, route) : null;
+    let v: View | null = route && route.kind !== 'invite' && route.kind !== 'gift' ? viewForRoute(s, route) : null;
     if (!v) {
       const last = recallView();
       const ok =

@@ -1,6 +1,8 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
-import { AdminUser, AdminUsers, ApiError, BlockedIp, api, parseTs } from '../lib/api';
+import { AdminUser, AdminUsers, ApiError, BlockedIp, api, parseTs , GiftCode} from '../lib/api';
 import { useStore } from '../lib/store';
+import { giftLink } from '../lib/routes';
+import { copyText } from '../lib/clipboard';
 import { fullWhen } from '../lib/time';
 import { Avatar } from './Avatar';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -246,6 +248,8 @@ export function AdminPanel() {
         </div>
       </section>
 
+      <GiftCodes />
+
       {confirm && (
         <ConfirmDialog
           title={confirm.title}
@@ -261,5 +265,103 @@ export function AdminPanel() {
         </ConfirmDialog>
       )}
     </div>
+  );
+}
+
+// ── Подарочные коды подписки (docs/API.md §17) ──
+
+function GiftCodes() {
+  const toast = useStore((s) => s.toast);
+  const [gifts, setGifts] = useState<GiftCode[]>([]);
+  const [tier, setTier] = useState(2);
+  const [days, setDays] = useState(30);
+  const [count, setCount] = useState(1);
+  const [note, setNote] = useState('');
+  const [fresh, setFresh] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const reload = useCallback(() => api.adminGifts().then(setGifts, () => {}), []);
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    try {
+      const codes = await api.adminCreateGifts(tier, days, count, note);
+      setFresh(codes.map((c) => c.code));
+      toast(`Создано кодов: ${codes.length}`);
+      await reload();
+    } catch (err) {
+      toast(errText(err), 'error');
+    }
+    setBusy(false);
+  };
+
+  return (
+    <section className="settings-card stack" aria-label="Подарочные коды">
+      <h3>Подарочные коды подписки</h3>
+      <form className="gift-form" onSubmit={(e) => void create(e)}>
+        <label>
+          Уровень
+          <select className="compact-select" value={tier} onChange={(e) => setTier(Number(e.target.value))}>
+            {[1, 2, 3].map((t) => (
+              <option key={t} value={t}>
+                {TIER_NAMES[t]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Дней
+          <input type="number" min={1} max={3650} value={days} onChange={(e) => setDays(Number(e.target.value))} />
+        </label>
+        <label>
+          Штук
+          <input type="number" min={1} max={50} value={count} onChange={(e) => setCount(Number(e.target.value))} />
+        </label>
+        <label className="grow">
+          Заметка
+          <input value={note} maxLength={80} placeholder="Кому или за что" onChange={(e) => setNote(e.target.value)} />
+        </label>
+        <button className="btn primary" disabled={busy}>
+          Создать
+        </button>
+      </form>
+      {fresh.length > 0 && (
+        <div className="gift-fresh" role="status">
+          <strong>Новые коды</strong> — скопируйте ссылку и отправьте получателю:
+          <ul className="admin-list">
+            {fresh.map((c) => (
+              <li key={c}>
+                <span className="mono">{c}</span>
+                <span className="grow" />
+                <button type="button" className="btn small" onClick={() => void copyText(giftLink(c)).then(() => toast('Ссылка скопирована'))}>
+                  Скопировать ссылку
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {gifts.length === 0 && <div className="muted small">Кодов ещё не было</div>}
+      <ul className="admin-list">
+        {gifts.slice(0, 50).map((g) => (
+          <li key={g.code} className={g.redeemed ? 'muted' : undefined}>
+            <span className="mono">{g.code}</span>
+            <span className="grow small">
+              {TIER_NAMES[g.tier]} · {g.days} дн.{g.note && <> · {g.note}</>}
+              {g.redeemed ? <> · активирован @{g.redeemed_by_name}</> : ''}
+            </span>
+            {!g.redeemed && (
+              <button type="button" className="btn small" onClick={() => void copyText(giftLink(g.code)).then(() => toast('Ссылка скопирована'))}>
+                Ссылка
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

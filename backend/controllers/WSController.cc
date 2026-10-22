@@ -4,6 +4,7 @@
 #include "../managers/ActivityManager.h"
 #include "../managers/UserRateLimiter.h"
 #include "../utils/Access.h"
+#include "../utils/Activity.h"
 #include "../utils/Broadcast.h"
 #include "../utils/Calls.h"
 #include "../utils/CryptoUtils.h"
@@ -93,7 +94,9 @@ static void handleVoiceJoin(int64_t userId, const WebSocketConnectionPtr& conn, 
     if (Access::channel(app().getDbClient(), channelId, userId, &info) != Access::Result::Ok) return;
     if (info.serverId != 0 && !info.isVoice) return;
     int proto = JsonUtils::getInt(root, "proto", 1) == 2 ? 2 : 1;
+    const int64_t prevSecs = VoiceManager::instance().secondsIn(userId);
     int64_t prev = VoiceManager::instance().join(userId, channelId, conn, proto);
+    if (prev != 0 && prev != channelId) Activity::bump(userId, Activity::Kind::VoiceSeconds, prevSecs);
     Broadcast::voiceState(channelId);
     if (prev != 0 && prev != channelId) Broadcast::voiceState(prev);
     LOG_INFO << "voice_join: user " << userId << " -> channel " << channelId << " (proto " << proto << ")";
@@ -108,8 +111,8 @@ static void handleVoiceSpeaking(int64_t userId, const WebSocketConnectionPtr& co
     p["user_id"]  = static_cast<Json::Int64>(userId);
     p["speaking"] = JsonUtils::getBool(root, "speaking");
     const std::string payload = JsonUtils::write(p);
-    for (int64_t uid : VoiceManager::instance().usersIn(ch))
-        if (uid != userId) WSManager::instance().sendToUser(uid, payload);
+    // Всем подключениям участников канала, включая другие окна говорящего (оверлей в играх)
+    for (int64_t uid : VoiceManager::instance().usersIn(ch)) WSManager::instance().sendToUser(uid, payload);
 }
 
 // [new] Видео участника голосового канала: {"type":"voice_media","screen":bool,"camera":bool}.
@@ -164,8 +167,13 @@ static void handleVoiceRtc(int64_t userId, const WebSocketConnectionPtr& conn, c
 // Текущее состояние всех голосовых каналов сервера — только запросившему участнику сервера
 static void handleVoiceQuery(int64_t userId, const WebSocketConnectionPtr& conn, const Json::Value& root) {
     int64_t serverId = JsonUtils::getInt(root, "server_id");
-    if (serverId <= 0) return;
     if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::VoiceQuery, userId)) return;
+    // Без server_id — состояние канала, где пользователь сам сейчас в голосе (другое окно, оверлей)
+    if (serverId <= 0) {
+        const int64_t own = VoiceManager::instance().channelOf(userId);
+        if (own != 0) conn->send(Broadcast::voiceStatePayload(own));
+        return;
+    }
     auto db = app().getDbClient();
     if (!Access::isServerMember(db, serverId, userId)) return;
     auto chans = db->execSqlSync(
@@ -413,8 +421,12 @@ void WSController::handleNewMessage(const WebSocketConnectionPtr& conn,
         else if (t == "voice_leave") {
             // Выйти может только подключение, которое владеет голосом: вкладка без голоса
             // не выкинет из канала десктоп того же пользователя
+            const int64_t secs = VoiceManager::instance().secondsIn(userId);
             int64_t ch = VoiceManager::instance().leaveIfOwner(userId, conn);
-            if (ch != 0) Broadcast::voiceState(ch);
+            if (ch != 0) {
+                Broadcast::voiceState(ch);
+                Activity::bump(userId, Activity::Kind::VoiceSeconds, secs);
+            }
         }
         else if (t == "voice_speaking") handleVoiceSpeaking(userId, conn, root);
         else if (t == "voice_query")    handleVoiceQuery(userId, conn, root);
@@ -441,8 +453,12 @@ void WSController::handleConnectionClosed(const WebSocketConnectionPtr& conn) {
         for (const auto& l : ActivityManager::instance().dropConnection(conn))
             sendPeers(l.rest, compact(peerEvent(l.channelId, l.game, "leave", l.peerId, s->userId)));
         // Закрылось голосовое подключение — выход из канала; другие подключения голос не трогают
+        const int64_t secs = VoiceManager::instance().secondsIn(s->userId);
         int64_t ch = VoiceManager::instance().leaveIfOwner(s->userId, conn);
-        if (ch != 0) Broadcast::voiceState(ch);
+        if (ch != 0) {
+            Broadcast::voiceState(ch);
+            Activity::bump(s->userId, Activity::Kind::VoiceSeconds, secs);
+        }
         // Офлайн — только когда закрылось последнее подключение
         if (WSManager::instance().removeConnection(s->userId, conn)) Broadcast::presence(s->userId);
         LOG_INFO << "WS closed: user " << s->userId;

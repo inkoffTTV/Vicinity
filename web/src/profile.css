@@ -1840,3 +1840,22 @@ button.server-tag:hover {
     margin: 0 auto;
   }
 }
+
+/* Титул и эмблема за активность (lib/awards.ts) */
+.pcard-title {
+  color: var(--text-2);
+  font-size: var(--fs-body-sm);
+  margin-top: -4px;
+}
+.pcard-name .emblem {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.emblem {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+}
+.msg-meta .emblem {
+  margin-left: -2px;
+}

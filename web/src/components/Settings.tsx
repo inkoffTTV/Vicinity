@@ -8,6 +8,9 @@ import { useStore } from '../lib/store';
 import { AdminPanel } from './AdminPanel';
 import { SettingsAppLinks } from './AppDownloads';
 import { VoiceScreen } from './settings/VoiceScreen';
+import { OverlayScreen } from './settings/OverlayScreen';
+import { ActivityScreen } from './settings/ActivityScreen';
+import { PrivacyScreen } from './settings/PrivacyScreen';
 import { AppIconScreen } from './settings/AppIconScreen';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
@@ -17,7 +20,7 @@ import { ProfileStudioPanel } from './profile/ProfileStudio';
 import { AccessibilityTab, SubscriptionTab, ThemeTab } from './ThemeSettings';
 import { AccountScreen } from './settings/AccountScreen';
 
-type Tab = 'account' | 'profile' | 'theme' | 'appicon' | 'voice' | 'notifications' | 'hotkeys' | 'accessibility' | 'subscription' | 'admin';
+type Tab = 'account' | 'profile' | 'activity' | 'privacy' | 'theme' | 'appicon' | 'voice' | 'notifications' | 'overlay' | 'hotkeys' | 'accessibility' | 'subscription' | 'admin';
 
 interface NavItem {
   id: Tab;
@@ -33,6 +36,8 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { id: 'account', label: 'Аккаунт', keywords: 'логин почта пароль двухфакторная 2fa сеансы устройства безопасность' },
       { id: 'profile', label: 'Профиль', keywords: 'имя аватар баннер о себе статус цвет тема ник бейджик тег' },
+      { id: 'activity', label: 'Уровень и награды', keywords: 'опыт уровень серия стрик титул эмблема награды друзья рейтинг' },
+      { id: 'privacy', label: 'Приватность', keywords: 'статус кто видит личка заявки друзья скрыть' },
     ],
   },
   {
@@ -42,6 +47,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { id: 'appicon', label: 'Значок приложения', keywords: 'иконка значок вкладка favicon лого' },
       { id: 'voice', label: 'Голос и видео', keywords: 'микрофон динамик звук камера громкость' },
       { id: 'notifications', label: 'Уведомления', keywords: 'звук оповещения упоминания' },
+      { id: 'overlay', label: 'Оверлей в играх', keywords: 'оверлей игра поверх голос кто говорит' },
       { id: 'hotkeys', label: 'Горячие клавиши', keywords: 'клавиатура сочетания ctrl alt' },
       { id: 'accessibility', label: 'Доступность', keywords: 'контраст насыщенность шрифт анимация компактный' },
     ],
@@ -130,10 +136,13 @@ export function Settings() {
           <div className="settings-main-body">
             {tab === 'account' && <AccountScreen onEditProfile={() => go('profile')} />}
             {tab === 'profile' && <ProfileTab />}
+            {tab === 'activity' && <ActivityScreen />}
+            {tab === 'privacy' && <PrivacyScreen />}
             {tab === 'theme' && <ThemeTab goTo={(t) => go(t === 'accessibility' ? 'accessibility' : 'subscription')} />}
             {tab === 'appicon' && <AppIconScreen goSubscription={() => go('subscription')} />}
             {tab === 'voice' && <VoiceScreen />}
             {tab === 'notifications' && <NotificationsTab />}
+            {tab === 'overlay' && <OverlayScreen />}
             {tab === 'hotkeys' && <HotkeysScreen />}
             {tab === 'accessibility' && <AccessibilityTab />}
             {tab === 'subscription' && <SubscriptionTab />}

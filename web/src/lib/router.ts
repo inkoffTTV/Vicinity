@@ -17,6 +17,12 @@ export const useInvite = create<InviteState>((set) => ({
   dismiss: () => set({ code: null }),
 }));
 
+/** Подарочный код из ссылки /gift/<код> (components/GiftCard.tsx) */
+export const useGift = create<InviteState>((set) => ({
+  code: initial?.kind === 'gift' ? initial.code : null,
+  dismiss: () => set({ code: null }),
+}));
+
 // Первый экран после входа и переход по «назад/вперёд» заменяют запись истории, остальные — добавляют
 let replaceNext = true;
 
@@ -44,6 +50,10 @@ window.addEventListener('popstate', () => {
   const route = parsePath(location.pathname);
   if (route?.kind === 'invite') {
     useInvite.setState({ code: route.code });
+    return;
+  }
+  if (route?.kind === 'gift') {
+    useGift.setState({ code: route.code });
     return;
   }
   replaceNext = true;

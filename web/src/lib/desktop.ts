@@ -7,6 +7,18 @@ interface DesktopBridge {
   retry: () => void;
   /** С версии 1.0.1: значок окна, трея и ярлыков (png 256×256; null — исходный) */
   setIcon?: (id: string, png: string | null) => void;
+  /** С версии 1.1.0: оверлей для игр — прозрачное окно поверх всего (маршрут /overlay) */
+  overlay?: {
+    get: () => Promise<OverlayPrefs | null>;
+    set: (patch: Partial<OverlayPrefs>) => void;
+    onChange: (fn: (prefs: OverlayPrefs) => void) => () => void;
+  };
+}
+
+export type OverlayCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+export interface OverlayPrefs {
+  enabled: boolean;
+  corner: OverlayCorner;
 }
 
 export const desktop: DesktopBridge | undefined = (window as unknown as { vicinityDesktop?: DesktopBridge }).vicinityDesktop;

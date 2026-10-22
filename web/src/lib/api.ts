@@ -182,6 +182,9 @@ export interface Message {
   /** Стиль ника автора (lib/nameStyle.ts) — нет у старых серверов */
   author_style?: unknown;
   author_badge?: Badge | null;
+  /** Титул и эмблема автора за активность (§16); нет у старых серверов */
+  author_title?: string;
+  author_emblem?: string;
   text: string;
   created_at: string;
   edited: boolean;
@@ -414,6 +417,67 @@ export interface Profile {
   badge?: { id: number; name: string; icon: string; tag?: string; tag_icon?: string } | null;
   /** Рекорды в играх «Активностей» (только сыгранные) */
   games?: Record<string, { best_floor: number; runs: number; wins: number }>;
+  /** Уровень, серия, титул и награды (§16); hidden — владелец скрыл статистику, тогда только level/streak/title/emblem */
+  activity?: Partial<ActivitySummary> & { hidden?: boolean };
+  subscription_until?: string;
+}
+
+// ── Активность и награды (§16) ──
+export type AwardRarity = 'common' | 'rare' | 'epic' | 'legendary';
+export interface Award {
+  id: string;
+  kind: 'title' | 'emblem';
+  name: string;
+  rarity: AwardRarity;
+  desc: string;
+  earned_at?: string;
+}
+export interface ActivitySummary {
+  xp: number;
+  level: number;
+  level_xp: number;
+  next_xp: number;
+  streak: number;
+  best_streak: number;
+  msgs: number;
+  call_min: number;
+  voice_min: number;
+  games: number;
+  wins: number;
+  title: string;
+  emblem: string;
+  awards: Award[];
+}
+export interface LeaderboardRow extends UserSummary {
+  xp: number;
+  level: number;
+  streak: number;
+  title: string;
+  emblem: string;
+}
+
+// ── Приватность (§15) ──
+export interface PrivacySettings {
+  status: 'everyone' | 'friends' | 'nobody';
+  stats: 'everyone' | 'friends' | 'nobody';
+  dm: 'everyone' | 'friends';
+  friend_requests: 'everyone' | 'friends_of_friends' | 'nobody';
+}
+
+// ── Подарочные коды (§17) ──
+export interface GiftInfo {
+  code: string;
+  tier: number;
+  name: string;
+  days: number;
+  redeemed: boolean;
+}
+export interface GiftCode extends GiftInfo {
+  note: string;
+  created_at: string;
+  redeemed_by: number;
+  redeemed_by_name: string;
+  redeemed_at: string;
 }
 
 /** Игра из каталога Steam: обложку отдаёт наш сервер (/api/v1/games/{appid}/cover) */
@@ -648,7 +712,19 @@ export const api = {
   revokeOtherSessions: () => del<{ status: string; revoked: number }>('/auth/sessions/others'),
 
   // ── Подписка и оформление ──
-  subscription: () => get<{ tier: number; current: Plan; plans: Plan[] }>('/subscription'),
+  subscription: () => get<{ tier: number; until?: string; current: Plan; plans: Plan[] }>('/subscription'),
+
+  // ── Активность, приватность, подарки (§15–17) ──
+  activityMe: () => get<{ activity: ActivitySummary; catalog: Award[] }>('/activity/me'),
+  activityLeaderboard: () => get<{ users: LeaderboardRow[] }>('/activity/leaderboard').then((r) => r.users),
+  activityEquip: (title: string, emblem: string) => post<{ activity: ActivitySummary }>('/activity/equip', { title, emblem }),
+  privacy: () => get<PrivacySettings>('/settings/privacy'),
+  patchPrivacy: (p: Partial<PrivacySettings>) => request<PrivacySettings>('PATCH', '/settings/privacy', p),
+  giftInfo: (code: string) => get<GiftInfo>(`/gifts/${encodeURIComponent(code)}`),
+  giftRedeem: (code: string) => post<{ tier: number; name: string; until: string; days: number }>('/gifts/redeem', { code }),
+  adminGifts: () => get<{ gifts: GiftCode[] }>('/admin/gifts').then((r) => r.gifts),
+  adminCreateGifts: (tier: number, days: number, count: number, note: string) =>
+    post<{ codes: { code: string; tier: number; days: number }[] }>('/admin/gifts', { tier, days, count, note }).then((r) => r.codes),
   appearance: () => get<AppearanceResponse>('/settings/appearance'),
   saveAppearance: (s: Partial<AppearanceSettings>) => request<AppearanceResponse>('PATCH', '/settings/appearance', s),
 

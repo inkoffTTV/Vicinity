@@ -13,6 +13,7 @@ export type Route =
   | { kind: 'home'; channelId: number | null }
   | { kind: 'server'; serverId: number; channelId: number | null }
   | { kind: 'invite'; code: string }
+  | { kind: 'gift'; code: string }
   | { kind: 'user'; userId: number }
   | { kind: 'profileLink'; code: string };
 
@@ -23,6 +24,8 @@ export function parsePath(path: string): Route | null {
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
   if (parts[0] === 'invite' && parts.length === 2 && /^[A-Za-z0-9]{1,32}$/.test(parts[1]))
     return { kind: 'invite', code: parts[1].toUpperCase() };
+  if (parts[0] === 'gift' && parts.length === 2 && /^[A-Za-z0-9-]{12,14}$/.test(parts[1]))
+    return { kind: 'gift', code: parts[1].toUpperCase() };
   if (parts[0] === 'u' && parts.length === 2 && /^[A-Za-z0-9]{16,32}$/.test(parts[1])) return { kind: 'profileLink', code: parts[1] };
   if (parts[0] === 'users' && parts.length === 2) {
     const userId = id(parts[1]);
@@ -71,3 +74,5 @@ export function pathFor(v: View): string {
 
 /** Ссылка-приглашение для копирования: открывает приложение и предлагает вступить */
 export const inviteLink = (code: string) => `${location.origin}/invite/${encodeURIComponent(code)}`;
+/** Ссылка на подарочный код подписки: открывает приложение и предлагает активировать */
+export const giftLink = (code: string) => `${location.origin}/gift/${encodeURIComponent(code)}`;

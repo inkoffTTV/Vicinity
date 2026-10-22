@@ -6,6 +6,7 @@ import { badgeById } from '../../lib/badges';
 import { NameStyle, nameCss } from '../../lib/nameStyle';
 import { ProfileTheme, themeSurface } from '../../lib/profileTheme';
 import { Avatar, PRESENCE_LABEL } from '../Avatar';
+import { Emblem } from '../Emblem';
 import { Markdown } from '../Markdown';
 import { ServerIcon } from '../ServerRail';
 import { Icon } from '../Icon';
@@ -36,6 +37,10 @@ export interface CardData {
   name_style: NameStyle | null;
   /** Тема профиля: градиент карточки, подложка и цвет текста по контрасту */
   theme?: ProfileTheme | null;
+  /** Титул и эмблема за активность (lib/awards.ts) и уровень */
+  title?: string;
+  emblem?: string;
+  level?: number;
 }
 
 /** Ссылка подключённого аккаунта: своя или по имени (Twitch, GitHub, Telegram…) */
@@ -153,7 +158,11 @@ export function ProfileCard({ d, actions, onBadge }: { d: CardData; actions?: Re
         )}
       </div>
       <div className="pcard-body">
-        <h2 className="pcard-name">{d.name_style ? <span style={nameCss(d.name_style, 24)}>{d.display_name}</span> : d.display_name}</h2>
+        <h2 className="pcard-name">
+          {d.name_style ? <span style={nameCss(d.name_style, 24)}>{d.display_name}</span> : d.display_name}
+          {d.emblem && <Emblem id={d.emblem} size={18} />}
+        </h2>
+        {d.title && <div className="pcard-title">{d.title}</div>}
         <div className="pcard-sub">
           <span>@{d.username}</span>
           {d.pronouns && <span>• {d.pronouns}</span>}

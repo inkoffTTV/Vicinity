@@ -9,6 +9,9 @@ import { Modal } from './Modal';
 import { RoleChips } from './RoleChips';
 import { ServerIcon } from './ServerRail';
 import { cardFromProfile } from './profile/cardData';
+import { Emblem } from './Emblem';
+import { plural, RARITY_LABEL } from '../lib/awards';
+import { Flame } from 'lucide-react';
 import { ProfileBoard } from './profile/ProfileBoard';
 import { ProfileCard } from './profile/ProfileCard';
 import { ProfileActions } from './profile/ProfileActions';
@@ -97,6 +100,38 @@ export function ProfileModal({ userId }: { userId: number }) {
           {card.status_text && <> · {card.status_text}</>}
         </p>
       </section>
+      {p.activity && (p.activity.level ?? 0) > 0 && (
+        <section className="widget pact">
+          <strong>Уровень {p.activity.level}</strong>
+          <p className="muted">
+            {p.activity.streak ? (
+              <>
+                <Icon icon={Flame} size={13} className="inline-ico" />
+                {p.activity.streak} {plural(p.activity.streak, 'день', 'дня', 'дней')} подряд
+              </>
+            ) : (
+              'Без серии'
+            )}
+            {!p.activity.hidden && typeof p.activity.msgs === 'number' && (
+              <>
+                {' '}
+                · {p.activity.msgs} {plural(p.activity.msgs, 'сообщение', 'сообщения', 'сообщений')} · {(p.activity.call_min ?? 0) + (p.activity.voice_min ?? 0)} мин в голосе
+              </>
+            )}
+            {p.activity.hidden && ' · статистика скрыта'}
+          </p>
+          {!!p.activity.awards?.length && (
+            <div className="pact-awards">
+              {p.activity.awards.map((a) => (
+                <span key={a.id} className={`award-chip r-${a.rarity}`} title={`${a.desc} · ${RARITY_LABEL[a.rarity]}`}>
+                  {a.kind === 'emblem' ? <Emblem id={a.id} size={12} /> : null}
+                  {a.name}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
       {p.games?.klyaksa && (
         <section className="widget">
           <strong>Клякса</strong>

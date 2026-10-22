@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState , FormEvent } from 'react';
 import { useThemeAccess } from '../lib/appearanceSync';
-import { usePlan } from '../lib/plan';
+import { api, ApiError } from '../lib/api';
+import { loadPlan, usePlan } from '../lib/plan';
+import { useStore } from '../lib/store';
 import { FontSize, ServerTheme, useAppearance } from '../lib/prefs';
 import { BASE_THEMES, COLOR_THEMES, CustomTheme, gradientCss, themeById } from '../lib/themes';
 import { Segmented, Toggle } from './SettingControls';
@@ -386,16 +388,55 @@ export function AccessibilityTab() {
 const TIER_TAG = ['', 'BASIC', 'STANDARD', 'ULTRA'];
 
 export function SubscriptionTab() {
-  const { current, plans } = usePlan();
+  const { current, plans, until } = usePlan();
   const list = plans.length ? plans : [current];
+  const toast = useStore((s) => s.toast);
+  const refreshMe = useStore((s) => s.refreshMe);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [codeError, setCodeError] = useState('');
+  const redeem = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!code.trim() || busy) return;
+    setBusy(true);
+    setCodeError('');
+    try {
+      const r = await api.giftRedeem(code);
+      await Promise.all([refreshMe(), loadPlan()]);
+      toast(`Подарок активирован: ${r.name}`);
+      setCode('');
+    } catch (err) {
+      setCodeError(err instanceof ApiError ? err.message : 'Ошибка');
+    }
+    setBusy(false);
+  };
+  const untilText = until ? new Date(until.replace(' ', 'T') + 'Z').toLocaleDateString('ru-RU') : '';
   return (
     <div className="settings">
       <h2 className="display" style={{ margin: 0 }}>
         Подписка
       </h2>
       <p className="muted" style={{ margin: 0 }}>
-        Сейчас у вас: <strong>{current.name}</strong>. Оплаты в приложении нет — подписку выдаёт администратор сервера.
+        Сейчас у вас: <strong>{current.name}</strong>
+        {untilText && <> до {untilText}</>}. Оплаты в приложении нет — подписку выдаёт администратор или подарочный код.
       </p>
+      <form className="settings-card stack gift-redeem" onSubmit={(e) => void redeem(e)} aria-label="Подарочный код">
+        <strong>Подарочный код</strong>
+        <div className="stack-row">
+          <input
+            className="grow mono"
+            placeholder="XXXX-XXXX-XXXX"
+            value={code}
+            maxLength={14}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            aria-label="Подарочный код"
+          />
+          <button className="btn primary" disabled={busy || code.replace(/-/g, '').length !== 12}>
+            Активировать
+          </button>
+        </div>
+        {codeError ? <span className="form-error">{codeError}</span> : <span className="muted small">Код подписки от администратора или друга. Ссылка вида /gift/КОД активирует его сама.</span>}
+      </form>
       <div className="plans">
         {list.map((p) => (
           <section key={p.tier} className={`plan${p.tier === current.tier ? ' current' : ''}`} aria-label={p.name}>

@@ -1,12 +1,13 @@
 // Vicinity для Windows: окно с веб-клиентом, трей, уведомления, выбор экрана для показа и автообновление.
 // Сам интерфейс — тот же веб-клиент с сервера, поэтому обновления дизайна приходят без переустановки.
-const { app, BrowserWindow, Menu, Tray, desktopCapturer, ipcMain, nativeImage, nativeTheme, screen, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, desktopCapturer, globalShortcut, ipcMain, nativeImage, nativeTheme, screen, session, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
 const APP_URL = 'https://chat.13-143-162-211.sslip.io';
 const ORIGIN = new URL(APP_URL).origin;
 const START_URL = APP_URL + '/channels/@me';
+const OVERLAY_URL = APP_URL + '/overlay';
 
 app.setAppUserModelId('app.vicinity.desktop');
 nativeTheme.themeSource = 'dark';
@@ -20,6 +21,7 @@ if (!app.requestSingleInstanceLock()) {
 let win = null;
 let tray = null;
 let quitting = false;
+let overlay = null;
 
 const asset = (name) => path.join(__dirname, '..', 'build', name);
 
@@ -250,12 +252,111 @@ function createWindow() {
   win.on('focus', () => win.flashFrame(false));
 }
 
-function createTray() {
-  tray = new Tray(fs.existsSync(iconPng()) ? trayIcon(currentIcon()) : nativeImage.createFromPath(asset('tray.png')));
-  tray.setToolTip('Vicinity');
+// ── Оверлей для игр: прозрачное окно поверх всего с участниками голоса, звонком и сообщениями ──
+// Клики проходят сквозь него. Игры в эксклюзивном полноэкранном режиме рисуют мимо него —
+// там нужен оконный режим без рамки (как у любого оверлея).
+const overlayFile = () => path.join(app.getPath('userData'), 'overlay.json');
+const OVERLAY_SIZE = { width: 360, height: 520 };
+const CORNERS = ['top-right', 'top-left', 'bottom-right', 'bottom-left'];
+function loadOverlay() {
+  try {
+    const o = JSON.parse(fs.readFileSync(overlayFile(), 'utf8'));
+    return { enabled: !!o.enabled, corner: CORNERS.includes(o.corner) ? o.corner : 'top-right' };
+  } catch {
+    return { enabled: false, corner: 'top-right' };
+  }
+}
+let overlayPrefs = null;
+function saveOverlay(prefs) {
+  overlayPrefs = prefs;
+  try {
+    fs.writeFileSync(overlayFile(), JSON.stringify(prefs));
+  } catch {
+    /* не страшно */
+  }
+}
+function overlayBounds(corner) {
+  const a = screen.getPrimaryDisplay().workArea;
+  const { width, height } = OVERLAY_SIZE;
+  const x = corner.endsWith('left') ? a.x + 8 : a.x + a.width - width - 8;
+  const y = corner.startsWith('top') ? a.y + 8 : a.y + a.height - height - 8;
+  return { x, y, width, height };
+}
+function applyOverlay() {
+  const prefs = overlayPrefs ?? (overlayPrefs = loadOverlay());
+  if (!prefs.enabled) {
+    if (overlay && !overlay.isDestroyed()) overlay.close();
+    overlay = null;
+  } else if (!overlay || overlay.isDestroyed()) {
+    overlay = new BrowserWindow({
+      ...overlayBounds(prefs.corner),
+      transparent: true,
+      frame: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      focusable: false,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      hasShadow: false,
+      show: false,
+      title: 'Vicinity Overlay',
+      webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
+    });
+    overlay.setAlwaysOnTop(true, 'screen-saver');
+    overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    overlay.setIgnoreMouseEvents(true, { forward: true });
+    overlay.removeMenu();
+    overlay.once('ready-to-show', () => overlay && overlay.showInactive());
+    overlay.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    overlay.on('closed', () => {
+      overlay = null;
+    });
+    void overlay.loadURL(OVERLAY_URL);
+  } else {
+    overlay.setBounds(overlayBounds(prefs.corner));
+  }
+  if (tray) createTrayMenu();
+  if (win && !win.isDestroyed()) win.webContents.send('overlay:changed', prefs);
+}
+function setOverlay(patch) {
+  const prefs = { ...(overlayPrefs ?? loadOverlay()), ...patch };
+  if (!CORNERS.includes(prefs.corner)) prefs.corner = 'top-right';
+  saveOverlay({ enabled: !!prefs.enabled, corner: prefs.corner });
+  applyOverlay();
+}
+ipcMain.handle('overlay:get', (e) => (sameOrigin(e.sender.getURL()) ? overlayPrefs ?? loadOverlay() : null));
+ipcMain.on('overlay:set', (e, patch) => {
+  if (!win || e.sender !== win.webContents || !sameOrigin(e.sender.getURL()) || !patch || typeof patch !== 'object') return;
+  const clean = {};
+  if (typeof patch.enabled === 'boolean') clean.enabled = patch.enabled;
+  if (typeof patch.corner === 'string') clean.corner = patch.corner;
+  setOverlay(clean);
+});
+
+function createTrayMenu() {
+  const prefs = overlayPrefs ?? loadOverlay();
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Открыть Vicinity', click: showWindow },
+      { type: 'separator' },
+      {
+        label: 'Оверлей в играх  (Ctrl+Shift+O)',
+        type: 'checkbox',
+        checked: prefs.enabled,
+        click: (item) => setOverlay({ enabled: item.checked }),
+      },
+      {
+        label: 'Угол оверлея',
+        submenu: [
+          ['top-right', 'Справа сверху'],
+          ['top-left', 'Слева сверху'],
+          ['bottom-right', 'Справа снизу'],
+          ['bottom-left', 'Слева снизу'],
+        ].map(([corner, label]) => ({ label, type: 'radio', checked: prefs.corner === corner, click: () => setOverlay({ corner }) })),
+      },
       { type: 'separator' },
       {
         label: 'Запускать вместе с Windows',
@@ -273,6 +374,12 @@ function createTray() {
       },
     ]),
   );
+}
+
+function createTray() {
+  tray = new Tray(fs.existsSync(iconPng()) ? trayIcon(currentIcon()) : nativeImage.createFromPath(asset('tray.png')));
+  tray.setToolTip('Vicinity');
+  createTrayMenu();
   tray.on('click', showWindow);
 }
 
@@ -383,4 +490,8 @@ app.whenReady().then(() => {
   createTray();
   createWindow();
   setupUpdates();
+  applyOverlay();
+  globalShortcut.register('CommandOrControl+Shift+O', () => setOverlay({ enabled: !(overlayPrefs ?? loadOverlay()).enabled }));
+  screen.on('display-metrics-changed', () => overlay && applyOverlay());
 });
+app.on('will-quit', () => globalShortcut.unregisterAll());

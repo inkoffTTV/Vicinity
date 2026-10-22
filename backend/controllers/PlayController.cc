@@ -1,4 +1,5 @@
 #include "PlayController.h"
+#include "../utils/Activity.h"
 #include "../managers/UserRateLimiter.h"
 #include "../models/User.h"
 #include "../utils/Access.h"
@@ -151,6 +152,8 @@ void PlayController::result(const HttpRequestPtr& req, std::function<void(const 
         s.best = std::max(s.best, floor);
         s.runs += 1;
         s.wins += won ? 1 : 0;
+        Activity::bump(self, Activity::Kind::GamePlayed);
+        if (won) Activity::bump(self, Activity::Kind::GameWon);
         s.kills = static_cast<int>(std::min<int64_t>(int64_t(s.kills) + kills, 1000000000));
         Json::Value u(Json::arrayValue);
         for (const auto& x : s.unlocks) u.append(x);

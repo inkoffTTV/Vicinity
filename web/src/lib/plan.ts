@@ -19,13 +19,13 @@ export const FREE_PLAN: Plan = {
   gradient_name: false,
 };
 
-export const usePlan = create<{ current: Plan; plans: Plan[] }>(() => ({ current: FREE_PLAN, plans: [] }));
+export const usePlan = create<{ current: Plan; plans: Plan[]; until: string }>(() => ({ current: FREE_PLAN, plans: [], until: '' }));
 
 export async function loadPlan() {
   try {
     const r = await api.subscription();
-    usePlan.setState({ current: r.current, plans: r.plans });
+    usePlan.setState({ current: r.current, plans: r.plans, until: r.until ?? '' });
   } catch {
-    usePlan.setState({ current: FREE_PLAN, plans: [] });
+    usePlan.setState({ current: FREE_PLAN, plans: [], until: '' });
   }
 }

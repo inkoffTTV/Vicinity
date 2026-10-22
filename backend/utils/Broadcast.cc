@@ -1,4 +1,5 @@
 #include "Broadcast.h"
+#include "Privacy.h"
 #include "JsonUtils.h"
 #include "PresenceUtil.h"
 #include "../managers/WSManager.h"
@@ -82,7 +83,19 @@ void presence(int64_t userId) {
     ev["type"]     = "presence";
     ev["user_id"]  = static_cast<Json::Int64>(userId);
     ev["presence"] = effectivePresence(userId);
-    toUsers(contactsOf(userId), ev);
+    // Приватность: кому статус скрыт, тот видит «не в сети»
+    try {
+        auto db = drogon::app().getDbClient();
+        const std::string mode = Privacy::get(userId)["status"].asString();
+        if (mode == "everyone") { toUsers(contactsOf(userId), ev); return; }
+        Json::Value hidden = ev;
+        hidden["presence"] = "offline";
+        const std::string shown = JsonUtils::write(ev), masked = JsonUtils::write(hidden);
+        for (int64_t uid : contactsOf(userId))
+            WSManager::instance().sendToUser(uid, mode == "friends" && Privacy::friends(db, userId, uid) ? shown : masked);
+    } catch (const std::exception& e) {
+        LOG_WARN << "Broadcast::presence " << userId << ": " << e.what();
+    }
 }
 
 void userUpdated(int64_t userId) {

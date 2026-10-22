@@ -5,6 +5,7 @@
 #include <sstream>
 #include "models/Database.h"
 #include "utils/WebPush.h"
+#include "utils/Gifts.h"
 #include "managers/SessionManager.h"
 #include "utils/Uploads.h"
 #ifdef VICINITY_HAVE_CURL
@@ -110,6 +111,9 @@ int main() {
             drogon::app().getLoop()->runEvery(300.0, [] {
                 AppSessionManager::instance().closeExpiredSessions();
             });
+            // Подарочные подписки со сроком: снимать истёкшие раз в час (и сразу при старте)
+            Gifts::expire();
+            drogon::app().getLoop()->runEvery(3600.0, [] { Gifts::expire(); });
         })
         .run();
     return 0;

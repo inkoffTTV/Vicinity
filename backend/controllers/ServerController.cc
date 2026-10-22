@@ -5,6 +5,7 @@
 #include "../models/Cascade.h"
 #include "../models/User.h"
 #include "../utils/Access.h"
+#include "../utils/Privacy.h"
 #include "../utils/Broadcast.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/TextUtils.h"
@@ -480,15 +481,13 @@ void ServerController::listMembers(const HttpRequestPtr& req,
         Json::Value arr(Json::arrayValue);
         for (const auto& r : rows) {
             int64_t uid = r["id"].as<int64_t>();
-            std::string pres = r["presence"].isNull() ? "online" : r["presence"].as<std::string>();
-            // Эффективное присутствие: онлайн только при активном WS и не «невидимке»
-            bool online = WSManager::instance().isOnline(uid) && pres != "invisible";
             Json::Value m;
             m["id"]           = static_cast<Json::Int64>(uid);
             m["username"]     = r["username"].as<std::string>();
             m["display_name"] = r["display_name"].as<std::string>();
             m["avatar_path"]  = r["avatar_path"].isNull() ? "" : r["avatar_path"].as<std::string>();
-            m["presence"]     = online ? pres : "offline";
+            // Эффективное присутствие с учётом приватности зрителя (utils/Privacy.h)
+            m["presence"]     = Privacy::presenceFor(db, uid, self);
             m["is_owner"]     = (r["owner_id"].as<int64_t>() == uid);
             m["developer"]    = r["developer"].isNull() ? 0 : r["developer"].as<int>();
             m["tier"]         = r["subscription_tier"].isNull() ? 0 : r["subscription_tier"].as<int>();

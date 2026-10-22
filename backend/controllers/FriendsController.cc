@@ -3,6 +3,7 @@
 #include "../utils/Broadcast.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/Access.h"
+#include "../utils/Privacy.h"
 #include "../utils/PresenceUtil.h"
 #include <drogon/HttpResponse.h>
 
@@ -27,14 +28,15 @@ static void notify(int64_t userId, const std::string& action, int64_t fromId) {
     Broadcast::toUser(userId, ev);
 }
 
-static Json::Value userSummary(const Row& row) {
+// viewer — кто смотрит: статус «только для друзей» или «никому» скрывается (utils/Privacy.h)
+static Json::Value userSummary(const Row& row, int64_t viewer = 0) {
     Json::Value u;
     int64_t id = row["id"].as<int64_t>();
     u["id"]           = id;
     u["username"]     = row["username"].as<std::string>();
     u["display_name"] = row["display_name"].as<std::string>();
     u["avatar_path"]  = row["avatar_path"].isNull() ? "" : row["avatar_path"].as<std::string>();
-    u["presence"]     = effectivePresence(id);
+    u["presence"]     = viewer ? Privacy::presenceFor(app().getDbClient(), id, viewer) : effectivePresence(id);
     return u;
 }
 
@@ -50,7 +52,7 @@ void FriendsController::listFriends(const HttpRequestPtr& req,
             "                    OR (f.addressee_id=? AND f.requester_id=u.id)) "
             "WHERE f.status='accepted' ORDER BY u.display_name COLLATE NOCASE", self, self);
         Json::Value arr(Json::arrayValue);
-        for (const auto& row : r) arr.append(userSummary(row));
+        for (const auto& row : r) arr.append(userSummary(row, self));
         Json::Value resp; resp["friends"] = arr;
         cb(jsonResp(resp));
     } catch (const std::exception& e) { cb(errResp(e.what(), k500InternalServerError)); }
@@ -99,6 +101,7 @@ void FriendsController::request(const HttpRequestPtr& req,
             cb(errResp("Пользователь не найден", k404NotFound)); return;
         }
         if (Access::blockedBetween(db, self, target)) { cb(errResp("Нельзя отправить заявку этому пользователю", k403Forbidden)); return; }
+        if (std::string why; !Privacy::canRequest(db, self, target, why)) { cb(errResp(why, k403Forbidden)); return; }
 
         auto ex = db->execSqlSync(
             "SELECT requester_id, status FROM friendships "

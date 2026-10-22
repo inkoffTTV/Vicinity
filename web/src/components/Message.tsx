@@ -14,6 +14,7 @@ import { userMenuProps } from '../lib/userMenu';
 import { useUserDirectory } from '../lib/users';
 import { Attachment } from './Attachment';
 import { VoiceMessage } from './VoiceMessage';
+import { Emblem } from './Emblem';
 import { Avatar } from './Avatar';
 import { EmojiPicker } from './EmojiPicker';
 import { Icon } from './Icon';
@@ -145,6 +146,7 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
               >
                 {msg.author_name}
               </button>
+              {msg.author_emblem && <Emblem id={msg.author_emblem} size={14} title={msg.author_title || undefined} />}
               {msg.author_badge && <ServerTag tag={msg.author_badge.tag} icon={msg.author_badge.icon} serverId={msg.author_badge.server_id} small />}
               <span className="msg-time" title={time.toLocaleString('ru-RU')}>
                 {formatTime(time)}

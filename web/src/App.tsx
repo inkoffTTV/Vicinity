@@ -3,7 +3,7 @@ import { DesktopUpdateBanner } from './components/DesktopUpdate';
 import { ActivityFrame, ActivityInvites } from './components/Activities';
 import { useAppearance } from './lib/prefs';
 import { setAppBadge } from './lib/pwa';
-import { useInvite } from './lib/router';
+import { useGift, useInvite } from './lib/router';
 import { useSearch } from './lib/search';
 import { useShortcuts } from './lib/shortcuts';
 import { useStore } from './lib/store';
@@ -23,11 +23,16 @@ import { Toasts } from './components/Toasts';
 import { UserMenu } from './components/UserMenu';
 import { IncomingCall } from './components/IncomingCall';
 import { InviteCard } from './components/InviteCard';
+import { GiftCard } from './components/GiftCard';
 import { CallOverlay } from './components/CallOverlay';
 import { VoiceStage } from './components/VoiceStage';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { SearchPanel } from './components/Search';
 import { ProfileStudio, useProfileStudio } from './components/profile/ProfileStudio';
+import { OverlayView } from './components/Overlay';
+
+// Оверлей для игр: ПК-приложение открывает этот адрес прозрачным окном поверх всего
+const OVERLAY = location.pathname === '/overlay';
 
 export default function App() {
   const booting = useStore((s) => s.booting);
@@ -42,6 +47,7 @@ export default function App() {
   const stageOpen = useVoiceVideo((s) => s.stageOpen);
   const searchOpen = useSearch((s) => s.open);
   const inviteCode = useInvite((s) => s.code);
+  const giftCode = useGift((s) => s.code);
   const [navOpen, setNavOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(() => window.innerWidth > 1100);
   const [switcher, setSwitcher] = useState(false);
@@ -74,7 +80,8 @@ export default function App() {
     setAppBadge(unreadTotal);
   }, [unreadTotal]);
 
-  if (booting) return <div className="splash">Vicinity</div>;
+  if (booting) return OVERLAY ? null : <div className="splash">Vicinity</div>;
+  if (OVERLAY) return me ? <OverlayView /> : null;
   if (!me && unreachable) return <Unreachable />;
   if (!me)
     return (
@@ -118,6 +125,7 @@ export default function App() {
       {settingsOpen && <Settings />}
       {studioOpen && <ProfileStudio />}
       {inviteCode && <InviteCard code={inviteCode} />}
+      {giftCode && <GiftCard code={giftCode} />}
       {switcher && <QuickSwitcher onClose={closeSwitcher} />}
       <UserMenu />
       <CallOverlay />

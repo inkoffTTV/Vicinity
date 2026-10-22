@@ -19,6 +19,7 @@ struct User {
     std::string email;       // нормализованная почта ("" — не привязана)
     std::string signupIp;
     std::string profileExt;  // JSON расширенного профиля (utils/ProfileExt.h)
+    std::string subscriptionUntil;   // срок подарочной подписки (UTC) или ""
     int         subscriptionTier = 0;
     int         developer        = 0;
     int         banned           = 0;

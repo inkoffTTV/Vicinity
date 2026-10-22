@@ -1057,3 +1057,197 @@ input.invalid {
   white-space: nowrap;
   user-select: all;
 }
+
+/* ── Уровень и награды (settings/ActivityScreen.tsx) ── */
+.lvl-card {
+  display: flex;
+  gap: var(--space-5);
+  align-items: center;
+}
+.lvl-ring {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: conic-gradient(var(--accent) var(--p), var(--bg-hover) 0);
+  position: relative;
+}
+.lvl-ring::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--bg-raised);
+}
+.lvl-ring > * {
+  position: relative;
+}
+.lvl-num {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+}
+.lvl-bar {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+.lvl-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width var(--dur-slow) var(--ease-out-soft);
+}
+.lvl-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  font-size: var(--fs-body-sm);
+}
+.lvl-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
+}
+.lvl-streak.on {
+  color: var(--danger-text);
+}
+.award-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-3);
+}
+.award-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out-soft), transform var(--dur-fast) var(--ease-out-soft);
+}
+.award-tile:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.award-tile.locked {
+  cursor: default;
+  opacity: 0.55;
+}
+.award-tile.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.award-ico {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--rarity) 22%, transparent);
+  color: var(--rarity);
+}
+.award-name {
+  font-weight: 600;
+}
+.award-rarity {
+  font-size: var(--fs-caption);
+  color: var(--rarity);
+}
+.r-common {
+  --rarity: var(--text-2);
+}
+.r-rare {
+  --rarity: #4aa3ff;
+}
+.r-epic {
+  --rarity: #b36bff;
+}
+.r-legendary {
+  --rarity: #f0b429;
+}
+.lvl-board {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lvl-board li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.lvl-board li.me {
+  background: var(--bg-hover);
+}
+.lvl-rank {
+  width: 1.6em;
+  text-align: right;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.lvl-pill {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+}
+.award-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--rarity) 55%, transparent);
+  color: var(--rarity);
+  font-size: var(--fs-caption);
+}
+.pact-awards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ── Подарочные коды ── */
+.gift-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: end;
+}
+.gift-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+}
+.gift-form input[type='number'] {
+  width: 80px;
+}
+.gift-redeem .mono {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.gift-icon {
+  color: var(--accent);
+}

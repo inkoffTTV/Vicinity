@@ -18,12 +18,13 @@ const std::string kColumns =
     "JOIN server_members bm ON bm.server_id = bs.id AND bm.user_id = u.id "
     "WHERE bs.id = json_extract(u.profile_ext, '$.badge_server') AND bs.tag IS NOT NULL) AS author_badge, "
     "m.text, m.created_at, m.edited, m.attachment, m.attachment_name, m.attachment_size, "
-    "m.attachment_type, m.reply_to, m.kind, m.meta, "
+    "m.attachment_type, m.reply_to, m.kind, m.meta, act.title AS author_title, act.emblem AS author_emblem, "
     "rm.id AS reply_id, rm.author_id AS reply_author_id, ru.display_name AS reply_author_name, "
     "rm.text AS reply_text, rm.attachment AS reply_attachment";
 
 const std::string kFrom =
     "messages m JOIN users u ON u.id = m.author_id "
+    "LEFT JOIN activity act ON act.user_id = u.id "
     "LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id "
     "LEFT JOIN users ru ON ru.id = rm.author_id";
 
@@ -66,6 +67,9 @@ Json::Value fromRow(const drogon::orm::Row& row) {
     msg["author_accent"] = str(row, "author_accent");
     msg["author_style"]  = ProfileExt::nameStyleFromJson(str(row, "author_style"), msg["author_tier"].asInt());
     msg["author_badge"]  = badgeFromString(str(row, "author_badge"));
+    // Титул и эмблема за активность (utils/Activity.h)
+    msg["author_title"]  = str(row, "author_title");
+    msg["author_emblem"] = str(row, "author_emblem");
     msg["text"]          = str(row, "text");
     msg["created_at"]    = str(row, "created_at");
     msg["edited"]        = row["edited"].as<int>() != 0;

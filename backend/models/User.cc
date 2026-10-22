@@ -19,6 +19,7 @@ static User rowToUser(const drogon::orm::Row& row) {
     if (!row["presence"].isNull())     u.presence    = row["presence"].as<std::string>();
     u.createdAt        = row["created_at"].as<std::string>();
     u.subscriptionTier = row["subscription_tier"].as<int>();
+    u.subscriptionUntil = row["subscription_until"].isNull() ? std::string() : row["subscription_until"].as<std::string>();
     u.developer        = row["developer"].as<int>();
     if (!row["email"].isNull())     u.email    = row["email"].as<std::string>();
     if (!row["signup_ip"].isNull()) u.signupIp = row["signup_ip"].as<std::string>();

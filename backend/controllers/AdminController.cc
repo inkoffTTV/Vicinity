@@ -1,4 +1,5 @@
 #include "AdminController.h"
+#include "../utils/Gifts.h"
 #include "../models/Cascade.h"
 #include "../models/User.h"
 #include "../managers/SessionManager.h"
@@ -140,7 +141,7 @@ void AdminController::setTier(const HttpRequestPtr& req, std::function<void(cons
     if (tier < 0 || tier > 3) { cb(error("Уровень подписки — от 0 до 3", k400BadRequest)); return; }
     if (!UserModel::findById(id)) { cb(error("Пользователь не найден", k404NotFound)); return; }
     try {
-        drogon::app().getDbClient()->execSqlSync("UPDATE users SET subscription_tier = ? WHERE id = ?", tier, id);
+        drogon::app().getDbClient()->execSqlSync("UPDATE users SET subscription_tier = ?, subscription_until = NULL WHERE id = ?", tier, id);
         Json::Value resp;
         resp["id"]   = static_cast<Json::Int64>(id);
         resp["tier"] = tier;
@@ -240,6 +241,40 @@ void AdminController::unblockIp(const HttpRequestPtr& req, std::function<void(co
         drogon::app().getDbClient()->execSqlSync("DELETE FROM blocked_ips WHERE ip = ?", ip);
         Json::Value resp;
         resp["status"] = "ok";
+        cb(jsonResp(std::move(resp)));
+    } catch (const std::exception& e) {
+        cb(error(e.what(), k500InternalServerError));
+    }
+}
+
+// POST /api/v1/admin/gifts {tier 1..3, days 1..3650, count 1..50, note} → {codes:[{code, tier, days}]}
+void AdminController::createGifts(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
+    if (!requireAdmin(req, cb)) return;
+    const int64_t self = req->attributes()->get<int64_t>("user_id");
+    auto json = req->getJsonObject();
+    if (!json || !json->isObject()) { cb(error("Invalid JSON", k400BadRequest)); return; }
+    const int tier  = static_cast<int>(JsonUtils::getInt(*json, "tier"));
+    const int days  = static_cast<int>(JsonUtils::getInt(*json, "days", 30));
+    const int count = static_cast<int>(JsonUtils::getInt(*json, "count", 1));
+    const std::string note = TextUtils::utf8Truncate(JsonUtils::getStr(*json, "note"), 80);
+    if (tier < 1 || tier > 3) { cb(error("Уровень подписки — от 1 до 3", k400BadRequest)); return; }
+    if (days < 1 || days > 3650) { cb(error("Срок — от 1 до 3650 дней", k400BadRequest)); return; }
+    if (count < 1 || count > 50) { cb(error("За раз — от 1 до 50 кодов", k400BadRequest)); return; }
+    try {
+        Json::Value resp;
+        resp["codes"] = Gifts::create(self, tier, days, count, note);
+        cb(jsonResp(std::move(resp)));
+    } catch (const std::exception& e) {
+        cb(error(e.what(), k500InternalServerError));
+    }
+}
+
+// GET /api/v1/admin/gifts → {gifts:[...]}
+void AdminController::listGifts(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
+    if (!requireAdmin(req, cb)) return;
+    try {
+        Json::Value resp;
+        resp["gifts"] = Gifts::list();
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
         cb(error(e.what(), k500InternalServerError));

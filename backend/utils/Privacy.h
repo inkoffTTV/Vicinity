@@ -1,0 +1,25 @@
+#pragma once
+#include <drogon/orm/DbClient.h>
+#include <json/json.h>
+#include <cstdint>
+#include <string>
+
+// Приватность (docs/API.md §15): кто видит статус и активность, кто может писать в личку и слать заявки.
+// Хранится в user_settings.privacy (JSON); значения по умолчанию — «все».
+namespace Privacy {
+    // {status, stats, dm, friend_requests} с подставленными значениями по умолчанию
+    Json::Value get(int64_t userId);
+    // Проверить и сохранить присланные поля; false — некорректное значение (error заполнен)
+    bool patch(int64_t userId, const Json::Value& in, Json::Value& out, std::string& error);
+
+    // Друзья ли (accepted)
+    bool friends(const drogon::orm::DbClientPtr& db, int64_t a, int64_t b);
+    // Виден ли viewer-у аспект field ("status" | "stats") пользователя target
+    bool allows(const drogon::orm::DbClientPtr& db, int64_t target, int64_t viewer, const char* field);
+    // Статус target глазами viewer: effectivePresence или "offline", если статус скрыт
+    std::string presenceFor(const drogon::orm::DbClientPtr& db, int64_t target, int64_t viewer);
+    // Может ли from написать target в личку (новую); текст отказа в reason
+    bool canDm(const drogon::orm::DbClientPtr& db, int64_t from, int64_t target, std::string& reason);
+    // Может ли from отправить target заявку в друзья; текст отказа в reason
+    bool canRequest(const drogon::orm::DbClientPtr& db, int64_t from, int64_t target, std::string& reason);
+}
