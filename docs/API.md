@@ -88,12 +88,13 @@ PATCH `/settings/appearance` `{любые поля settings}` → то же. `se
 | `follow_system` | bool — «Как тема устройства» |
 | `base_theme` | `light` \| `dark` \| `graphite` \| `black` |
 | `color_theme` | null \| id готовой темы (`mint`, `peach`, … — список в `SettingsController.cc` и `web/src/lib/themes.ts`) — **Standard+, иначе 403** `{error, required_tier: 2}` |
-| `custom_theme` | null \| `{colors: [2–3 × "#rrggbb"], angle: 0–360, base: "dark"\|"light"}` — **Ultra, иначе 403** `{error, required_tier: 3}` |
+| `custom_theme` | null \| `{colors: [2–3 × "#rrggbb"], angle: 0–360, base: "dark"\|"light"}` — **Ultra, иначе 403** `{error, required_tier: 3}`; либо `{from: id}` — тема сообщества (§18), сервер сам подставляет её цвета и хранит `from`, **Standard+, иначе 403** `{required_tier: 2}`; 404, если тему удалили |
 | `sync_devices` | bool — синхронизировать между устройствами |
 | `apply_to_profiles` | bool — чужие профили в своих цветах |
 | `server_theme` | `mine` \| `default` — тема на серверах |
 | `accent` | `""` \| `#rrggbb` |
 | `font_size` | `s` \| `m` \| `l` |
+| `button_style` | `soft` \| `square` \| `round` — стиль кнопок и полей (атрибут `data-buttons` на `<html>`) |
 | `compact`, `reduce_motion`, `high_contrast` | bool |
 | `saturation` | 0–100 |
 
@@ -429,3 +430,16 @@ GET/PATCH `/settings/privacy` → `{status, stats, dm, friend_requests}` (хра
 `call_invite` — 10/мин, остальной сигналинг звонков (`call_accept/reject/end/busy`, `rtc_*`) **и `voice_rtc`** — 100 подряд,
 затем 5/с (общее ведро), **[new]** `voice_media` — 20/мин;
 голос — §11.
+
+## 18. Темы сообщества **[new]**
+
+Своя тема (Ultra) публикуется для всех; применить тему сообщества может любой со Standard — она хранится в
+`settings.appearance.custom_theme` с полем `from` (см. §0.6). Таблицы `community_themes`, `community_theme_likes`
+(`backend/controllers/ThemesController.cc`).
+
+| Метод | Путь | Описание |
+|---|---|---|
+| GET | `/themes/community?sort=top\|new` | `{themes:[{id, name, colors, angle, base, likes, liked, mine, created_at, author:{id, display_name}}], can_publish, own, max_own}` — до 100 тем, `top` по сердечкам |
+| POST | `/themes/community` | `{name: 2–30 символов, colors: [2–3 × "#rrggbb"], angle, base}` → тема. **Ultra, иначе 403**; больше 5 своих — 409 |
+| POST | `/themes/community/{id}/like` | поставить или снять сердечко → `{likes, liked}` |
+| DELETE | `/themes/community/{id}` | только автор или разработчик → `{ok}` |

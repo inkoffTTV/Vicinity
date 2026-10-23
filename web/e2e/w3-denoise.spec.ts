@@ -9,7 +9,7 @@ const stats = (u: User) =>
   u.page.evaluate(() => ({ ...(window as unknown as { __vicinityVoiceStats: { framesSent: number } }).__vicinityVoiceStats }));
 
 test('rnnoise: toggle in voice settings, model loads on voice join, frames still flow, off again', async ({ browser }) => {
-  const a = await registerUser(browser, 'Алиса');
+  const a = await registerUser(browser, 'Алиса', { denoise: true });
   await createServer(a, 'Тихий сервер');
 
   // Модуль отдаётся сборкой (vite plugin), а не лежит в репозитории
@@ -19,11 +19,10 @@ test('rnnoise: toggle in voice settings, model loads on voice join, frames still
 
   await a.page.locator('.user-panel').getByTitle('Настройки').click();
   await settingsTab(a, 'Голос и видео').click();
+  // Включено по умолчанию
   const toggle = a.page.getByRole('switch', { name: 'Нейросетевое шумоподавление (RNNoise)' });
-  await expect(toggle).toHaveJSProperty('checked', false);
-  await toggle.click();
   await expect(toggle).toHaveJSProperty('checked', true);
-  await expect(a.page.locator('.toggle-row', { hasText: 'RNNoise' })).toContainText('модель ~5 МБ');
+  await expect(a.page.locator('.toggle-row', { hasText: 'RNNoise' })).toContainText('Модель ~5 МБ');
   await a.page.keyboard.press('Escape');
   // Поддельный микрофон Chromium пищит чистым тоном — модель почти гасит его; чтобы кадры уходили,
   // порог срабатывания — ручной и минимальный (настройка хранится в localStorage)

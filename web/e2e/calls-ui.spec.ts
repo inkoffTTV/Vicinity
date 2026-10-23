@@ -70,6 +70,11 @@ test('1:1 call: source swap, fullscreen, tier screen quality, sounds', async ({ 
   await expect(stage(a)).toHaveAttribute('data-main', 'remote-screen');
   await expect.poll(() => soundCount(a.page, 'streamStart')).toBe(2);
   await expect.poll(() => videoWidth(a.page, '.call-window video.call-video.main.remote-screen')).toBeGreaterThan(0);
+  // Ползунок громкости экрана собеседника в подписи крупного кадра
+  await win(a).locator('.call-main-label .stream-volume input[type=range]').fill('0.5');
+  await expect
+    .poll(() => a.page.evaluate(() => document.querySelector<HTMLVideoElement>('.call-window video.call-video.main.remote-screen')!.volume))
+    .toBeCloseTo(0.5, 1);
   const camThumb = win(a).getByRole('button', { name: 'Показать крупно: Камера: Боб' });
   await expect(camThumb.locator('video.remote-camera')).toBeVisible();
   await shot(a.page, 'call-screen-desktop');

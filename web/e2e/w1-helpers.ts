@@ -29,7 +29,7 @@ export async function apiRegister(request: APIRequestContext, displayName: strin
   return { token: body.token, id: body.user_id, username };
 }
 
-export async function call(request: APIRequestContext, who: ApiUser, method: 'GET' | 'POST' | 'DELETE', path: string, data?: unknown) {
+export async function call(request: APIRequestContext, who: ApiUser, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, data?: unknown) {
   const r = await request.fetch(`/api/v1${path}`, { method, headers: { Authorization: `Bearer ${who.token}` }, data });
   const text = await r.text();
   return { status: r.status(), body: text ? JSON.parse(text) : null };

@@ -189,7 +189,7 @@ export interface MediaPrefs {
   screenAudio: boolean;
   /** Усиление микрофона, 0…2 */
   micGain: number;
-  /** Нейросетевое шумоподавление RNNoise поверх браузерного (загружает ~5 МБ модели) */
+  /** Нейросетевое шумоподавление RNNoise поверх браузерного (загружает ~5 МБ модели); включено по умолчанию */
   denoise: boolean;
   /** Громкость собеседников, 0…2 (в звонке выше 1 не бывает — так устроен <audio>) */
   volume: number;
@@ -217,7 +217,7 @@ const DEFAULTS: MediaPrefs = {
   screenAudio: true,
   micGain: 1,
   volume: 1,
-  denoise: false,
+  denoise: true,
 };
 const clampNum = (v: unknown, min: number, max: number, def: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def;
@@ -574,3 +574,36 @@ export function cameraConstraints(): MediaTrackConstraints {
     ...(id ? { deviceId: { ideal: id } } : {}),
   };
 }
+
+// ── Громкость отдельных трансляций (экран собеседника в звонке или в голосовом канале) ──
+// Множитель 0…1 поверх общей громкости, запоминается по человеку: чей-то громкий экран убавил один раз.
+
+const STREAM_VOLUME_KEY = 'vicinity.streamVolume';
+
+function loadStreamVolumes(): Record<string, number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STREAM_VOLUME_KEY) ?? '{}');
+    const out: Record<string, number> = {};
+    if (raw && typeof raw === 'object')
+      for (const [k, v] of Object.entries(raw)) if (typeof v === 'number' && Number.isFinite(v)) out[k] = Math.min(1, Math.max(0, v));
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export const useStreamVolume = create<{ volumes: Record<string, number>; set: (userId: number, v: number) => void }>((set, get) => ({
+  volumes: loadStreamVolumes(),
+  set: (userId, v) => {
+    const volumes = { ...get().volumes, [String(userId)]: Math.min(1, Math.max(0, v)) };
+    set({ volumes });
+    try {
+      localStorage.setItem(STREAM_VOLUME_KEY, JSON.stringify(volumes));
+    } catch {
+      /* приватный режим */
+    }
+  },
+}));
+
+/** Множитель громкости трансляции этого человека (1 — не трогали) */
+export const streamGain = (volumes: Record<string, number>, userId: number) => volumes[String(userId)] ?? 1;

@@ -19,12 +19,22 @@ export interface User {
 export async function registerUser(
   browser: Browser,
   displayName: string,
-  opts: { viewport?: { width: number; height: number }; colorScheme?: 'dark' | 'light' } = {},
+  opts: { viewport?: { width: number; height: number }; colorScheme?: 'dark' | 'light'; denoise?: boolean } = {},
 ): Promise<User> {
   const context = await browser.newContext({
     viewport: opts.viewport ?? { width: 1280, height: 800 },
     colorScheme: opts.colorScheme ?? 'dark',
   });
+  // Поддельный микрофон Chromium пищит чистым тоном, а RNNoise (включён по умолчанию) считает его шумом
+  // и почти гасит — тесты голоса и звонков отключают модель; тест RNNoise просит её явно (denoise: true)
+  if (!opts.denoise)
+    await context.addInitScript(() => {
+      try {
+        if (localStorage.getItem('vicinity.media') === null) localStorage.setItem('vicinity.media', JSON.stringify({ denoise: false }));
+      } catch {
+        /* изолированный iframe активности без allow-same-origin: localStorage недоступен */
+      }
+    });
   const page = await context.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));

@@ -7,6 +7,8 @@ import { accentForTheme, BaseTheme, ColorTheme, CustomTheme, gradientCss, themeB
 
 export type FontSize = 's' | 'm' | 'l';
 export type ServerTheme = 'mine' | 'default';
+/** Стиль кнопок и полей: мягкие углы (по умолчанию), прямые, круглые */
+export type ButtonStyle = 'soft' | 'square' | 'round';
 
 export interface Appearance {
   /** «Как тема устройства»: светлая или тёмная по системе */
@@ -26,6 +28,7 @@ export interface Appearance {
   /** Компактная лента: меньше отступы и аватары */
   compact: boolean;
   fontSize: FontSize;
+  buttonStyle: ButtonStyle;
   /** Убрать анимации независимо от настройки системы */
   reducedMotion: boolean;
   /** Насыщенность цветов, % */
@@ -67,6 +70,7 @@ export const DEFAULTS: Appearance = {
   accent: '',
   compact: false,
   fontSize: 'm',
+  buttonStyle: 'soft',
   reducedMotion: false,
   saturation: 100,
   highContrast: false,
@@ -97,6 +101,7 @@ export function sanitize(raw: any): Appearance {
           colors: custom.colors.map((c: string) => c.toLowerCase()),
           angle: Number.isFinite(custom.angle) ? Math.max(0, Math.min(360, custom.angle)) : 135,
           base: custom.base === 'light' ? 'light' : 'dark',
+          ...(Number.isInteger(custom.from) && custom.from > 0 ? { from: custom.from as number } : {}),
         }
       : null,
     syncDevices: src.syncDevices !== false,
@@ -105,6 +110,7 @@ export function sanitize(raw: any): Appearance {
     accent: typeof src.accent === 'string' && HEX.test(src.accent) ? src.accent.toLowerCase() : '',
     compact: src.compact === true,
     fontSize: src.fontSize === 's' || src.fontSize === 'l' ? src.fontSize : 'm',
+    buttonStyle: src.buttonStyle === 'square' || src.buttonStyle === 'round' ? src.buttonStyle : 'soft',
     reducedMotion: src.reducedMotion === true,
     saturation: Number.isFinite(src.saturation) ? Math.max(0, Math.min(100, Math.round(src.saturation))) : 100,
     highContrast: src.highContrast === true,
@@ -202,6 +208,7 @@ function apply(s: State) {
   }
   root.toggleAttribute('data-compact', s.compact);
   root.setAttribute('data-font', s.fontSize);
+  root.setAttribute('data-buttons', s.buttonStyle);
   root.toggleAttribute('data-reduced-motion', s.reducedMotion);
   root.toggleAttribute('data-contrast', s.highContrast);
   if (s.saturation < 100) {

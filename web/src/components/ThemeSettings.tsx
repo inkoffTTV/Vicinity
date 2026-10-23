@@ -1,9 +1,10 @@
 import { useEffect, useState , FormEvent } from 'react';
 import { useThemeAccess } from '../lib/appearanceSync';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, CommunityTheme } from '../lib/api';
+import { colorsFromBanner } from '../lib/bannerColors';
 import { loadPlan, usePlan } from '../lib/plan';
 import { useStore } from '../lib/store';
-import { FontSize, ServerTheme, useAppearance } from '../lib/prefs';
+import { ButtonStyle, FontSize, ServerTheme, useAppearance } from '../lib/prefs';
 import { BASE_THEMES, COLOR_THEMES, CustomTheme, gradientCss, themeById } from '../lib/themes';
 import { Segmented, Toggle } from './SettingControls';
 
@@ -31,6 +32,51 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
   const [editor, setEditor] = useState(false);
   const [draft, setDraft] = useState<CustomTheme>(a.customTheme ?? DEFAULT_CUSTOM);
   const preview = a.preview;
+  const me = useStore((s) => s.me);
+  const toast = useStore((s) => s.toast);
+  const [publishName, setPublishName] = useState('');
+  const [published, setPublished] = useState(0); // счётчик — список сообщества перечитывает себя
+  const [bannerBusy, setBannerBusy] = useState(false);
+
+  // Цвета из баннера профиля — в черновик своей темы
+  const fromBanner = async () => {
+    if (!me?.banner_path) return;
+    setBannerBusy(true);
+    try {
+      tryCustom({ ...draft, colors: await colorsFromBanner(me.banner_path, draft.base) });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Не удалось прочитать баннер', 'error');
+    } finally {
+      setBannerBusy(false);
+    }
+  };
+
+  // Тема сообщества: со Standard применяется и хранится как своя с пометкой from, без подписки — предпросмотр
+  const pickCommunity = (t: CommunityTheme) => {
+    const theme: CustomTheme = { colors: t.colors, angle: t.angle, base: t.base, from: t.id };
+    if (access.colorThemes) {
+      a.setPreview(null);
+      a.set(a.customTheme?.from === t.id ? { customTheme: null } : { customTheme: theme, colorTheme: null });
+    } else {
+      a.setPreview(preview?.customTheme?.from === t.id ? null : { colorTheme: null, customTheme: theme });
+    }
+  };
+
+  const publish = async () => {
+    const name = publishName.trim();
+    if (name.length < 2) {
+      toast('Дайте теме название (2–30 символов)', 'error');
+      return;
+    }
+    try {
+      await api.publishTheme({ name, colors: draft.colors, angle: draft.angle, base: draft.base });
+      setPublishName('');
+      setPublished((n) => n + 1);
+      toast(`Тема «${name}» опубликована`);
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Не удалось опубликовать', 'error');
+    }
+  };
 
   // Предпросмотр живёт, пока открыта вкладка
   useEffect(() => () => useAppearance.getState().setPreview(null), []);
@@ -59,10 +105,10 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
   };
 
   const previewName = preview
-    ? (themeById(preview.colorTheme)?.name ?? (preview.customTheme ? 'Своя тема' : ''))
+    ? (themeById(preview.colorTheme)?.name ?? (preview.customTheme ? (preview.customTheme.from ? 'Тема сообщества' : 'Своя тема') : ''))
     : '';
-  const previewNeeds = preview?.customTheme ? 'Ultra' : 'Standard';
-  const canKeepPreview = preview?.customTheme ? access.customTheme : access.colorThemes;
+  const previewNeeds = preview?.customTheme && !preview.customTheme.from ? 'Ultra' : 'Standard';
+  const canKeepPreview = preview?.customTheme && !preview.customTheme.from ? access.customTheme : access.colorThemes;
   const activeId = (preview ?? a).colorTheme;
 
   return (
@@ -165,7 +211,7 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
               <button
                 type="button"
                 className="btn small primary"
-                onClick={() => (preview.customTheme ? saveCustom() : pickColor(preview.colorTheme!))}
+                onClick={() => (preview.customTheme ? (preview.customTheme.from ? a.set({ customTheme: preview.customTheme, colorTheme: null }) : saveCustom()) : pickColor(preview.colorTheme!))}
               >
                 Применить
               </button>
@@ -253,6 +299,15 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
               ]}
               onChange={(base) => tryCustom({ ...draft, base })}
             />
+            <button
+              type="button"
+              className="btn small"
+              disabled={!me?.banner_path || bannerBusy}
+              title={me?.banner_path ? 'Подобрать цвета из баннера профиля' : 'Сначала загрузите баннер в профиле'}
+              onClick={() => void fromBanner()}
+            >
+              Цвета из баннера
+            </button>
             {access.customTheme ? (
               <button type="button" className="btn primary" onClick={saveCustom}>
                 Применить свою тему
@@ -260,9 +315,52 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
             ) : (
               <span className="muted small">Своя тема сохраняется с подпиской Ultra — пока это предпросмотр.</span>
             )}
+            {access.customTheme && (
+              <div className="publish-theme">
+                <input
+                  type="text"
+                  maxLength={30}
+                  placeholder="Название для сообщества"
+                  aria-label="Название темы"
+                  value={publishName}
+                  onChange={(e) => setPublishName(e.target.value)}
+                />
+                <button type="button" className="btn small" onClick={() => void publish()}>
+                  Опубликовать
+                </button>
+              </div>
+            )}
           </div>
         )}
       </section>
+
+      <CommunityThemes
+        key={published}
+        activeId={(preview ?? a).customTheme?.from ?? null}
+        previewId={preview?.customTheme?.from ?? null}
+        onPick={pickCommunity}
+      />
+
+      <Segmented<ButtonStyle>
+        label="Стиль кнопок и полей"
+        value={a.buttonStyle}
+        options={[
+          ['soft', 'Мягкие'],
+          ['square', 'Прямые'],
+          ['round', 'Круглые'],
+        ]}
+        onChange={(buttonStyle) => a.set({ buttonStyle })}
+      />
+      <Segmented<FontSize>
+        label="Размер шрифта"
+        value={a.fontSize}
+        options={[
+          ['s', 'Мелкий'],
+          ['m', 'Обычный'],
+          ['l', 'Крупный'],
+        ]}
+        onChange={(fontSize) => a.set({ fontSize })}
+      />
 
       <Toggle
         label="Синхронизировать тему на моих устройствах"
@@ -320,6 +418,108 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
         </button>
       </div>
     </div>
+  );
+}
+
+// ── Темы сообщества (docs/API.md §18) ──
+
+function CommunityThemes({
+  activeId,
+  previewId,
+  onPick,
+}: {
+  activeId: number | null;
+  previewId: number | null;
+  onPick: (t: CommunityTheme) => void;
+}) {
+  const access = useThemeAccess();
+  const toast = useStore((s) => s.toast);
+  const [sort, setSort] = useState<'top' | 'new'>('top');
+  const [themes, setThemes] = useState<CommunityTheme[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    api.communityThemes(sort).then(
+      (r) => setThemes(r.themes),
+      () => setFailed(true),
+    );
+  }, [sort]);
+  if (failed || (themes && themes.length === 0)) return null;
+
+  const like = async (t: CommunityTheme) => {
+    try {
+      const r = await api.likeTheme(t.id);
+      setThemes((list) => list?.map((x) => (x.id === t.id ? { ...x, ...r } : x)) ?? null);
+    } catch {
+      toast('Не удалось', 'error');
+    }
+  };
+  const remove = async (t: CommunityTheme) => {
+    try {
+      await api.deleteTheme(t.id);
+      setThemes((list) => list?.filter((x) => x.id !== t.id) ?? null);
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Не удалось удалить', 'error');
+    }
+  };
+
+  return (
+    <section className="color-themes community-themes" aria-label="Темы сообщества">
+      <div className="theme-section-head">
+        <div>
+          <h3>Темы сообщества</h3>
+          <span className="muted small">
+            {access.colorThemes ? 'Темы, которые опубликовали другие. Применяются как цветовые темы.' : 'Нажмите, чтобы посмотреть; применить — с подпиской Standard.'}
+          </span>
+        </div>
+        <Segmented<'top' | 'new'>
+          label=""
+          value={sort}
+          options={[
+            ['top', 'Популярные'],
+            ['new', 'Новые'],
+          ]}
+          onChange={setSort}
+        />
+      </div>
+      <ul className="community-grid">
+        {(themes ?? []).map((t) => (
+          <li key={t.id} className={`community-theme${activeId === t.id ? ' active' : ''}${previewId === t.id ? ' previewing' : ''}`}>
+            <button
+              type="button"
+              className="community-swatch"
+              style={{ background: gradientCss(t) }}
+              aria-pressed={activeId === t.id}
+              aria-label={`Тема «${t.name}»`}
+              title={access.colorThemes ? 'Применить' : 'Посмотреть'}
+              onClick={() => onPick(t)}
+            >
+              {activeId === t.id && <CheckIcon />}
+            </button>
+            <div className="community-meta">
+              <strong className="ellipsis">{t.name}</strong>
+              <span className="muted small ellipsis">{t.author.display_name || 'аноним'}</span>
+            </div>
+            <button
+              type="button"
+              className={`like-btn${t.liked ? ' on' : ''}`}
+              aria-pressed={t.liked}
+              aria-label={t.liked ? 'Убрать сердечко' : 'Нравится'}
+              onClick={() => void like(t)}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill={t.liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 21s-7-4.6-9.2-9A5.2 5.2 0 0 1 12 6.5 5.2 5.2 0 0 1 21.2 12C19 16.4 12 21 12 21z" />
+              </svg>
+              {t.likes}
+            </button>
+            {t.mine && (
+              <button type="button" className="plain muted" aria-label={`Удалить тему «${t.name}»`} title="Удалить мою тему" onClick={() => void remove(t)}>
+                ×
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

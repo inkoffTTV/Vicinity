@@ -59,6 +59,16 @@ test('group voice: stage tiles, screen share with LIVE, watching, cameras, sound
   await expect(stage(c).locator('.stage-viewers')).toContainText('зрителей: 2 из 8');
   await expect(tile(a, 'Ваня').getByRole('button', { name: 'Скрыть' })).toBeVisible();
 
+  // Громкость именно этого экрана: ползунок в панели трансляции, значение запоминается по человеку
+  const vol = stage(a).locator('.stage-stream-bar .stream-volume input[type=range]');
+  await vol.fill('0.3');
+  await expect.poll(() => a.page.evaluate(() => document.querySelector<HTMLVideoElement>('.stage-stream video')!.volume)).toBeCloseTo(0.3, 1);
+  expect(Object.values(JSON.parse(await a.page.evaluate(() => localStorage.getItem('vicinity.streamVolume') ?? '{}')))).toEqual([0.3]);
+  await stage(a).locator('.stage-stream-bar').getByRole('button', { name: 'Выключить звук экрана' }).click();
+  await expect.poll(() => a.page.evaluate(() => document.querySelector<HTMLVideoElement>('.stage-stream video')!.volume)).toBe(0);
+  await stage(a).locator('.stage-stream-bar').getByRole('button', { name: 'Включить звук экрана' }).click();
+  await vol.fill('1');
+
   // Полный экран трансляции
   await stage(a).locator('.stage-stream').hover();
   await stage(a).locator('.stage-stream').getByRole('button', { name: 'Во весь экран' }).click();

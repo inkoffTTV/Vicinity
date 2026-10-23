@@ -104,11 +104,17 @@ WebSocket binary message = raw PCM payload, nothing else
 
 **Capture path**
 1. `getUserMedia({audio:{channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:true}})`. Do this from a user gesture ("Join") and resume the `AudioContext` there.
-   Optional RNNoise (Settings → Voice → «Нейросетевое шумоподавление»): `openMic()` in `web/src/lib/media.ts` routes the
+   RNNoise, on by default (Settings → Voice → «Нейросетевое шумоподавление»): `openMic()` in `web/src/lib/media.ts` routes the
    microphone through `public/worklets/voice-denoise.js` (RNNoise wasm from `@shiguredo/rnnoise-wasm`, served as
    `/worklets/rnnoise.js`, 480-sample frames at 48 kHz, one frame of latency); the same processed stream feeds voice
-   channels and 1:1 calls. If the worklet or the model fails to load, the raw microphone is used and the settings screen
-   shows the error.
+   channels and 1:1 calls. The worklet also gates on RNNoise's VAD: between phrases the residual floor is pulled down to
+   −22 dB (`GATE_FLOOR`), speech opens the gate at once and it closes after 300 ms of silence, so keyboard and fan noise
+   do not leak through while nobody talks. If the worklet or the model fails to load, the raw microphone is used and the
+   settings screen shows the error. E2E tests disable the model per context (`registerUser(..., { denoise })`) because
+   Chromium's fake microphone is a pure tone the model treats as noise.
+   Per-stream volume: a viewer's slider next to a shared screen (`StreamVolume` in `CallOverlay.tsx`, in the voice stage
+   bar and in the call window's main label) multiplies the output volume for that streamer's screen audio; values are kept
+   per user id in `localStorage` (`vicinity.streamVolume`, `useStreamVolume` in `media.ts`).
 2. `AudioWorklet` capture processor: downmix to mono, resample to 16 000 Hz, then build 320-sample `Int16Array`s.
    - Clamp with `Math.max(-1, Math.min(1, x)) * 32767`.
    - Apply the mic-gain slider before converting.

@@ -59,7 +59,7 @@ export interface AppearanceSettings {
   follow_system: boolean;
   base_theme: 'light' | 'dark' | 'graphite' | 'black';
   color_theme: string | null;
-  custom_theme: { colors: string[]; angle: number; base: 'light' | 'dark' } | null;
+  custom_theme: { colors: string[]; angle: number; base: 'light' | 'dark'; from?: number } | null;
   sync_devices: boolean;
   apply_to_profiles: boolean;
   server_theme: 'mine' | 'default';
@@ -71,6 +71,21 @@ export interface AppearanceSettings {
   high_contrast: boolean;
   /** Нет у старых серверов */
   app_icon?: string;
+  button_style?: 'soft' | 'square' | 'round';
+}
+
+/** Тема сообщества (GET /themes/community, docs/API.md §18) */
+export interface CommunityTheme {
+  id: number;
+  name: string;
+  colors: string[];
+  angle: number;
+  base: 'light' | 'dark';
+  likes: number;
+  liked: boolean;
+  mine: boolean;
+  created_at: string;
+  author: { id: number; display_name: string };
 }
 
 export interface AppearanceResponse {
@@ -726,6 +741,10 @@ export const api = {
   adminCreateGifts: (tier: number, days: number, count: number, note: string) =>
     post<{ codes: { code: string; tier: number; days: number }[] }>('/admin/gifts', { tier, days, count, note }).then((r) => r.codes),
   appearance: () => get<AppearanceResponse>('/settings/appearance'),
+  communityThemes: (sort: 'top' | 'new' = 'top') => get<{ themes: CommunityTheme[]; can_publish: boolean; own: number; max_own: number }>(`/themes/community?sort=${sort}`),
+  publishTheme: (t: { name: string; colors: string[]; angle: number; base: 'light' | 'dark' }) => post<CommunityTheme>('/themes/community', t),
+  likeTheme: (id: number) => post<{ likes: number; liked: boolean }>(`/themes/community/${id}/like`),
+  deleteTheme: (id: number) => del<{ ok: boolean }>(`/themes/community/${id}`),
   saveAppearance: (s: Partial<AppearanceSettings>) => request<AppearanceResponse>('PATCH', '/settings/appearance', s),
 
   // ── Админ-панель (developer) ──

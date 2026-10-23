@@ -24,8 +24,9 @@ import { useVoice } from '../lib/voice';
 import { MAX_VIEWERS, useVoiceVideo, Watch } from '../lib/voiceVideo';
 import { AudioSettings } from './AudioSettings';
 import { Avatar } from './Avatar';
-import { StreamVideo, useFullscreen } from './CallOverlay';
+import { StreamVideo, useFullscreen, StreamVolume } from './CallOverlay';
 import { Icon } from './Icon';
+import { streamGain, useStreamVolume } from '../lib/media';
 import { ScreenShareControl } from './ScreenShareControl';
 import { ActivitiesButton } from './Activities';
 import { voicePlace } from './VoiceBar';
@@ -229,6 +230,7 @@ function Tile({ user, watching, compact }: { user: VoiceUser; watching: Record<s
 /** Экран участника крупно: во весь экран, закрыть */
 function FocusStream({ watch, name }: { watch: Watch; name: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const volumes = useStreamVolume((s) => s.volumes);
   const fs = useFullscreen(ref);
   const unwatch = useVoiceVideo((s) => s.unwatch);
   return (
@@ -239,7 +241,13 @@ function FocusStream({ watch, name }: { watch: Watch; name: string }) {
       data-state={watch.state}
     >
       {watch.stream ? (
-        <StreamVideo stream={watch.stream} className="stage-stream-video" onDoubleClick={fs.toggle} audible={watch.kind === 'screen'} />
+        <StreamVideo
+          stream={watch.stream}
+          className="stage-stream-video"
+          onDoubleClick={fs.toggle}
+          audible={watch.kind === 'screen'}
+          gain={streamGain(volumes, watch.userId)}
+        />
       ) : (
         <div className="stage-stream-wait">
           <span className="spinner" /> Подключение к трансляции…
@@ -249,6 +257,7 @@ function FocusStream({ watch, name }: { watch: Watch; name: string }) {
         <span className="live-badge">LIVE</span>
         <span className="ellipsis">Экран: {name}</span>
         <div className="grow" />
+        {watch.kind === 'screen' && <StreamVolume userId={watch.userId} />}
         <button
           className="icon-btn"
           title={fs.full ? 'Выйти из полноэкранного режима (Esc)' : 'Во весь экран'}

@@ -1,4 +1,5 @@
 #include "SettingsController.h"
+#include "ThemesController.h"
 #include "../models/User.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/Tiers.h"
@@ -71,6 +72,7 @@ static Json::Value defaults() {
     v["saturation"]        = 100;
     v["high_contrast"]     = false;
     v["app_icon"]          = "classic";
+    v["button_style"]      = "soft";
     return v;
 }
 
@@ -92,7 +94,9 @@ static Json::Value load(int64_t userId, bool* stored = nullptr) {
 // (подписку сняли), отдаётся пустой — клиент не применяет то, что сохранить уже нельзя.
 static Json::Value withAccess(Json::Value v, int tier, bool stored = true) {
     if (!Tiers::colorThemes(tier)) v["color_theme"] = Json::nullValue;
-    if (!Tiers::customTheme(tier)) v["custom_theme"] = Json::nullValue;
+    // Своя тема — Ultra; тема сообщества (custom_theme.from) — Standard+
+    if (v["custom_theme"].isObject() && v["custom_theme"].isMember("from") ? !Tiers::colorThemes(tier) : !Tiers::customTheme(tier))
+        v["custom_theme"] = Json::nullValue;
     {
         const auto it = appIcons().find(v["app_icon"].isString() ? v["app_icon"].asString() : std::string());
         if (it == appIcons().end() || it->second > Tiers::clamp(tier)) v["app_icon"] = "classic";
@@ -161,6 +165,7 @@ void SettingsController::patchAppearance(const HttpRequestPtr& req, std::functio
         if (!oneOf("base_theme", {"light", "dark", "graphite", "black"})) { bad("base_theme"); return; }
         if (!oneOf("server_theme", {"mine", "default"}))                  { bad("server_theme"); return; }
         if (!oneOf("font_size", {"s", "m", "l"}))                          { bad("font_size"); return; }
+        if (!oneOf("button_style", {"soft", "square", "round"}))           { bad("button_style"); return; }
         if (in.isMember("accent")) {
             if (!in["accent"].isString() || (!in["accent"].asString().empty() && !isHexColor(in["accent"].asString()))) {
                 bad("accent"); return;
@@ -206,7 +211,22 @@ void SettingsController::patchAppearance(const HttpRequestPtr& req, std::functio
         if (in.isMember("custom_theme")) {
             const Json::Value& ct = in["custom_theme"];
             if (ct.isNull()) v["custom_theme"] = Json::nullValue;
-            else {
+            else if (ct.isObject() && ct.isMember("from")) {
+                // Тема сообщества: цвета берём из базы, нужна подписка Standard
+                if (!ct["from"].isIntegral()) { bad("custom_theme.from"); return; }
+                Json::Value t = ThemesController::find(ct["from"].asInt64());
+                if (t.isNull()) { cb(error("Такой темы сообщества уже нет", k404NotFound)); return; }
+                if (!Tiers::colorThemes(tier)) {
+                    Json::Value e;
+                    e["error"]         = "Темы сообщества — с подпиской Standard";
+                    e["required_tier"] = 2;
+                    cb(jsonResp(std::move(e), k403Forbidden));
+                    return;
+                }
+                t["from"]         = ct["from"].asInt64();
+                v["custom_theme"] = t;
+                v["color_theme"]  = Json::nullValue;
+            } else {
                 if (!ct.isObject()) { bad("custom_theme"); return; }
                 const Json::Value& colors = ct["colors"];
                 if (!colors.isArray() || colors.size() < 2 || colors.size() > 3) { bad("custom_theme"); return; }

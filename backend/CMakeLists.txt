@@ -27,6 +27,7 @@ add_executable(VicinityServer
     controllers/SearchController.cc
     controllers/ServerController.cc
     controllers/SettingsController.cc
+    controllers/ThemesController.cc
     controllers/UserController.cc
     controllers/WSController.cc
     filters/AuthFilter.cc

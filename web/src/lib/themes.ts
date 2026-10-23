@@ -17,6 +17,8 @@ export interface CustomTheme {
   colors: string[];
   angle: number;
   base: 'light' | 'dark';
+  /** id темы сообщества, из которой взяты цвета (такую можно хранить со Standard, свою — только с Ultra) */
+  from?: number;
 }
 
 export const BASE_THEMES: { id: BaseTheme; name: string; swatch: string }[] = [

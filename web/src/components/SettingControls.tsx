@@ -13,10 +13,10 @@ export function Segmented<T extends string>({
 }) {
   return (
     <div className="setting-row">
-      <span className="setting-label" id={`seg-${label}`}>
+      <span className="setting-label" id={`seg-${label || 'sort'}`}>
         {label}
       </span>
-      <div className="segmented" role="radiogroup" aria-labelledby={`seg-${label}`}>
+      <div className="segmented" role="radiogroup" aria-labelledby={`seg-${label || 'sort'}`}>
         {options.map(([v, text]) => (
           <button key={v} type="button" role="radio" aria-checked={value === v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>
             {text}

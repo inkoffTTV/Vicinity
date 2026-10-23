@@ -5,6 +5,7 @@ import './rnnoise-shim.js';
 import { Rnnoise } from './rnnoise.js';
 
 const SCALE = 32768; // RNNoise ждёт float в диапазоне 16-битного PCM
+const GATE_FLOOR = 0.08; // −22 дБ: фон между фразами почти не слышен, но без «обрыва» звука
 
 class DenoiseProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -17,8 +18,14 @@ class DenoiseProcessor extends AudioWorkletProcessor {
     this.outRead = 0;
     this.outLen = 0;
     this.enabled = true;
+    // Гейт по голосовой активности: между фразами остаточный шум прижимается до −22 дБ,
+    // голос открывает гейт мгновенно, закрывается он через 300 мс тишины
+    this.gate = true;
+    this.gain = 1;
+    this.hold = 0;
     this.port.onmessage = (e) => {
       if (typeof e.data?.enabled === 'boolean') this.enabled = e.data.enabled;
+      if (typeof e.data?.gate === 'boolean') this.gate = e.data.gate;
     };
     Rnnoise.load().then(
       (r) => {
@@ -49,13 +56,21 @@ class DenoiseProcessor extends AudioWorkletProcessor {
       this.inBuf[this.inLen++] = input[i] * SCALE;
       if (this.inLen === this.frameSize) {
         this.inLen = 0;
-        this.state.processFrame(this.inBuf);
+        const vad = this.state.processFrame(this.inBuf);
+        let gain = 1;
+        if (this.gate) {
+          if (vad > 0.5) this.hold = 30; // 300 мс после последней уверенной речи
+          else if (this.hold > 0) this.hold--;
+          const target = vad > 0.5 || this.hold > 0 ? 1 : GATE_FLOOR;
+          this.gain += (target - this.gain) * (target > this.gain ? 0.6 : 0.12);
+          gain = this.gain;
+        }
         // Вход и выход идут одним темпом, очередь не длиннее пары кадров; упираемся в конец буфера — сдвигаем к началу
         if (this.outRead + this.outLen + this.frameSize > this.outBuf.length) {
           this.outBuf.copyWithin(0, this.outRead, this.outRead + this.outLen);
           this.outRead = 0;
         }
-        for (let j = 0; j < this.frameSize; j++) this.outBuf[this.outRead + this.outLen + j] = this.inBuf[j] / SCALE;
+        for (let j = 0; j < this.frameSize; j++) this.outBuf[this.outRead + this.outLen + j] = (this.inBuf[j] / SCALE) * gain;
         this.outLen += this.frameSize;
       }
     }

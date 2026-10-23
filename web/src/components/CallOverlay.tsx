@@ -14,10 +14,13 @@ import {
   SignalMedium,
   Video as VideoIcon,
   VideoOff,
+  Volume1,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { CallPhase, NetQuality, useCall } from '../lib/call';
-import { applyOutput, useMediaPrefs } from '../lib/media';
+import { applyOutput, streamGain, useMediaPrefs, useStreamVolume } from '../lib/media';
 import { useStore } from '../lib/store';
 import { AudioSettings } from './AudioSettings';
 import { Avatar } from './Avatar';
@@ -82,6 +85,7 @@ export function StreamVideo({
   videoRef,
   onDoubleClick,
   audible,
+  gain,
 }: {
   stream: MediaStream;
   className: string;
@@ -89,6 +93,8 @@ export function StreamVideo({
   onDoubleClick?: () => void;
   /** Играть звук потока (трансляция экрана со звуком); громкость и устройство — из настроек звука */
   audible?: boolean;
+  /** Множитель громкости этой трансляции 0…1 (ползунок у экрана) поверх общей громкости */
+  gain?: number;
 }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const outputId = useMediaPrefs((s) => s.outputId);
@@ -103,8 +109,8 @@ export function StreamVideo({
     const el = ref.current;
     if (!el || !audible) return;
     applyOutput(el, outputId);
-    el.volume = Math.min(1, volume);
-  }, [audible, outputId, volume]);
+    el.volume = Math.min(1, volume * (gain ?? 1));
+  }, [audible, outputId, volume, gain]);
   return (
     <video
       ref={(el) => {
@@ -118,6 +124,35 @@ export function StreamVideo({
       muted={!audible || deafened}
       onDoubleClick={onDoubleClick}
     />
+  );
+}
+
+/** Ползунок громкости трансляции экрана конкретного человека (запоминается, lib/media.ts) */
+export function StreamVolume({ userId, compact }: { userId: number; compact?: boolean }) {
+  const volumes = useStreamVolume((s) => s.volumes);
+  const setVolume = useStreamVolume((s) => s.set);
+  const v = streamGain(volumes, userId);
+  return (
+    <div className={`stream-volume${compact ? ' compact' : ''}`} role="group" aria-label="Громкость этого экрана" title="Громкость этого экрана" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        className="plain"
+        aria-label={v === 0 ? 'Включить звук экрана' : 'Выключить звук экрана'}
+        onClick={() => setVolume(userId, v === 0 ? 1 : 0)}
+      >
+        <Icon icon={v === 0 ? VolumeX : v < 0.5 ? Volume1 : Volume2} size={16} />
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.05}
+        value={v}
+        aria-label="Громкость экрана"
+        aria-valuetext={`${Math.round(v * 100)}%`}
+        onChange={(e) => setVolume(userId, Number(e.target.value))}
+      />
+    </div>
   );
 }
 
@@ -237,6 +272,7 @@ function CallWindow() {
 
   const net = NET[c.net];
   const live = c.phase === 'active';
+  const screenVolumes = useStreamVolume((s) => s.volumes);
 
   return (
     <div
@@ -294,6 +330,8 @@ function CallWindow() {
             className={`call-video main ${main.cls}`}
             videoRef={mainVideo}
             onDoubleClick={fs.toggle}
+            audible={main.key === 'remote-screen'}
+            gain={streamGain(screenVolumes, c.peerId)}
           />
         ) : (
           <div className="call-peer">
@@ -305,7 +343,12 @@ function CallWindow() {
             </div>
           </div>
         )}
-        {main.stream && <div className="call-main-label">{main.label}</div>}
+        {main.stream && (
+          <div className="call-main-label">
+            {main.label}
+            {main.key === 'remote-screen' && <StreamVolume userId={c.peerId} compact />}
+          </div>
+        )}
         {c.screen && (
           <div className="call-sharing">
             <span className="live-dot" /> Вы показываете экран{c.screenLabel ? ` · ${c.screenLabel}` : ''}

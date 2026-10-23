@@ -423,6 +423,20 @@ void initialize() {
          "redeemed_by INTEGER DEFAULT NULL,"
          "redeemed_at DATETIME DEFAULT NULL)");
 
+    // Темы сообщества (controllers/ThemesController.cc)
+    exec("CREATE TABLE IF NOT EXISTS community_themes ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+         "author_id INTEGER NOT NULL,"
+         "name TEXT NOT NULL,"
+         "colors TEXT NOT NULL,"
+         "angle INTEGER NOT NULL DEFAULT 135,"
+         "base TEXT NOT NULL DEFAULT 'dark',"
+         "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    exec("CREATE TABLE IF NOT EXISTS community_theme_likes ("
+         "theme_id INTEGER NOT NULL,"
+         "user_id INTEGER NOT NULL,"
+         "PRIMARY KEY(theme_id, user_id))");
+
     initFts();
 
     exec("CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id)");
