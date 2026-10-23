@@ -5118,3 +5118,139 @@ a:focus-visible > .ico {
   display: flex;
   align-items: center;
 }
+
+/* ── Слушать вместе (ListenTogether.tsx) ── */
+.listen-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  background: var(--bg-panel);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.listen-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.listen-now {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.listen-art {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex: none;
+  background: var(--bg-ground);
+}
+.listen-art.placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+}
+.listen-art.small {
+  width: 32px;
+  height: 32px;
+}
+.listen-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.listen-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-ground);
+  overflow: hidden;
+  cursor: pointer;
+}
+.listen-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s linear;
+}
+.listen-ctl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.listen-volume {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-3);
+}
+.listen-volume input[type='range'] {
+  width: 70px;
+  accent-color: var(--accent);
+}
+.listen-queue,
+.listen-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+}
+.listen-queue li,
+.listen-results li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+}
+.listen-queue li:hover,
+.listen-results li:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+.listen-num {
+  width: 18px;
+  text-align: right;
+}
+.listen-search {
+  display: flex;
+  gap: 8px;
+}
+.listen-search input {
+  flex: 1;
+  min-width: 0;
+}
+.stage-btn {
+  position: relative;
+}
+.stage-btn-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+@media (max-width: 760px) {
+  .listen-now {
+    flex-wrap: wrap;
+  }
+  .listen-ctl {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

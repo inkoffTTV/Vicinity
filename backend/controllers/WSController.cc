@@ -9,6 +9,7 @@
 #include "../utils/Calls.h"
 #include "../utils/CryptoUtils.h"
 #include "../utils/JsonUtils.h"
+#include "../utils/Listen.h"
 #include <drogon/drogon.h>
 #include <trantor/net/TcpConnection.h>
 #include <trantor/utils/Logger.h>
@@ -99,6 +100,7 @@ static void handleVoiceJoin(int64_t userId, const WebSocketConnectionPtr& conn, 
     if (prev != 0 && prev != channelId) Activity::bump(userId, Activity::Kind::VoiceSeconds, prevSecs);
     Broadcast::voiceState(channelId);
     if (prev != 0 && prev != channelId) Broadcast::voiceState(prev);
+    Listen::sendTo(conn, channelId);   // в канале уже что-то слушают — догоняем
     LOG_INFO << "voice_join: user " << userId << " -> channel " << channelId << " (proto " << proto << ")";
 }
 
@@ -432,6 +434,12 @@ void WSController::handleNewMessage(const WebSocketConnectionPtr& conn,
         else if (t == "voice_query")    handleVoiceQuery(userId, conn, root);
         else if (t == "voice_media")    handleVoiceMedia(userId, conn, root);
         else if (t == "voice_rtc")      handleVoiceRtc(userId, conn, root);
+        else if (t.rfind("listen_", 0) == 0) {
+            // «Слушать вместе»: только из подключения, владеющего голосом в канале
+            const int64_t ch = VoiceManager::instance().channelOfConnection(userId, conn);
+            if (ch != 0 && UserRateLimiter::instance().allow(UserRateLimiter::Action::VoiceQuery, userId))
+                Listen::handle(userId, ch, t, root);
+        }
         else if (t == "typing")         handleTyping(userId, root);
         else if (t == "set_presence")   handleSetPresence(userId, root);
         else if (kCallTypes.count(t))   handleCallSignal(userId, conn, t, root);

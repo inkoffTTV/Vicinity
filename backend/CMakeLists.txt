@@ -48,6 +48,7 @@ add_executable(VicinityServer
     utils/CryptoUtils.cc
     utils/EmailUtils.cc
     utils/Gifts.cc
+    utils/Listen.cc
     utils/FileSystem.cc
     utils/Mailer.cc
     utils/Messages.cc

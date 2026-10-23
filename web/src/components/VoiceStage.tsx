@@ -4,6 +4,7 @@ import {
   EyeOff,
   Headphones,
   HeadphoneOff,
+  ListMusic,
   Maximize,
   Menu,
   Mic,
@@ -29,6 +30,8 @@ import { Icon } from './Icon';
 import { streamGain, useStreamVolume } from '../lib/media';
 import { ScreenShareControl } from './ScreenShareControl';
 import { ActivitiesButton } from './Activities';
+import { ListenPanel } from './ListenTogether';
+import { useListen } from '../lib/listen';
 import { voicePlace } from './VoiceBar';
 import { useVoiceUsers } from './VoiceRoom';
 
@@ -60,6 +63,9 @@ export function VoiceStage({ onMenu }: { onMenu: () => void }) {
   const viewers = useVoiceVideo((s) => s.viewers);
   const vv = useVoiceVideo.getState();
   const [settings, setSettings] = useState(false);
+  const listenOpen = useListen((s) => s.open);
+  const listenQueue = useListen((s) => s.queue.length);
+  const setListenOpen = useListen((s) => s.setOpen);
   if (channelId === null) return null;
 
   const live = connected && joined;
@@ -93,6 +99,7 @@ export function VoiceStage({ onMenu }: { onMenu: () => void }) {
       </header>
 
       <div className={`stage-body${streams.length ? ' has-focus' : ''}`}>
+        {(listenOpen || listenQueue > 0) && <ListenPanel names={Object.fromEntries(users.map((u) => [u.user_id, u.name]))} />}
         {streams.length > 0 && (
           <div className={`stage-focus n${Math.min(streams.length, 4)}`}>
             {streams.map(([key, w]) => (
@@ -144,6 +151,17 @@ export function VoiceStage({ onMenu }: { onMenu: () => void }) {
           onToggle={() => void vv.toggleScreen()}
         />
         <ActivitiesButton btnClass="stage-btn" channelId={live ? channelId : null} />
+        <button
+          className={`stage-btn${listenOpen || listenQueue > 0 ? ' on' : ''}`}
+          aria-pressed={listenOpen}
+          disabled={!live}
+          title="Слушать вместе"
+          aria-label="Слушать вместе"
+          onClick={() => setListenOpen(!listenOpen)}
+        >
+          <Icon icon={ListMusic} anim="pop" size={22} />
+          {listenQueue > 0 && <span className="stage-btn-badge">{listenQueue}</span>}
+        </button>
         <button className="stage-btn" title="Настройки звука" aria-label="Настройки звука" onClick={() => setSettings(true)}>
           <Icon icon={Settings} anim="spin" size={24} />
         </button>

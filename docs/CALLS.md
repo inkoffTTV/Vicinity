@@ -153,6 +153,29 @@ WebSocket binary message = raw PCM payload, nothing else
 
 ---
 
+### 2.7 Listen together (shared queue of catalog previews)
+
+Any member of a voice channel can open «Слушать вместе» on the stage (`web/src/components/ListenTogether.tsx`),
+search the catalog (`GET /music/search`) and queue 30-second previews. The server (`backend/utils/Listen.cc`) keeps one
+in-memory room per channel: `queue` (first item is playing), `playing`, position anchor. Commands are JSON over the
+voice-owning WebSocket connection and are accepted only from a member of that channel (rate limit shared with
+`voice_query`):
+
+| Client → server | Payload | Effect |
+|---|---|---|
+| `listen_add` | `{track:{id,title,artist,album,artwork,preview,url}}` | append (max 50); first track starts playing. `preview` must be `https://*.apple.com/...` or a path on this server |
+| `listen_remove` | `{index}` | drop a queued item (0 = current, next starts from 0:00) |
+| `listen_play` / `listen_pause` | — | shared play state |
+| `listen_next` | `{index: 0}` | drop the current track; every client sends it on `ended`, the server honours only the first (index still 0) |
+| `listen_seek` | `{position_ms}` | 0…30000 |
+| `listen_clear` | — | empty the queue |
+
+Server → everyone in the channel (and to a joiner right after `voice_join`):
+`{"type":"listen_state","channel_id","queue":[…tracks with added_by],"playing","position_ms","duration_ms":30000,"by"}`.
+The client (`web/src/lib/listen.ts`) mirrors the state, plays `queue[0].preview` in one `<audio>` per tab at
+`position_ms + (now − received)` and re-seeks when it drifts by more than a second; it is silent while deafened or
+not joined. Music volume is a local slider on top of the output volume. When the channel empties the room is dropped.
+
 ## 3. 1:1 calls
 
 ### 3.1 Server relay

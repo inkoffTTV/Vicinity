@@ -1,6 +1,7 @@
 #include "Broadcast.h"
 #include "Privacy.h"
 #include "JsonUtils.h"
+#include "Listen.h"
 #include "PresenceUtil.h"
 #include "../managers/WSManager.h"
 #include "../managers/VoiceManager.h"
@@ -157,6 +158,8 @@ static std::mutex pendingMutex;
 static std::map<int64_t, std::set<int64_t>> pendingChannels;   // канал -> получатели
 
 void voiceState(int64_t channelId) {
+    // Канал опустел — общая очередь «Слушать вместе» забывается
+    if (VoiceManager::instance().usersIn(channelId).empty()) Listen::clear(channelId);
     std::set<int64_t> users;
     try {
         users = channelAudience(channelId);
