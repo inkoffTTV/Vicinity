@@ -88,24 +88,55 @@ case "${1:-run}" in
         run_update $force
         ;;
     install)
-        if ! command -v crontab >/dev/null 2>&1; then
-            echo "Нет crontab: apt install cron" >&2
+        if command -v crontab >/dev/null 2>&1; then
+            { other_cron; cron_line; } | crontab -
+            say "автообновление включено: каждые $every мин с ветки $branch (crontab -l)"
+        elif command -v systemctl >/dev/null 2>&1 && [ -d /etc/systemd/system ]; then
+            # Без cron (так бывает на минимальных образах) — таймер systemd
+            cat > /etc/systemd/system/vicinity-autoupdate.service <<UNIT
+[Unit]
+Description=Vicinity: обновление с ветки GitHub
+[Service]
+Type=oneshot
+WorkingDirectory=$repo
+ExecStart=/bin/sh $here/autoupdate.sh
+UNIT
+            cat > /etc/systemd/system/vicinity-autoupdate.timer <<UNIT
+[Unit]
+Description=Vicinity: проверять ветку каждые $every минут
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=${every}min
+AccuracySec=30s
+[Install]
+WantedBy=timers.target
+UNIT
+            systemctl daemon-reload
+            systemctl enable --now vicinity-autoupdate.timer >/dev/null
+            say "автообновление включено через systemd: каждые $every мин с ветки $branch (systemctl list-timers vicinity-autoupdate.timer)"
+        else
+            echo "Нет ни crontab, ни systemd: apt install cron" >&2
             exit 1
         fi
-        { other_cron; cron_line; } | crontab -
-        say "автообновление включено: каждые $every мин с ветки $branch (crontab -l)"
         ;;
     uninstall)
-        other_cron | crontab - 2>/dev/null || true
+        if command -v crontab >/dev/null 2>&1; then other_cron | crontab - 2>/dev/null || true; fi
+        if [ -f /etc/systemd/system/vicinity-autoupdate.timer ]; then
+            systemctl disable --now vicinity-autoupdate.timer >/dev/null 2>&1 || true
+            rm -f /etc/systemd/system/vicinity-autoupdate.timer /etc/systemd/system/vicinity-autoupdate.service
+            systemctl daemon-reload
+        fi
         say "автообновление выключено"
         ;;
     status)
         if crontab -l 2>/dev/null | grep -q 'deploy/autoupdate.sh'; then
             echo "cron: включено — $(crontab -l 2>/dev/null | grep 'deploy/autoupdate.sh')"
+        elif systemctl is-active -q vicinity-autoupdate.timer 2>/dev/null; then
+            echo "systemd: включено — $(systemctl list-timers --no-pager vicinity-autoupdate.timer 2>/dev/null | sed -n 2p)"
         elif crontab -l 2>/dev/null | grep -q 'vicinity-up.lock'; then
             echo "cron: стоит старая однострочная запись — замени на скрипт: sh deploy/autoupdate.sh install"
         else
-            echo "cron: выключено (sh deploy/autoupdate.sh install)"
+            echo "выключено (sh deploy/autoupdate.sh install)"
         fi
         echo "ветка: $branch"
         echo "на сервере: $(git -C "$repo" log -1 --format='%h %s (%cr)')"

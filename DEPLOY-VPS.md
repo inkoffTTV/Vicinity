@@ -423,7 +423,8 @@ cd ~/vicinity && git pull && cd deploy && docker compose up -d --build
 cd ~/vicinity && sh deploy/autoupdate.sh install
 ```
 
-Команда ставит запись в `crontab` (старую однострочную запись с `vicinity-up.lock`, если была, заменяет).
+Команда ставит запись в `crontab` (старую однострочную запись с `vicinity-up.lock`, если была, заменяет);
+если cron не установлен, вместо него создаётся таймер systemd `vicinity-autoupdate.timer`.
 Остальное:
 
 | Команда | Что делает |
