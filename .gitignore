@@ -61,3 +61,6 @@ dist/*.exe
 # Установщики ПК-приложения (на сервере, не в git)
 deploy/downloads/
 deploy/autoupdate.log
+deploy/.autoupdate.lock
+deploy/.autoupdate.lock.d
+deploy/.autoupdate-failed

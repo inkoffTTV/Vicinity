@@ -415,15 +415,28 @@ cd ~/vicinity && git pull && cd deploy && docker compose up -d --build
 
 ### Автообновление с ветки
 
-Сервер может подтягивать ветку сам, без доступа извне: раз в 5 минут cron сравнивает локальный HEAD
-с `origin` и при новых коммитах запускает `update.sh`. Проверено: работает. Строка для `crontab -e`:
+Сервер подтягивает ветку сам, без доступа извне: скрипт `deploy/autoupdate.sh` раз в 5 минут
+сравнивает локальный коммит с `origin` и при новых коммитах запускает `update.sh`
+(резервная копия → `git pull` → сборка → перезапуск → проверка). Включить один раз:
 
-```
-*/5 * * * * cd ~/vicinity && git fetch -q origin claude/zen-feynman-rcs2s3 && [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/claude/zen-feynman-rcs2s3)" ] && flock -n /tmp/vicinity-up.lock sh deploy/update.sh >> deploy/autoupdate.log 2>&1
+```sh
+cd ~/vicinity && sh deploy/autoupdate.sh install
 ```
 
-Репозиторий на сервере должен стоять на этой ветке (`git checkout claude/zen-feynman-rcs2s3`).
-Лог — `deploy/autoupdate.log`. Скрипт `deploy/vps.sh` — для запуска `update.sh` по SSH с другой машины.
+Команда ставит запись в `crontab` (старую однострочную запись с `vicinity-up.lock`, если была, заменяет).
+Остальное:
+
+| Команда | Что делает |
+|---|---|
+| `sh deploy/autoupdate.sh status` | включено ли, какой коммит на сервере и какой в ветке, последние записи журнала |
+| `sh deploy/autoupdate.sh now` | обновиться прямо сейчас, не дожидаясь cron |
+| `sh deploy/autoupdate.sh uninstall` | выключить |
+
+Журнал — `deploy/autoupdate.log` (сам обрезается). Два запуска не накладываются (замок), а упавшее
+обновление не повторяется каждые 5 минут: скрипт ждёт следующего коммита или `now` и пишет в журнал,
+на каком коммите упало. Ветка — та, что сейчас выбрана в репозитории (`BRANCH=имя` — другая,
+`EVERY=10` — другой интервал при `install`). Скрипт `deploy/vps.sh autoupdate` включает всё это по SSH
+с другой машины.
 
 ### Обновление со старой версии
 
