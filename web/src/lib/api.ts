@@ -71,13 +71,26 @@ export interface AppearanceSettings {
   high_contrast: boolean;
   /** Нет у старых серверов */
   app_icon?: string;
-  button_style?: 'soft' | 'square' | 'round';
+  radius?: 'none' | 'small' | 'medium' | 'large';
+  font_family?: string;
+  font_px?: number;
+  font_weight?: number;
+  scale?: number;
+  eco?: 'off' | 'minimized' | 'unfocused';
+  transparency?: boolean;
+  panel_opacity?: number;
+  glass_blur?: number;
+  background?: { image: string; from?: number } | null;
 }
 
 /** Тема сообщества (GET /themes/community, docs/API.md §18) */
 export interface CommunityTheme {
   id: number;
   name: string;
+  /** Тема (цвета) или фон (картинка) */
+  kind: 'theme' | 'background';
+  image: string;
+  installs: number;
   colors: string[];
   angle: number;
   base: 'light' | 'dark';
@@ -741,8 +754,17 @@ export const api = {
   adminCreateGifts: (tier: number, days: number, count: number, note: string) =>
     post<{ codes: { code: string; tier: number; days: number }[] }>('/admin/gifts', { tier, days, count, note }).then((r) => r.codes),
   appearance: () => get<AppearanceResponse>('/settings/appearance'),
-  communityThemes: (sort: 'top' | 'new' = 'top') => get<{ themes: CommunityTheme[]; can_publish: boolean; own: number; max_own: number }>(`/themes/community?sort=${sort}`),
-  publishTheme: (t: { name: string; colors: string[]; angle: number; base: 'light' | 'dark' }) => post<CommunityTheme>('/themes/community', t),
+  communityThemes: (sort: 'top' | 'new' = 'top', kind: 'theme' | 'background' | 'all' = 'all') =>
+    get<{ themes: CommunityTheme[]; can_publish: boolean; can_publish_background: boolean; own: number; max_own: number }>(
+      `/themes/community?sort=${sort}&kind=${kind}`,
+    ),
+  publishTheme: (t: { name: string; kind?: 'theme' | 'background'; image?: string; colors: string[]; angle: number; base: 'light' | 'dark' }) =>
+    post<CommunityTheme>('/themes/community', t),
+  uploadWorkshopImage: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request<{ file_url: string }>('POST', '/themes/community/upload', fd);
+  },
   likeTheme: (id: number) => post<{ likes: number; liked: boolean }>(`/themes/community/${id}/like`),
   deleteTheme: (id: number) => del<{ ok: boolean }>(`/themes/community/${id}`),
   saveAppearance: (s: Partial<AppearanceSettings>) => request<AppearanceResponse>('PATCH', '/settings/appearance', s),

@@ -432,6 +432,9 @@ void initialize() {
          "angle INTEGER NOT NULL DEFAULT 135,"
          "base TEXT NOT NULL DEFAULT 'dark',"
          "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+    exec("ALTER TABLE community_themes ADD COLUMN kind TEXT NOT NULL DEFAULT 'theme'");   // theme | background
+    exec("ALTER TABLE community_themes ADD COLUMN image TEXT DEFAULT NULL");               // /uploads/backgrounds/… у фона
+    exec("ALTER TABLE community_themes ADD COLUMN installs INTEGER NOT NULL DEFAULT 0");
     exec("CREATE TABLE IF NOT EXISTS community_theme_likes ("
          "theme_id INTEGER NOT NULL,"
          "user_id INTEGER NOT NULL,"

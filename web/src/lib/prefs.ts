@@ -4,11 +4,19 @@
 import { create } from 'zustand';
 import { APP_ICONS, applyFavicon, DEFAULT_APP_ICON } from './appIcon';
 import { accentForTheme, BaseTheme, ColorTheme, CustomTheme, gradientCss, themeById } from './themes';
+import { fontById, UI_FONTS } from './fonts';
 
 export type FontSize = 's' | 'm' | 'l';
 export type ServerTheme = 'mine' | 'default';
-/** Стиль кнопок и полей: мягкие углы (по умолчанию), прямые, круглые */
-export type ButtonStyle = 'soft' | 'square' | 'round';
+/** Скругление углов интерфейса */
+export type Radius = 'none' | 'small' | 'medium' | 'large';
+/** Экономия эффектов: никогда, в свёрнутом окне, когда окно не в фокусе */
+export type Eco = 'off' | 'minimized' | 'unfocused';
+/** Фон приложения: своя картинка или из мастерской (from — id записи) */
+export interface AppBackground {
+  image: string;
+  from?: number;
+}
 
 export interface Appearance {
   /** «Как тема устройства»: светлая или тёмная по системе */
@@ -28,7 +36,23 @@ export interface Appearance {
   /** Компактная лента: меньше отступы и аватары */
   compact: boolean;
   fontSize: FontSize;
-  buttonStyle: ButtonStyle;
+  radius: Radius;
+  /** Шрифт интерфейса (lib/fonts.ts) */
+  fontFamily: string;
+  /** Базовый размер шрифта интерфейса, px; 0 — авто */
+  fontPx: number;
+  /** Жирность текста; 0 — авто */
+  fontWeight: number;
+  /** Масштаб интерфейса, % */
+  scale: number;
+  eco: Eco;
+  /** Прозрачные панели поверх градиента или фона */
+  transparency: boolean;
+  /** Непрозрачность панелей, % (при прозрачности) */
+  panelOpacity: number;
+  /** Размытие фона под панелями, px */
+  glassBlur: number;
+  background: AppBackground | null;
   /** Убрать анимации независимо от настройки системы */
   reducedMotion: boolean;
   /** Насыщенность цветов, % */
@@ -70,7 +94,16 @@ export const DEFAULTS: Appearance = {
   accent: '',
   compact: false,
   fontSize: 'm',
-  buttonStyle: 'soft',
+  radius: 'medium',
+  fontFamily: 'default',
+  fontPx: 0,
+  fontWeight: 0,
+  scale: 100,
+  eco: 'off',
+  transparency: true,
+  panelOpacity: 55,
+  glassBlur: 12,
+  background: null,
   reducedMotion: false,
   saturation: 100,
   highContrast: false,
@@ -110,7 +143,19 @@ export function sanitize(raw: any): Appearance {
     accent: typeof src.accent === 'string' && HEX.test(src.accent) ? src.accent.toLowerCase() : '',
     compact: src.compact === true,
     fontSize: src.fontSize === 's' || src.fontSize === 'l' ? src.fontSize : 'm',
-    buttonStyle: src.buttonStyle === 'square' || src.buttonStyle === 'round' ? src.buttonStyle : 'soft',
+    radius: ['none', 'small', 'medium', 'large'].includes(src.radius) ? src.radius : 'medium',
+    fontFamily: UI_FONTS.some((f) => f.id === src.fontFamily) ? src.fontFamily : 'default',
+    fontPx: Number.isInteger(src.fontPx) && src.fontPx >= 12 && src.fontPx <= 20 ? src.fontPx : 0,
+    fontWeight: [400, 500, 600, 700].includes(src.fontWeight) ? src.fontWeight : 0,
+    scale: [75, 90, 100, 110, 125].includes(src.scale) ? src.scale : 100,
+    eco: src.eco === 'minimized' || src.eco === 'unfocused' ? src.eco : 'off',
+    transparency: src.transparency !== false,
+    panelOpacity: Number.isFinite(src.panelOpacity) ? Math.max(20, Math.min(100, Math.round(src.panelOpacity))) : 55,
+    glassBlur: Number.isFinite(src.glassBlur) ? Math.max(0, Math.min(40, Math.round(src.glassBlur))) : 12,
+    background:
+      src.background && typeof src.background === 'object' && typeof src.background.image === 'string' && src.background.image.startsWith('/uploads/backgrounds/')
+        ? { image: src.background.image, ...(Number.isInteger(src.background.from) && src.background.from > 0 ? { from: src.background.from as number } : {}) }
+        : null,
     reducedMotion: src.reducedMotion === true,
     saturation: Number.isFinite(src.saturation) ? Math.max(0, Math.min(100, Math.round(src.saturation))) : 100,
     highContrast: src.highContrast === true,
@@ -177,6 +222,18 @@ export function resolvedBase(s: State): BaseTheme {
   return s.followSystem ? (systemDark() ? 'dark' : 'light') : s.baseTheme;
 }
 
+/** Экономия эффектов: data-eco на <html>, пока окно свёрнуто или не в фокусе — CSS убирает размытие и анимации */
+function applyEco() {
+  const mode = document.documentElement.getAttribute('data-eco-mode');
+  const on = mode === 'minimized' ? document.hidden : mode === 'unfocused' ? document.hidden || !document.hasFocus() : false;
+  document.documentElement.toggleAttribute('data-eco', on);
+}
+if (typeof window !== 'undefined') {
+  document.addEventListener('visibilitychange', applyEco);
+  window.addEventListener('focus', applyEco);
+  window.addEventListener('blur', applyEco);
+}
+
 /** Атрибуты и переменные на <html> — по ним CSS выбирает тему, акцент, плотность и шрифт */
 function apply(s: State) {
   const root = document.documentElement;
@@ -208,7 +265,32 @@ function apply(s: State) {
   }
   root.toggleAttribute('data-compact', s.compact);
   root.setAttribute('data-font', s.fontSize);
-  root.setAttribute('data-buttons', s.buttonStyle);
+  root.setAttribute('data-radius', s.radius);
+  // Фон приложения: картинка под панелями; стекло — полупрозрачные панели поверх градиента или картинки
+  const bg = s.inServer && s.serverTheme === 'default' && !s.preview ? null : s.background;
+  if (bg) {
+    root.setAttribute('data-bg', '');
+    root.style.setProperty('--app-bg', `url("${bg.image}")`);
+  } else {
+    root.removeAttribute('data-bg');
+    root.style.removeProperty('--app-bg');
+  }
+  const glass = s.transparency && (!!g || !!bg);
+  root.toggleAttribute('data-glass', glass);
+  root.style.setProperty('--panel-alpha', String(s.panelOpacity / 100));
+  root.style.setProperty('--glass-blur', `${s.glassBlur}px`);
+  // Шрифт интерфейса, размер и жирность; масштаб
+  const font = fontById(s.fontFamily);
+  if (s.fontFamily !== 'default') root.style.setProperty('--font-sans', font.family);
+  else root.style.removeProperty('--font-sans');
+  if (s.fontPx) root.style.setProperty('--ui-font', `${s.fontPx}px`);
+  else root.style.removeProperty('--ui-font');
+  if (s.fontWeight) root.style.setProperty('--ui-weight', String(s.fontWeight));
+  else root.style.removeProperty('--ui-weight');
+  root.style.setProperty('--ui-scale', String(s.scale / 100));
+  root.toggleAttribute('data-scaled', s.scale !== 100);
+  root.setAttribute('data-eco-mode', s.eco);
+  applyEco();
   root.toggleAttribute('data-reduced-motion', s.reducedMotion);
   root.toggleAttribute('data-contrast', s.highContrast);
   if (s.saturation < 100) {

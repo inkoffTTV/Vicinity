@@ -27,6 +27,13 @@ import '@fontsource/press-start-2p/400.css';
 import '@fontsource/lobster/400.css';
 import '@fontsource/amatic-sc/700.css';
 import '@fontsource/rubik-mono-one/400.css';
+// Шрифты интерфейса (lib/fonts.ts): обычное начертание для текста
+import '@fontsource/comfortaa/400.css';
+import '@fontsource/exo-2/400.css';
+import '@fontsource/oswald/400.css';
+import '@fontsource/playfair-display/400.css';
+import '@fontsource/caveat/400.css';
+import '@fontsource/unbounded/400.css';
 import './tokens.css';
 import './styles.css';
 import './theme.css';

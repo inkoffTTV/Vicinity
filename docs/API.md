@@ -94,7 +94,16 @@ PATCH `/settings/appearance` `{любые поля settings}` → то же. `se
 | `server_theme` | `mine` \| `default` — тема на серверах |
 | `accent` | `""` \| `#rrggbb` |
 | `font_size` | `s` \| `m` \| `l` |
-| `button_style` | `soft` \| `square` \| `round` — стиль кнопок и полей (атрибут `data-buttons` на `<html>`) |
+| `radius` | `none` \| `small` \| `medium` \| `large` — скругление углов (`data-radius`) |
+| `font_family` | `default` \| `system` \| `comfortaa` \| `oswald` \| `exo` \| `playfair` \| `jetbrains` \| `caveat` \| `lobster` \| `pressstart` \| `russo` \| `unbounded` — шрифт интерфейса (`web/src/lib/fonts.ts`) |
+| `font_px` | 0 (авто) или 12–20 — базовый размер шрифта интерфейса |
+| `font_weight` | 0 (авто), 400, 500, 600, 700 |
+| `scale` | 75 \| 90 \| 100 \| 110 \| 125 — масштаб интерфейса, % |
+| `eco` | `off` \| `minimized` \| `unfocused` — экономия эффектов (без размытия и анимаций, пока окно свёрнуто или не в фокусе) |
+| `transparency` | bool — полупрозрачные панели поверх градиента или фона |
+| `panel_opacity` | 20–100 — непрозрачность панелей, % |
+| `glass_blur` | 0–40 — размытие фона под панелями, px |
+| `background` | null \| `{image: "/uploads/backgrounds/…"}` (своя картинка, `POST /themes/community/upload`) \| `{from: id}` — фон из мастерской (§18), картинку подставляет сервер и считает установку; 404, если фон удалили |
 | `compact`, `reduce_motion`, `high_contrast` | bool |
 | `saturation` | 0–100 |
 
@@ -431,15 +440,17 @@ GET/PATCH `/settings/privacy` → `{status, stats, dm, friend_requests}` (хра
 затем 5/с (общее ведро), **[new]** `voice_media` — 20/мин;
 голос — §11.
 
-## 18. Темы сообщества **[new]**
+## 18. Мастерская: темы и фоны сообщества **[new]**
 
-Своя тема (Ultra) публикуется для всех; применить тему сообщества может любой со Standard — она хранится в
-`settings.appearance.custom_theme` с полем `from` (см. §0.6). Таблицы `community_themes`, `community_theme_likes`
+Своя тема (Ultra) и фон-картинка (Standard+) публикуются для всех. Применить тему из мастерской — Standard+
+(`settings.appearance.custom_theme = {from: id}`), фон — всем (`background = {from: id}`), см. §0.6.
+Таблицы `community_themes` (`kind` theme|background, `image`, `installs`), `community_theme_likes`
 (`backend/controllers/ThemesController.cc`).
 
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/themes/community?sort=top\|new` | `{themes:[{id, name, colors, angle, base, likes, liked, mine, created_at, author:{id, display_name}}], can_publish, own, max_own}` — до 100 тем, `top` по сердечкам |
-| POST | `/themes/community` | `{name: 2–30 символов, colors: [2–3 × "#rrggbb"], angle, base}` → тема. **Ultra, иначе 403**; больше 5 своих — 409 |
+| GET | `/themes/community?sort=top\|new&kind=all\|theme\|background` | `{themes:[{id, name, kind, image, installs, colors, angle, base, likes, liked, mine, created_at, author:{id, display_name}}], can_publish, can_publish_background, own, max_own}` — до 100 записей; `top` — по сердечкам и установкам |
+| POST | `/themes/community/upload` | multipart-картинка → `{file_url}` (`/uploads/backgrounds/…`) — для своего фона или публикации |
+| POST | `/themes/community` | `{name: 2–30 символов, kind: "theme"\|"background", colors: [2–3 × "#rrggbb"] (у фона необязательно), angle, base, image (у фона — из upload)}` → запись. Тема — **Ultra**, фон — **Standard**, иначе 403; больше 10 своих — 409 |
 | POST | `/themes/community/{id}/like` | поставить или снять сердечко → `{likes, liked}` |
 | DELETE | `/themes/community/{id}` | только автор или разработчик → `{ok}` |

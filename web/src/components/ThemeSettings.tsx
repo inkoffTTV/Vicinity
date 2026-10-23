@@ -1,12 +1,16 @@
-import { useEffect, useState , FormEvent } from 'react';
+import { useEffect, useRef, useState, FormEvent } from 'react';
 import { useThemeAccess } from '../lib/appearanceSync';
+import { Monitor, Moon, Plus, Sun } from 'lucide-react';
 import { api, ApiError, CommunityTheme } from '../lib/api';
 import { colorsFromBanner } from '../lib/bannerColors';
+import { FONT_GROUPS, UI_FONTS } from '../lib/fonts';
+import { Icon } from './Icon';
+import { Workshop } from './Workshop';
 import { loadPlan, usePlan } from '../lib/plan';
 import { useStore } from '../lib/store';
-import { ButtonStyle, FontSize, ServerTheme, useAppearance } from '../lib/prefs';
+import { Eco, FontSize, Radius, ServerTheme, useAppearance } from '../lib/prefs';
 import { BASE_THEMES, COLOR_THEMES, CustomTheme, gradientCss, themeById } from '../lib/themes';
-import { Segmented, Toggle } from './SettingControls';
+import { Cards, Segmented, Slider, Toggle } from './SettingControls';
 
 type GoTo = (tab: 'accessibility' | 'subscription') => void;
 
@@ -26,19 +30,130 @@ const LockIcon = () => (
 
 // ── Тема ──
 
+type Sub = 'look' | 'font' | 'workshop';
+
 export function ThemeTab({ goTo }: { goTo: GoTo }) {
   const a = useAppearance();
   const access = useThemeAccess();
-  const [editor, setEditor] = useState(false);
-  const [draft, setDraft] = useState<CustomTheme>(a.customTheme ?? DEFAULT_CUSTOM);
+  const toast = useStore((s) => s.toast);
+  const [sub, setSub] = useState<Sub>('look');
   const preview = a.preview;
+
+  // Предпросмотр живёт, пока открыта вкладка
+  useEffect(() => () => useAppearance.getState().setPreview(null), []);
+
+  // Тема сообщества: со Standard применяется и хранится как своя с пометкой from, без подписки — предпросмотр
+  const pickCommunity = (t: CommunityTheme) => {
+    const theme: CustomTheme = { colors: t.colors, angle: t.angle, base: t.base, from: t.id };
+    if (access.colorThemes) {
+      a.setPreview(null);
+      a.set(a.customTheme?.from === t.id ? { customTheme: null } : { customTheme: theme, colorTheme: null });
+    } else {
+      a.setPreview(preview?.customTheme?.from === t.id ? null : { colorTheme: null, customTheme: theme });
+      toast('Предпросмотр: применить темы из мастерской можно с подпиской Standard');
+    }
+  };
+
+  const previewName = preview
+    ? (themeById(preview.colorTheme)?.name ?? (preview.customTheme ? (preview.customTheme.from ? 'Тема из мастерской' : 'Своя тема') : ''))
+    : '';
+  const previewNeeds = preview?.customTheme && !preview.customTheme.from ? 'Ultra' : 'Standard';
+  const canKeepPreview = preview?.customTheme && !preview.customTheme.from ? access.customTheme : access.colorThemes;
+
+  return (
+    <div className="settings theme-settings">
+      <h2 className="display" style={{ margin: 0 }}>
+        Внешний вид
+      </h2>
+      <div className="subtabs" role="tablist" aria-label="Разделы внешнего вида">
+        {(
+          [
+            ['look', 'Вид'],
+            ['font', 'Шрифт'],
+            ['workshop', 'Мастерская'],
+          ] as [Sub, string][]
+        ).map(([id, name]) => (
+          <button key={id} type="button" role="tab" aria-selected={sub === id} className={sub === id ? 'on' : ''} onClick={() => setSub(id)}>
+            {name}
+          </button>
+        ))}
+      </div>
+
+      {preview && (
+        <div className="preview-bar" role="status">
+          <span>
+            Предпросмотр: <strong>{previewName}</strong>
+          </span>
+          {canKeepPreview ? (
+            <button
+              type="button"
+              className="btn primary small"
+              onClick={() => {
+                const p = preview;
+                a.setPreview(null);
+                a.set(p.customTheme ? { customTheme: p.customTheme, colorTheme: null } : { colorTheme: p.colorTheme, customTheme: null });
+              }}
+            >
+              Оставить
+            </button>
+          ) : (
+            <>
+              <span className="muted small">сохранить — с подпиской {previewNeeds}</span>
+              <button type="button" className="btn primary small" onClick={() => goTo('subscription')}>
+                О подписке
+              </button>
+            </>
+          )}
+          <button type="button" className="btn small" onClick={() => a.setPreview(null)}>
+            Вернуть
+          </button>
+        </div>
+      )}
+
+      {sub === 'look' && <LookPane goTo={goTo} />}
+      {sub === 'font' && <FontPane />}
+      {sub === 'workshop' && <Workshop onPickTheme={pickCommunity} />}
+    </div>
+  );
+}
+
+// ── Вид: тема, готовые темы, стекло, фон, скругление, масштаб, экономия ──
+
+function LookPane({ goTo }: { goTo: GoTo }) {
+  const a = useAppearance();
+  const access = useThemeAccess();
   const me = useStore((s) => s.me);
   const toast = useStore((s) => s.toast);
-  const [publishName, setPublishName] = useState('');
-  const [published, setPublished] = useState(0); // счётчик — список сообщества перечитывает себя
+  const preview = a.preview;
+  const [editor, setEditor] = useState(false);
+  const [draft, setDraft] = useState<CustomTheme>(a.customTheme && !a.customTheme.from ? a.customTheme : DEFAULT_CUSTOM);
   const [bannerBusy, setBannerBusy] = useState(false);
+  const [bgBusy, setBgBusy] = useState(false);
+  const bgFile = useRef<HTMLInputElement>(null);
 
-  // Цвета из баннера профиля — в черновик своей темы
+  const pickBase = (id: (typeof BASE_THEMES)[number]['id']) => a.set({ baseTheme: id, followSystem: false, colorTheme: null, customTheme: null });
+  const pickColor = (id: string | null) => {
+    if (id === null) {
+      a.setPreview(null);
+      a.set({ colorTheme: null, customTheme: null });
+      return;
+    }
+    if (access.colorThemes) {
+      a.setPreview(null);
+      a.set({ colorTheme: a.colorTheme === id ? null : id, customTheme: null });
+    } else {
+      a.setPreview(preview?.colorTheme === id ? null : { colorTheme: id, customTheme: null });
+    }
+  };
+  const tryCustom = (t: CustomTheme) => {
+    setDraft(t);
+    a.setPreview({ colorTheme: null, customTheme: t });
+  };
+  const saveCustom = () => {
+    a.setPreview(null);
+    a.set({ customTheme: draft, colorTheme: null });
+    setEditor(false);
+  };
   const fromBanner = async () => {
     if (!me?.banner_path) return;
     setBannerBusy(true);
@@ -50,99 +165,100 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
       setBannerBusy(false);
     }
   };
-
-  // Тема сообщества: со Standard применяется и хранится как своя с пометкой from, без подписки — предпросмотр
-  const pickCommunity = (t: CommunityTheme) => {
-    const theme: CustomTheme = { colors: t.colors, angle: t.angle, base: t.base, from: t.id };
-    if (access.colorThemes) {
-      a.setPreview(null);
-      a.set(a.customTheme?.from === t.id ? { customTheme: null } : { customTheme: theme, colorTheme: null });
-    } else {
-      a.setPreview(preview?.customTheme?.from === t.id ? null : { colorTheme: null, customTheme: theme });
-    }
-  };
-
-  const publish = async () => {
-    const name = publishName.trim();
-    if (name.length < 2) {
-      toast('Дайте теме название (2–30 символов)', 'error');
-      return;
-    }
+  const uploadBg = async (f: File) => {
+    setBgBusy(true);
     try {
-      await api.publishTheme({ name, colors: draft.colors, angle: draft.angle, base: draft.base });
-      setPublishName('');
-      setPublished((n) => n + 1);
-      toast(`Тема «${name}» опубликована`);
+      const r = await api.uploadWorkshopImage(f);
+      a.set({ background: { image: r.file_url } });
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : 'Не удалось опубликовать', 'error');
+      toast(e instanceof ApiError ? e.message : 'Не удалось загрузить картинку', 'error');
+    } finally {
+      setBgBusy(false);
     }
   };
 
-  // Предпросмотр живёт, пока открыта вкладка
-  useEffect(() => () => useAppearance.getState().setPreview(null), []);
-
-  const pickBase = (id: (typeof BASE_THEMES)[number]['id']) =>
-    a.set({ baseTheme: id, followSystem: false, colorTheme: null, customTheme: null });
-
-  const pickColor = (id: string) => {
-    if (access.colorThemes) {
-      a.setPreview(null);
-      a.set({ colorTheme: a.colorTheme === id ? null : id, customTheme: null });
-    } else {
-      a.setPreview(preview?.colorTheme === id ? null : { colorTheme: id, customTheme: null });
-    }
-  };
-
-  const tryCustom = (t: CustomTheme) => {
-    setDraft(t);
-    a.setPreview({ colorTheme: null, customTheme: t });
-  };
-
-  const saveCustom = () => {
-    a.setPreview(null);
-    a.set({ customTheme: draft, colorTheme: null });
-    setEditor(false);
-  };
-
-  const previewName = preview
-    ? (themeById(preview.colorTheme)?.name ?? (preview.customTheme ? (preview.customTheme.from ? 'Тема сообщества' : 'Своя тема') : ''))
-    : '';
-  const previewNeeds = preview?.customTheme && !preview.customTheme.from ? 'Ultra' : 'Standard';
-  const canKeepPreview = preview?.customTheme && !preview.customTheme.from ? access.customTheme : access.colorThemes;
-  const activeId = (preview ?? a).colorTheme;
+  const activeColor = (preview ?? a).colorTheme;
+  const noneOn = !preview && !a.colorTheme && !a.customTheme;
+  const glassOn = !!(preview ?? a).colorTheme || !!(preview ?? a).customTheme || !!a.background;
+  const baseIcon = (id: string) => (id === 'light' ? <Icon icon={Sun} size={18} /> : id === 'dark' ? <Icon icon={Moon} size={18} /> : null);
 
   return (
-    <div className="settings theme-settings">
-      <h2 className="display" style={{ margin: 0 }}>
-        Тема
-      </h2>
+    <>
+      <section className="theme-section" aria-label="Тема">
+        <div className="theme-section-head">
+          <div>
+            <h3>Тема</h3>
+            <span className="muted small">Выберите основу интерфейса</span>
+          </div>
+          <div className="base-themes">
+            {BASE_THEMES.map((t) => {
+              const on = !a.followSystem && a.baseTheme === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="base-theme"
+                  aria-pressed={on}
+                  aria-label={t.name}
+                  title={t.name}
+                  style={{ background: t.swatch, color: t.id === 'light' ? '#222' : '#fff' }}
+                  onClick={() => pickBase(t.id)}
+                >
+                  {baseIcon(t.id)}
+                  {on && (
+                    <span className="check">
+                      <CheckIcon />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              className="base-theme sync"
+              aria-pressed={a.followSystem}
+              aria-label="Как тема устройства"
+              title="Как тема устройства"
+              onClick={() => a.set({ followSystem: !a.followSystem })}
+            >
+              <Icon icon={Monitor} size={18} />
+              {a.followSystem && (
+                <span className="check">
+                  <CheckIcon />
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </section>
 
-      <Toggle
-        label="Как тема устройства"
-        hint="Светлая или тёмная — как на вашем устройстве."
-        checked={a.followSystem}
-        onChange={(followSystem) => a.set({ followSystem, colorTheme: followSystem ? null : a.colorTheme, customTheme: followSystem ? null : a.customTheme })}
-      />
-
-      <section className="theme-section" aria-label="Темы по умолчанию">
-        <h3>Темы по умолчанию</h3>
-        <div className="base-themes">
-          {BASE_THEMES.map((t) => {
-            const on = !a.followSystem && !a.colorTheme && !a.customTheme && a.baseTheme === t.id;
+      <section className="theme-section" aria-label="Готовые темы">
+        <h3>Готовые темы</h3>
+        <span className="muted small">
+          {access.colorThemes ? 'Градиент под панелями и акцент в цвет темы. Сохраняется на всех устройствах.' : 'Нажмите, чтобы посмотреть; применить — с подпиской Standard.'}
+        </span>
+        <div className="theme-cards">
+          <button type="button" className={`theme-card${noneOn ? ' on' : ''}`} aria-pressed={noneOn} onClick={() => pickColor(null)}>
+            <span className="theme-dot neutral" aria-hidden="true" />
+            <span>Neutral</span>
+          </button>
+          {COLOR_THEMES.map((t) => {
+            const on = activeColor === t.id;
             return (
               <button
                 key={t.id}
                 type="button"
-                className="base-theme"
+                className={`theme-card${on ? ' on' : ''}${preview?.colorTheme === t.id ? ' previewing' : ''}`}
                 aria-pressed={on}
                 aria-label={t.name}
                 title={t.name}
-                style={{ background: t.swatch }}
-                onClick={() => pickBase(t.id)}
+                onClick={() => pickColor(t.id)}
               >
-                {on && (
-                  <span className="check">
-                    <CheckIcon />
+                <span className="theme-dot" style={{ background: gradientCss(t) }} aria-hidden="true" />
+                <span className="ellipsis">{t.name}</span>
+                {!access.colorThemes && (
+                  <span className="lock">
+                    <LockIcon />
                   </span>
                 )}
               </button>
@@ -150,118 +266,21 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
           })}
           <button
             type="button"
-            className="base-theme sync"
-            aria-pressed={a.followSystem}
-            aria-label="Как тема устройства"
-            title="Как тема устройства"
-            onClick={() => a.set({ followSystem: !a.followSystem, colorTheme: null, customTheme: null })}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M20 11a8 8 0 0 0-14.6-4.5M4 4v4h4M4 13a8 8 0 0 0 14.6 4.5M20 20v-4h-4" />
-            </svg>
-            {a.followSystem && (
-              <span className="check">
-                <CheckIcon />
-              </span>
-            )}
-          </button>
-        </div>
-      </section>
-
-      {!access.colorThemes && (
-        <section className="theme-promo" aria-label="Подписка">
-          <span className="theme-promo-art" aria-hidden="true" />
-          <div className="theme-promo-text">
-            <strong>Настройте Vicinity по своему вкусу</strong>
-            <span className="muted small">
-              Цветовые темы — с подпиской Standard, своя тема из любых цветов — с Ultra.
-            </span>
-          </div>
-          <button type="button" className="btn primary" onClick={() => goTo('subscription')}>
-            Подробнее
-          </button>
-        </section>
-      )}
-
-      <section className="color-themes" aria-label="Цветовые темы">
-        <div className="color-themes-head">
-          <div className="grow">
-            <strong>Цветовые темы</strong>
-            <span className="muted small">
-              {access.colorThemes ? 'Выберите тему — она сохранится на всех устройствах.' : 'Нажмите на тему, чтобы посмотреть, как она выглядит.'}
-            </span>
-          </div>
-          {!access.colorThemes && (
-            <button type="button" className="btn small" onClick={() => goTo('subscription')}>
-              <LockIcon /> Откройте с подпиской
-            </button>
-          )}
-        </div>
-
-        {preview && (
-          <div className="preview-bar" role="status">
-            <span className="grow">
-              Предпросмотр: <strong>{previewName}</strong>.{' '}
-              {canKeepPreview ? '' : `Сохранить тему можно с подпиской ${previewNeeds}.`}
-            </span>
-            <button type="button" className="btn small" onClick={() => a.setPreview(null)}>
-              Вернуть мою тему
-            </button>
-            {canKeepPreview ? (
-              <button
-                type="button"
-                className="btn small primary"
-                onClick={() => (preview.customTheme ? (preview.customTheme.from ? a.set({ customTheme: preview.customTheme, colorTheme: null }) : saveCustom()) : pickColor(preview.colorTheme!))}
-              >
-                Применить
-              </button>
-            ) : (
-              <button type="button" className="btn small primary" onClick={() => goTo('subscription')}>
-                О подписке
-              </button>
-            )}
-          </div>
-        )}
-
-        <div className="color-grid">
-          <button
-            type="button"
-            className={`color-swatch custom${editor ? ' previewing' : ''}`}
-            aria-pressed={!!a.customTheme}
+            className={`theme-card custom${editor ? ' previewing' : ''}${a.customTheme && !a.customTheme.from ? ' on' : ''}`}
+            aria-pressed={!!a.customTheme && !a.customTheme.from}
             aria-label="Своя тема"
             title="Своя тема (Ultra)"
             onClick={() => {
               setEditor((v) => !v);
-              if (!editor) tryCustom(a.customTheme ?? draft);
+              if (!editor) tryCustom(a.customTheme && !a.customTheme.from ? a.customTheme : draft);
               else a.setPreview(null);
             }}
           >
-            <span className="new-tag">НОВОЕ</span>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              <path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 2-2s-1-1.6-1-2.6 1-2.4 2.4-2.4H18a3 3 0 0 0 3-3c0-4.4-4-8-9-8z" />
-              <circle cx="7.5" cy="11" r="1.2" />
-              <circle cx="10.5" cy="7" r="1.2" />
-              <circle cx="15" cy="7.5" r="1.2" />
-            </svg>
+            <span className="theme-dot plus" aria-hidden="true">
+              <Icon icon={Plus} size={18} />
+            </span>
+            <span>Своя</span>
           </button>
-          {COLOR_THEMES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={`color-swatch${preview?.colorTheme === t.id ? ' previewing' : ''}`}
-              aria-pressed={activeId === t.id}
-              aria-label={t.name}
-              title={t.name}
-              style={{ background: gradientCss(t) }}
-              onClick={() => pickColor(t.id)}
-            >
-              {!access.colorThemes && (
-                <span className="lock">
-                  <LockIcon />
-                </span>
-              )}
-            </button>
-          ))}
         </div>
 
         {editor && (
@@ -270,11 +289,7 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
             {draft.colors.map((c, i) => (
               <label key={i}>
                 Цвет {i + 1}
-                <input
-                  type="color"
-                  value={c}
-                  onChange={(e) => tryCustom({ ...draft, colors: draft.colors.map((x, j) => (j === i ? e.target.value : x)) })}
-                />
+                <input type="color" value={c} onChange={(e) => tryCustom({ ...draft, colors: draft.colors.map((x, j) => (j === i ? e.target.value : x)) })} />
               </label>
             ))}
             {draft.colors.length < 3 ? (
@@ -315,211 +330,202 @@ export function ThemeTab({ goTo }: { goTo: GoTo }) {
             ) : (
               <span className="muted small">Своя тема сохраняется с подпиской Ultra — пока это предпросмотр.</span>
             )}
-            {access.customTheme && (
-              <div className="publish-theme">
-                <input
-                  type="text"
-                  maxLength={30}
-                  placeholder="Название для сообщества"
-                  aria-label="Название темы"
-                  value={publishName}
-                  onChange={(e) => setPublishName(e.target.value)}
-                />
-                <button type="button" className="btn small" onClick={() => void publish()}>
-                  Опубликовать
-                </button>
-              </div>
-            )}
           </div>
         )}
       </section>
 
-      <CommunityThemes
-        key={published}
-        activeId={(preview ?? a).customTheme?.from ?? null}
-        previewId={preview?.customTheme?.from ?? null}
-        onPick={pickCommunity}
-      />
-
-      <Segmented<ButtonStyle>
-        label="Стиль кнопок и полей"
-        value={a.buttonStyle}
-        options={[
-          ['soft', 'Мягкие'],
-          ['square', 'Прямые'],
-          ['round', 'Круглые'],
-        ]}
-        onChange={(buttonStyle) => a.set({ buttonStyle })}
-      />
-      <Segmented<FontSize>
-        label="Размер шрифта"
-        value={a.fontSize}
-        options={[
-          ['s', 'Мелкий'],
-          ['m', 'Обычный'],
-          ['l', 'Крупный'],
-        ]}
-        onChange={(fontSize) => a.set({ fontSize })}
-      />
-
-      <Toggle
-        label="Синхронизировать тему на моих устройствах"
-        hint="Тема и оформление сохраняются в аккаунте и приходят на другие браузеры."
-        checked={a.syncDevices}
-        onChange={(syncDevices) => a.set({ syncDevices })}
-      />
-      <Toggle
-        label="Применить тему к профилям других пользователей"
-        hint="Карточки профилей других людей — в ваших цветах, а не в их."
-        checked={a.applyToProfiles}
-        onChange={(applyToProfiles) => a.set({ applyToProfiles })}
-      />
-      <div className="theme-row">
-        <div className="theme-row-text">
-          <strong>Тема по умолчанию на серверах</strong>
-          <span className="muted small">На серверах — ваша тема или стандартная тёмная.</span>
-        </div>
-        <select
-          aria-label="Тема по умолчанию на серверах"
-          style={{ width: 240 }}
-          value={a.serverTheme}
-          onChange={(e) => a.set({ serverTheme: e.target.value as ServerTheme })}
-        >
-          <option value="mine">Использовать мою тему</option>
-          <option value="default">Стандартная тема Vicinity</option>
-        </select>
-      </div>
-
-      <section className="theme-section" aria-label="Связанные настройки">
-        <h3 className="muted">Связанные настройки</h3>
-        <button type="button" className="link-card" onClick={() => goTo('accessibility')}>
-          <span className="link-card-icon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="4.5" r="1.8" />
-              <path d="M5 8.5l7 1.5 7-1.5M12 10v4.5M12 14.5l-3 6M12 14.5l3 6" />
-            </svg>
-          </span>
+      <section className="theme-section" aria-label="Прозрачность и фон">
+        <Toggle label="Прозрачность" hint="Полупрозрачные панели поверх градиента темы или фона" checked={a.transparency} onChange={(transparency) => a.set({ transparency })} />
+        <Slider
+          label="Непрозрачность"
+          hint={glassOn ? 'Насколько плотные панели' : 'Работает с цветовой темой или фоном'}
+          value={a.panelOpacity}
+          min={20}
+          max={100}
+          step={5}
+          unit="%"
+          disabled={!a.transparency || !glassOn}
+          onChange={(panelOpacity) => a.set({ panelOpacity })}
+        />
+        <Slider
+          label="Размытие фона"
+          hint="Картинка под панелями размывается, чтобы текст читался"
+          value={a.glassBlur}
+          min={0}
+          max={40}
+          step={2}
+          unit="px"
+          disabled={!a.background}
+          onChange={(glassBlur) => a.set({ glassBlur })}
+        />
+        <div className="setting-row bg-row">
           <span className="grow">
-            <strong>Специальные возможности</strong>
-            <span className="muted small" style={{ display: 'block' }}>
-              Насыщенность цветов, высокий контраст, размер шрифта и анимации
-            </span>
+            <span className="toggle-label">Фон приложения</span>
+            <span className="muted small toggle-hint">Своя картинка под всем интерфейсом; готовые — в Мастерской</span>
           </span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </button>
+          {a.background && <span className="bg-thumb" style={{ backgroundImage: `url("${a.background.image}")` }} aria-hidden="true" />}
+          <input ref={bgFile} type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && void uploadBg(e.target.files[0])} />
+          <button type="button" className="btn small" disabled={bgBusy} onClick={() => bgFile.current?.click()}>
+            {a.background ? 'Другая картинка' : 'Загрузить картинку'}
+          </button>
+          {a.background && (
+            <button type="button" className="btn small" onClick={() => a.set({ background: null })}>
+              Убрать
+            </button>
+          )}
+        </div>
+      </section>
+
+      <section className="theme-section" aria-label="Форма и масштаб">
+        <Cards<Radius>
+          label="Скругление углов"
+          hint="Радиус скругления элементов интерфейса и карточек"
+          value={a.radius}
+          options={[
+            { id: 'none', name: 'Нет', icon: <span className="radius-demo r0" /> },
+            { id: 'small', name: 'Маленькое', icon: <span className="radius-demo r1" /> },
+            { id: 'medium', name: 'Среднее', icon: <span className="radius-demo r2" /> },
+            { id: 'large', name: 'Большое', icon: <span className="radius-demo r3" /> },
+          ]}
+          onChange={(radius) => a.set({ radius })}
+        />
+        <Segmented<string>
+          label="Масштаб интерфейса"
+          value={String(a.scale)}
+          options={[
+            ['75', '75%'],
+            ['90', '90%'],
+            ['100', '100%'],
+            ['110', '110%'],
+            ['125', '125%'],
+          ]}
+          onChange={(v) => a.set({ scale: Number(v) })}
+        />
+        <Segmented<Eco>
+          label="Экономия ресурсов"
+          value={a.eco}
+          options={[
+            ['off', 'Выключено'],
+            ['minimized', 'При сворачивании'],
+            ['unfocused', 'Не в фокусе'],
+          ]}
+          onChange={(eco) => a.set({ eco })}
+        />
+        <span className="muted small">Экономия убирает размытие и анимации, пока окно свёрнуто или не активно.</span>
+      </section>
+
+      <section className="theme-section" aria-label="Синхронизация">
+        <Toggle label="Синхронизировать на моих устройствах" hint="Оформление хранится в аккаунте и приходит на другие браузеры." checked={a.syncDevices} onChange={(syncDevices) => a.set({ syncDevices })} />
+        <Toggle label="Применить тему к профилям других" hint="Карточки чужих профилей — в ваших цветах, а не в их." checked={a.applyToProfiles} onChange={(applyToProfiles) => a.set({ applyToProfiles })} />
+        <div className="theme-row">
+          <div className="theme-row-text">
+            <strong>Тема по умолчанию на серверах</strong>
+            <span className="muted small">На серверах — ваша тема или стандартная тёмная.</span>
+          </div>
+          <select aria-label="Тема по умолчанию на серверах" style={{ width: 240 }} value={a.serverTheme} onChange={(e) => a.set({ serverTheme: e.target.value as ServerTheme })}>
+            <option value="mine">Использовать мою тему</option>
+            <option value="default">Стандартная тема Vicinity</option>
+          </select>
+        </div>
+        {!access.colorThemes && (
+          <div className="theme-promo" aria-label="Подписка">
+            <span className="theme-promo-art" aria-hidden="true" />
+            <div className="theme-promo-text">
+              <strong>Настройте Vicinity по своему вкусу</strong>
+              <span className="muted small">Цветовые темы и темы из мастерской — с подпиской Standard, своя тема из любых цветов — с Ultra.</span>
+            </div>
+            <button type="button" className="btn primary" onClick={() => goTo('subscription')}>
+              О подписке
+            </button>
+          </div>
+        )}
       </section>
 
       <div className="row end">
+        <button type="button" className="link-btn muted small" onClick={() => goTo('accessibility')}>
+          Контраст, насыщенность, анимации — в «Доступности»
+        </button>
         <div className="grow" />
         <button type="button" className="btn" onClick={a.reset}>
           Сбросить оформление
         </button>
       </div>
-    </div>
+    </>
   );
 }
 
-// ── Темы сообщества (docs/API.md §18) ──
+// ── Шрифт ──
 
-function CommunityThemes({
-  activeId,
-  previewId,
-  onPick,
-}: {
-  activeId: number | null;
-  previewId: number | null;
-  onPick: (t: CommunityTheme) => void;
-}) {
-  const access = useThemeAccess();
-  const toast = useStore((s) => s.toast);
-  const [sort, setSort] = useState<'top' | 'new'>('top');
-  const [themes, setThemes] = useState<CommunityTheme[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    api.communityThemes(sort).then(
-      (r) => setThemes(r.themes),
-      () => setFailed(true),
-    );
-  }, [sort]);
-  if (failed || (themes && themes.length === 0)) return null;
-
-  const like = async (t: CommunityTheme) => {
-    try {
-      const r = await api.likeTheme(t.id);
-      setThemes((list) => list?.map((x) => (x.id === t.id ? { ...x, ...r } : x)) ?? null);
-    } catch {
-      toast('Не удалось', 'error');
-    }
-  };
-  const remove = async (t: CommunityTheme) => {
-    try {
-      await api.deleteTheme(t.id);
-      setThemes((list) => list?.filter((x) => x.id !== t.id) ?? null);
-    } catch (e) {
-      toast(e instanceof ApiError ? e.message : 'Не удалось удалить', 'error');
-    }
-  };
-
+function FontPane() {
+  const a = useAppearance();
+  const [group, setGroup] = useState('all');
+  const fonts = UI_FONTS.filter((f) => group === 'all' || f.group === group);
   return (
-    <section className="color-themes community-themes" aria-label="Темы сообщества">
-      <div className="theme-section-head">
-        <div>
-          <h3>Темы сообщества</h3>
-          <span className="muted small">
-            {access.colorThemes ? 'Темы, которые опубликовали другие. Применяются как цветовые темы.' : 'Нажмите, чтобы посмотреть; применить — с подпиской Standard.'}
-          </span>
+    <>
+      <section className="theme-section" aria-label="Шрифт">
+        <h3>Шрифт</h3>
+        <span className="muted small">Семейство шрифта интерфейса</span>
+        <div className="chips" role="tablist" aria-label="Группы шрифтов">
+          {[['all', 'Все'] as [string, string], ...FONT_GROUPS].map(([id, name]) => (
+            <button key={id} type="button" role="tab" aria-selected={group === id} className={`chip${group === id ? ' on' : ''}`} onClick={() => setGroup(id)}>
+              {name}
+            </button>
+          ))}
         </div>
-        <Segmented<'top' | 'new'>
-          label=""
-          value={sort}
+        <div className="font-cards" role="radiogroup" aria-label="Шрифт интерфейса">
+          {fonts.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              role="radio"
+              aria-checked={a.fontFamily === f.id}
+              className={`font-card${a.fontFamily === f.id ? ' on' : ''}`}
+              style={{ fontFamily: f.family }}
+              onClick={() => a.set({ fontFamily: f.id })}
+            >
+              <span className="font-sample">Aa</span>
+              <span className="font-name">{f.name}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className="theme-section" aria-label="Размер и жирность">
+        <Segmented<string>
+          label="Размер шрифта"
+          value={String(a.fontPx)}
           options={[
-            ['top', 'Популярные'],
-            ['new', 'Новые'],
+            ['12', '12'],
+            ['14', '14'],
+            ['0', '16 Авто'],
+            ['18', '18'],
+            ['20', '20'],
           ]}
-          onChange={setSort}
+          onChange={(v) => a.set({ fontPx: Number(v) })}
         />
-      </div>
-      <ul className="community-grid">
-        {(themes ?? []).map((t) => (
-          <li key={t.id} className={`community-theme${activeId === t.id ? ' active' : ''}${previewId === t.id ? ' previewing' : ''}`}>
-            <button
-              type="button"
-              className="community-swatch"
-              style={{ background: gradientCss(t) }}
-              aria-pressed={activeId === t.id}
-              aria-label={`Тема «${t.name}»`}
-              title={access.colorThemes ? 'Применить' : 'Посмотреть'}
-              onClick={() => onPick(t)}
-            >
-              {activeId === t.id && <CheckIcon />}
-            </button>
-            <div className="community-meta">
-              <strong className="ellipsis">{t.name}</strong>
-              <span className="muted small ellipsis">{t.author.display_name || 'аноним'}</span>
-            </div>
-            <button
-              type="button"
-              className={`like-btn${t.liked ? ' on' : ''}`}
-              aria-pressed={t.liked}
-              aria-label={t.liked ? 'Убрать сердечко' : 'Нравится'}
-              onClick={() => void like(t)}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill={t.liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 21s-7-4.6-9.2-9A5.2 5.2 0 0 1 12 6.5 5.2 5.2 0 0 1 21.2 12C19 16.4 12 21 12 21z" />
-              </svg>
-              {t.likes}
-            </button>
-            {t.mine && (
-              <button type="button" className="plain muted" aria-label={`Удалить тему «${t.name}»`} title="Удалить мою тему" onClick={() => void remove(t)}>
-                ×
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
+        <Segmented<string>
+          label="Жирность шрифта"
+          value={String(a.fontWeight)}
+          options={[
+            ['0', 'Авто'],
+            ['400', '400'],
+            ['500', '500'],
+            ['600', '600'],
+            ['700', '700'],
+          ]}
+          onChange={(v) => a.set({ fontWeight: Number(v) })}
+        />
+        <Segmented<FontSize>
+          label="Размер текста сообщений"
+          value={a.fontSize}
+          options={[
+            ['s', 'Мелкий'],
+            ['m', 'Обычный'],
+            ['l', 'Крупный'],
+          ]}
+          onChange={(fontSize) => a.set({ fontSize })}
+        />
+      </section>
+    </>
   );
 }
 

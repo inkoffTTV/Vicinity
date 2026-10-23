@@ -3,6 +3,7 @@
 #include "../models/User.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/Tiers.h"
+#include "../utils/Uploads.h"
 #include <drogon/drogon.h>
 #include <cctype>
 #include <initializer_list>
@@ -72,7 +73,16 @@ static Json::Value defaults() {
     v["saturation"]        = 100;
     v["high_contrast"]     = false;
     v["app_icon"]          = "classic";
-    v["button_style"]      = "soft";
+    v["radius"]            = "medium";   // скругление углов: none | small | medium | large
+    v["font_family"]       = "default";  // шрифт интерфейса (список в web/src/lib/fonts.ts)
+    v["font_px"]           = 0;          // базовый размер шрифта, 0 — авто
+    v["font_weight"]       = 0;          // 0 — авто, 400…700
+    v["scale"]             = 100;        // масштаб интерфейса, %
+    v["eco"]               = "off";      // экономия эффектов: off | minimized | unfocused
+    v["transparency"]      = true;       // прозрачные панели поверх градиента или фона
+    v["panel_opacity"]     = 55;         // непрозрачность панелей, %
+    v["glass_blur"]        = 12;         // размытие фона под панелями, px
+    v["background"]        = Json::nullValue;   // {image: /uploads/backgrounds/…, from?: id из мастерской}
     return v;
 }
 
@@ -150,7 +160,7 @@ void SettingsController::patchAppearance(const HttpRequestPtr& req, std::functio
 
         auto bad = [&](const std::string& field) { cb(error("Некорректное значение: " + field, k400BadRequest)); };
         for (const char* key : {"follow_system", "sync_devices", "apply_to_profiles", "compact", "reduce_motion",
-                                "high_contrast"}) {
+                                "high_contrast", "transparency"}) {
             if (!in.isMember(key)) continue;
             if (!in[key].isBool()) { bad(key); return; }
             v[key] = in[key].asBool();
@@ -165,7 +175,45 @@ void SettingsController::patchAppearance(const HttpRequestPtr& req, std::functio
         if (!oneOf("base_theme", {"light", "dark", "graphite", "black"})) { bad("base_theme"); return; }
         if (!oneOf("server_theme", {"mine", "default"}))                  { bad("server_theme"); return; }
         if (!oneOf("font_size", {"s", "m", "l"}))                          { bad("font_size"); return; }
-        if (!oneOf("button_style", {"soft", "square", "round"}))           { bad("button_style"); return; }
+        if (!oneOf("radius", {"none", "small", "medium", "large"}))         { bad("radius"); return; }
+        if (!oneOf("eco", {"off", "minimized", "unfocused"}))              { bad("eco"); return; }
+        if (!oneOf("font_family", {"default", "system", "comfortaa", "oswald", "exo", "playfair", "jetbrains",
+                                   "caveat", "lobster", "pressstart", "russo", "unbounded"}))   { bad("font_family"); return; }
+        auto intIn = [&](const char* key, std::initializer_list<int> allowed, int lo = 0, int hi = -1) {
+            if (!in.isMember(key)) return true;
+            if (!in[key].isIntegral()) return false;
+            const int x = in[key].asInt();
+            if (hi >= lo) { if (x < lo || x > hi) return false; }
+            else { bool ok = false; for (int a : allowed) if (a == x) ok = true; if (!ok) return false; }
+            v[key] = x;
+            return true;
+        };
+        if (!intIn("font_px", {0, 12, 13, 14, 15, 16, 17, 18, 19, 20})) { bad("font_px"); return; }
+        if (!intIn("font_weight", {0, 400, 500, 600, 700}))              { bad("font_weight"); return; }
+        if (!intIn("scale", {75, 90, 100, 110, 125}))                    { bad("scale"); return; }
+        if (!intIn("panel_opacity", {}, 20, 100))                        { bad("panel_opacity"); return; }
+        if (!intIn("glass_blur", {}, 0, 40))                             { bad("glass_blur"); return; }
+        if (in.isMember("background")) {
+            const Json::Value& bg = in["background"];
+            if (bg.isNull()) v["background"] = Json::nullValue;
+            else {
+                if (!bg.isObject()) { bad("background"); return; }
+                Json::Value clean;
+                if (bg.isMember("from")) {
+                    if (!bg["from"].isIntegral()) { bad("background.from"); return; }
+                    Json::Value t = ThemesController::find(bg["from"].asInt64());
+                    if (t.isNull() || t["kind"].asString() != "background") { cb(error("Такого фона в мастерской уже нет", k404NotFound)); return; }
+                    clean["image"] = t["image"];
+                    clean["from"]  = bg["from"].asInt64();
+                    ThemesController::countInstall(bg["from"].asInt64());
+                } else {
+                    const std::string image = bg["image"].isString() ? bg["image"].asString() : std::string();
+                    if (!Uploads::isUploadUrl(image, "backgrounds")) { bad("background.image"); return; }
+                    clean["image"] = image;
+                }
+                v["background"] = clean;
+            }
+        }
         if (in.isMember("accent")) {
             if (!in["accent"].isString() || (!in["accent"].asString().empty() && !isHexColor(in["accent"].asString()))) {
                 bad("accent"); return;
@@ -223,9 +271,13 @@ void SettingsController::patchAppearance(const HttpRequestPtr& req, std::functio
                     cb(jsonResp(std::move(e), k403Forbidden));
                     return;
                 }
+                if (t["kind"].asString() != "theme") { cb(error("Это фон, а не тема", k400BadRequest)); return; }
+                t.removeMember("kind");
+                t.removeMember("image");
                 t["from"]         = ct["from"].asInt64();
                 v["custom_theme"] = t;
                 v["color_theme"]  = Json::nullValue;
+                ThemesController::countInstall(ct["from"].asInt64());
             } else {
                 if (!ct.isObject()) { bad("custom_theme"); return; }
                 const Json::Value& colors = ct["colors"];

@@ -93,6 +93,7 @@ export default function App() {
 
   return (
     <div className={`app${navOpen ? ' nav-open' : ''}${inVoice ? ' in-voice' : ''}`}>
+      <div className="app-bg" aria-hidden="true" />
       <DesktopUpdateBanner />
       <ActivityFrame />
       <ActivityInvites />
