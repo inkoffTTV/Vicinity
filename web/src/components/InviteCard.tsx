@@ -5,6 +5,7 @@ import { useInvite } from '../lib/router';
 import { useStore } from '../lib/store';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
+import { OpenInApp } from './OpenInApp';
 import { ServerIcon } from './ServerRail';
 
 /** Приглашение по ссылке /invite/<код>: вступить на сервер или открыть его, если уже там */
@@ -84,6 +85,7 @@ export function InviteCard({ code }: { code: string }) {
             </div>
           </>
         )}
+        <OpenInApp path={`/invite/${code}`} />
       </div>
     </Modal>
   );

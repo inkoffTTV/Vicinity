@@ -52,11 +52,23 @@ async function startDm(request: APIRequestContext, a: Account, b: Account): Prom
   return r.body.channel_id;
 }
 
+/** Приглашённый принимает приглашение в беседу/на сервер (docs/API.md §7.1) */
+async function acceptInvite(request: APIRequestContext, who: Account, kind: 'group' | 'server', target: number) {
+  const list = await api(request, who, 'GET', '/invites');
+  const inv = list.body.invites.find((i: any) => i.kind === kind && i.target_id === target);
+  expect(inv).toBeTruthy();
+  expect((await api(request, who, 'POST', `/invites/${inv.id}/accept`)).status).toBe(200);
+}
+
 async function createGroup(request: APIRequestContext, owner: Account, name: string, members: Account[] = []) {
   const r = await api(request, owner, 'POST', '/channels', { type: 'group', name });
   expect(r.status).toBe(201);
-  for (const m of members)
-    expect((await api(request, owner, 'POST', `/channels/${r.body.channel_id}/members`, { user_id: m.id })).status).toBe(200);
+  for (const m of members) {
+    const inv = await api(request, owner, 'POST', `/channels/${r.body.channel_id}/members`, { user_id: m.id });
+    expect(inv.status).toBe(200);
+    expect(inv.body.status).toBe('invited');
+    await acceptInvite(request, m, 'group', r.body.channel_id);
+  }
   return r.body.channel_id as number;
 }
 
@@ -437,6 +449,7 @@ test.describe.serial('backend feature API', () => {
     const ch = await createGroup(request, a, 'Команда', [b]);
     await sb.next((e) => e.type === 'channel_added' && e.channel_id === ch);
     expect((await api(request, a, 'POST', `/channels/${ch}/members`, { user_id: c.id })).status).toBe(200);
+    await acceptInvite(request, c, 'group', ch);
     await sb.next((e) => e.type === 'channel_member_joined' && e.channel_id === ch && e.user_id === c.id);
     await sa.next((e) => e.type === 'channel_member_joined' && e.user_id === c.id);
 

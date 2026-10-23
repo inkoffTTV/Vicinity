@@ -3,6 +3,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, RegistrationInfo, api } from '../lib/api';
 import { solveAltcha } from '../lib/altcha';
 import { useInvite } from '../lib/router';
+import { OpenInApp } from './OpenInApp';
 import { useStore } from '../lib/store';
 import { AuthAppLinks } from './AppDownloads';
 import { Icon } from './Icon';
@@ -283,6 +284,7 @@ export function Login() {
           <div className="invite-hint">
             Вас пригласили на сервер (код <strong>{invite}</strong>). Войдите или зарегистрируйтесь, чтобы принять
             приглашение.
+            <OpenInApp path={`/invite/${invite}`} />
           </div>
         )}
 

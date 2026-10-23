@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createGroup, makeFriends, pageErrors, registerUser, send, User } from './helpers';
+import { acceptInvite, createGroup, makeFriends, pageErrors, registerUser, send, User } from './helpers';
 import { confirmDialog } from './w2-helpers';
 
 // Беседы: панель участников — пригласить, переименовать, покинуть, удалить; всё видно вживую.
@@ -7,10 +7,14 @@ import { confirmDialog } from './w2-helpers';
 const panel = (u: User) => u.page.locator('.group-panel');
 const members = (u: User) => panel(u).locator('.member');
 
-/** Пригласить друга в открытую беседу из панели */
+/** Пригласить друга в открытую беседу из панели; приглашение приходит ему, пока он не примет — его нет в составе */
 async function invite(owner: User, friend: User) {
   await panel(owner).getByRole('button', { name: 'Пригласить в беседу' }).click();
-  await owner.page.locator(`.modal .user-row:has-text("@${friend.username}")`).getByRole('button', { name: 'Добавить' }).click();
+  const row = owner.page.locator(`.modal .user-row:has-text("@${friend.username}")`);
+  await row.getByRole('button', { name: 'Пригласить' }).click();
+  await expect(row).toContainText('Отправлено');
+  await owner.page.keyboard.press('Escape');
+  await expect(owner.page.locator('.modal')).toHaveCount(0);
 }
 
 test('group panel: invite, rename by a member, leave with ownership handover, delete by the owner', async ({ browser }) => {
@@ -27,10 +31,15 @@ test('group panel: invite, rename by a member, leave with ownership handover, de
   await expect(members(a).first().locator('.owner-crown[title="Владелец беседы"]')).toBeVisible();
   await expect(panel(a).getByRole('button', { name: 'Удалить беседу' })).toBeVisible();
 
-  // Пригласить: у приглашённого беседа появляется, у владельца растёт состав
+  // Пригласить: у приглашённого — приглашение, в составе он только после «Принять»
   await invite(a, b);
+  await expect(b.page.locator('.invite-item', { hasText: 'Поход' })).toBeVisible();
+  await expect(b.page.locator('.side-item', { hasText: 'Поход' })).toHaveCount(0);
+  await expect(members(a)).toHaveCount(1);
+  await acceptInvite(b, 'Поход');
   await expect(b.page.locator('.side-item', { hasText: 'Поход' })).toBeVisible();
   await expect(members(a)).toHaveCount(2);
+  await expect(a.page.locator('.toast', { hasText: 'принял(а) приглашение' })).toBeVisible();
   await b.page.locator('.side-item', { hasText: 'Поход' }).click();
   await expect(members(b)).toHaveCount(2);
   // Не владелец беседу не удаляет
@@ -44,8 +53,9 @@ test('group panel: invite, rename by a member, leave with ownership handover, de
   await expect(a.page.locator('.side-item', { hasText: 'Поход в горы' })).toBeVisible();
   await expect(panel(a)).toContainText('Поход в горы');
 
-  // Новый участник появляется у всех
+  // Новый участник появляется у всех, когда примет приглашение
   await invite(a, c);
+  await acceptInvite(c, 'Поход в горы');
   await expect(members(b)).toHaveCount(3);
 
   // Владелец уходит — владельцем становится самый давний участник (Боб), у него появляется «Удалить»

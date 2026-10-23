@@ -1,7 +1,7 @@
 {
   "name": "vicinity-desktop",
   "productName": "Vicinity",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Vicinity — мессенджер для своих: чаты, серверы, голос и звонки",
   "author": "Vicinity",
   "license": "MIT",
@@ -32,6 +32,12 @@
       "build/icon.png",
       "build/tray.png",
       "package.json"
+    ],
+    "protocols": [
+      {
+        "name": "Vicinity",
+        "schemes": ["vicinity"]
+      }
     ],
     "win": {
       "target": [

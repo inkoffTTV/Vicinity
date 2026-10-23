@@ -12,11 +12,40 @@ const OVERLAY_URL = APP_URL + '/overlay';
 app.setAppUserModelId('app.vicinity.desktop');
 nativeTheme.themeSource = 'dark';
 
-// Второй запуск — показываем уже открытое окно
+// Ссылки vicinity://invite/КОД (и https-ссылки на сайт) открывают приложение (1.2.0+).
+// В разработке (electron .) Windows должна запускать electron с путём к приложению.
+const PROTOCOL = 'vicinity';
+if (process.defaultApp && process.argv.length >= 2) {
+  app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL);
+}
+
+// Второй запуск — показываем уже открытое окно (и открываем ссылку, с которой его запустили)
 if (!app.requestSingleInstanceLock()) {
   app.quit();
   process.exit(0);
 }
+
+// Экраны веб-клиента, которые можно открыть по ссылке (web/src/lib/routes.ts)
+const APP_PATH = /^\/(invite|gift|u|users|channels)\//;
+
+/** Путь экрана из ссылки: vicinity://invite/ABC → /invite/ABC, https://<сайт>/invite/ABC → /invite/ABC; иначе null */
+function deepLinkPath(raw) {
+  if (typeof raw !== 'string') return null;
+  try {
+    if (raw.toLowerCase().startsWith(PROTOCOL + '://')) {
+      const rest = raw.slice(PROTOCOL.length + 3).replace(/^\/+/, '');
+      const u = new URL('https://x/' + rest);
+      return APP_PATH.test(u.pathname) ? u.pathname : null;
+    }
+    const u = new URL(raw);
+    return u.origin === ORIGIN && APP_PATH.test(u.pathname) ? u.pathname : null;
+  } catch {
+    return null;
+  }
+}
+const deepLinkFromArgv = (argv) => argv.map(deepLinkPath).find(Boolean) ?? null;
 
 let win = null;
 let tray = null;
@@ -191,11 +220,15 @@ function createWindow() {
   win.once('ready-to-show', () => {
     if (!startHidden) win.show();
   });
-  void win.loadURL(START_URL);
+  // Запуск по ссылке — сразу на нужный экран
+  const first = deepLinkFromArgv(process.argv);
+  void win.loadURL(first ? APP_URL + first : START_URL);
 
-  // Ссылки наружу — в браузер; внутри окна остаётся только сам Vicinity
+  // Ссылки на экраны Vicinity — в этом же окне; остальные — в браузер
   win.webContents.setWindowOpenHandler(({ url }) => {
-    openExternal(url);
+    const p = deepLinkPath(url);
+    if (p) openDeepLink(p);
+    else openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (e, url) => {
@@ -477,7 +510,26 @@ function setupUpdates() {
   }
 }
 
-app.on('second-instance', showWindow);
+/** Открыть экран по ссылке в уже запущенном окне: веб-клиент сам переходит без перезагрузки (lib/router.ts) */
+function openDeepLink(p) {
+  showWindow();
+  if (!win) return;
+  const url = win.webContents.getURL();
+  if (!sameOrigin(url)) {
+    // Окно «Нет связи» или ещё не загрузилось — просто открыть адрес
+    void win.loadURL(APP_URL + p);
+    return;
+  }
+  win.webContents
+    .executeJavaScript(`window.dispatchEvent(new CustomEvent('vicinity-open', { detail: ${JSON.stringify(p)} }))`, true)
+    .catch(() => void win.loadURL(APP_URL + p));
+}
+
+app.on('second-instance', (_e, argv) => {
+  const p = deepLinkFromArgv(argv);
+  if (p && win) openDeepLink(p);
+  else showWindow();
+});
 app.on('before-quit', () => {
   quitting = true;
 });

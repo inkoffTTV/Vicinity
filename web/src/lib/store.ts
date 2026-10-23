@@ -7,6 +7,7 @@ import { Reach,
   Dm,
   getToken,
   Group,
+  Invite,
   LastMessage,
   Me,
   Member,
@@ -63,6 +64,8 @@ interface State {
   friends: UserSummary[];
   incoming: UserSummary[];
   outgoing: UserSummary[];
+  /** Приглашения в беседы и на серверы, ждущие ответа */
+  invites: Invite[];
   presence: Record<number, Presence>;
   voice: Record<number, VoiceUser[]>;
   speaking: Record<number, boolean>;
@@ -119,6 +122,9 @@ interface State {
   refreshServer: (id: number) => Promise<void>;
   refreshDms: () => Promise<void>;
   refreshFriends: () => Promise<void>;
+  refreshInvites: () => Promise<void>;
+  /** Принять (и открыть беседу/сервер) или отклонить приглашение; true — получилось */
+  answerInvite: (id: number, accept: boolean) => Promise<boolean>;
   open: (v: View) => void;
   openDmWith: (userId: number, via?: Reach) => Promise<void>;
   loadMessages: (channelId: number) => Promise<void>;
@@ -657,7 +663,8 @@ export const useStore = create<State>((set, get) => {
         set({ speaking: { ...s.speaking, [ev.user_id]: !!ev.speaking } });
         break;
       case 'server_added':
-        s.toast(`Вас добавили на сервер «${ev.name}»`);
+        // accepted — принял своё приглашение (может быть, на другом устройстве): тост не нужен
+        if (!ev.accepted) s.toast(`Вас добавили на сервер «${ev.name}»`);
         void s.refreshServers();
         break;
       case 'server_removed':
@@ -708,8 +715,24 @@ export const useStore = create<State>((set, get) => {
         }
         break;
       case 'channel_added':
-        s.toast(`Вас добавили в беседу «${ev.name}»`);
+        if (!ev.accepted) s.toast(`Вас добавили в беседу «${ev.name}»`);
         void s.refreshDms();
+        break;
+      case 'invite_received': {
+        const inv = ev.invite as Invite | null;
+        if (!inv) break;
+        set({ invites: [inv, ...s.invites.filter((i) => i.id !== inv.id)] });
+        s.toast(`${inv.inviter.display_name} приглашает вас ${inv.kind === 'group' ? 'в беседу' : 'на сервер'} «${inv.name}»`);
+        break;
+      }
+      case 'invite_removed':
+        set({ invites: s.invites.filter((i) => i.id !== ev.invite_id) });
+        break;
+      case 'invite_answered':
+        if (ev.name)
+          s.toast(
+            `${ev.user_name || 'Пользователь'} ${ev.accepted ? 'принял(а)' : 'отклонил(а)'} приглашение ${ev.kind === 'group' ? 'в беседу' : 'на сервер'} «${ev.name}»`,
+          );
         break;
       case 'channel_updated': {
         const name = typeof ev.name === 'string' ? ev.name : undefined;
@@ -832,6 +855,7 @@ export const useStore = create<State>((set, get) => {
       s.refreshServers(),
       s.refreshDms(),
       s.refreshFriends(),
+      s.refreshInvites(),
       serverId !== null ? refreshMembers(serverId) : null,
     ]);
     if (e !== epoch) return;
@@ -846,7 +870,7 @@ export const useStore = create<State>((set, get) => {
     const me = await api.me();
     if (e !== epoch) return;
     socket.connect(getToken()!);
-    await Promise.all([get().refreshServers(), get().refreshDms(), get().refreshFriends()]);
+    await Promise.all([get().refreshServers(), get().refreshDms(), get().refreshFriends(), get().refreshInvites()]);
     if (e !== epoch) return;
     // Экран из адреса (прямая ссылка, перезагрузка), иначе последний открытый — если он ещё доступен
     const route = parsePath(location.pathname);
@@ -906,6 +930,7 @@ export const useStore = create<State>((set, get) => {
     friends: [],
     incoming: [],
     outgoing: [],
+    invites: [],
     presence: {},
     voice: {},
     speaking: {},
@@ -1175,6 +1200,48 @@ export const useStore = create<State>((set, get) => {
         set({ friends, incoming: pend.incoming, outgoing: pend.outgoing, presence });
       } catch (err) {
         errorToast(err);
+      }
+    },
+
+    refreshInvites: async () => {
+      const e = epoch;
+      try {
+        const invites = await api.invites();
+        if (e !== epoch) return;
+        set({ invites });
+      } catch (err) {
+        // Сервер старой версии без приглашений — просто пустой список
+        if (err instanceof ApiError && err.status === 404) return;
+        errorToast(err);
+      }
+    },
+
+    answerInvite: async (id, accept) => {
+      const inv = get().invites.find((i) => i.id === id);
+      const where = inv ? `${inv.kind === 'group' ? 'беседу' : 'сервер'} «${inv.name}»` : '';
+      try {
+        if (!accept) {
+          await api.declineInvite(id);
+          set({ invites: get().invites.filter((i) => i.id !== id) });
+          if (where) get().toast(`Приглашение в ${where} отклонено`);
+          return true;
+        }
+        const r = await api.acceptInvite(id);
+        set({ invites: get().invites.filter((i) => i.id !== id) });
+        if (r.kind === 'group' && r.channel_id) {
+          await get().refreshDms();
+          get().open({ kind: 'group', channelId: r.channel_id });
+        } else if (r.server_id) {
+          await get().refreshServers();
+          get().open({ kind: 'server', serverId: r.server_id, channelId: null });
+        }
+        return true;
+      } catch (err) {
+        // Беседы/сервера уже нет — приглашение сервер снял, убираем и у себя
+        if (err instanceof ApiError && (err.status === 404 || err.status === 403))
+          set({ invites: get().invites.filter((i) => i.id !== id) });
+        errorToast(err);
+        return false;
       }
     },
 

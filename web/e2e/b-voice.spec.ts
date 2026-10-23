@@ -1,5 +1,5 @@
 import { expect, Page, test } from '@playwright/test';
-import { controlSocket, createGroup, createServer, joinServer, pageErrors, registerUser, User } from './helpers';
+import { controlSocket, createGroup, createServer, inviteToGroup, joinServer, pageErrors, registerUser, User } from './helpers';
 
 // Голосовые каналы в браузере (docs/CALLS.md §2, протокол v2 из docs/API.md §11).
 // Фейковый микрофон Chromium пищит каждые полсекунды: этого хватает и для кадров, и для индикатора речи.
@@ -18,15 +18,10 @@ const received = async (u: User) => (await stats(u.page)).framesReceived;
 const voiceUser = (u: User, name: string) => u.page.locator('.sidebar .voice-user', { hasText: name });
 const voiceBar = (u: User) => u.page.locator('.voice-bar');
 
-/** Добавить пользователя в открытую беседу через диалог «Добавить участника». */
+/** Пригласить в открытую беседу; приглашённый принимает (helpers.inviteToGroup) */
 async function addToGroup(owner: User, who: User) {
-  await owner.page.getByRole('button', { name: 'Добавить участника' }).click();
-  await owner.page.locator('.modal input').fill(who.username);
-  await owner.page
-    .locator(`.modal .user-row:has-text("@${who.username}")`)
-    .getByRole('button', { name: 'Добавить' })
-    .click();
-  await expect(owner.page.locator('.toast', { hasText: 'добавлен' })).toBeVisible();
+  const name = (await owner.page.locator('.chat-title').first().textContent())?.trim() ?? '';
+  await inviteToGroup(owner, who, name);
 }
 
 test('server voice channel: both hear each other, speaking rings, mute and leave', async ({ browser }) => {

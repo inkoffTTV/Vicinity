@@ -376,6 +376,22 @@ export interface Group {
   last_message?: LastMessage | null;
 }
 
+/** Приглашение в беседу или на сервер: человек сам принимает или отклоняет (docs/API.md §7.1) */
+export interface Invite {
+  id: number;
+  kind: 'group' | 'server';
+  target_id: number;
+  name: string;
+  /** Значок сервера ('' — нет) */
+  icon: string;
+  members: number;
+  inviter: UserSummary;
+  created_at: string;
+}
+
+/** Ответ на «пригласить»: invited — отправлено, already_invited — уже ждёт ответа; старый сервер — added */
+export type InviteResult = { status: 'invited' | 'already_invited' | 'added' };
+
 /** Сессия входа (docs/API.md §9) */
 export interface Session {
   id: string;
@@ -798,7 +814,7 @@ export const api = {
   createGroup: (name: string) =>
     post<{ channel_id: number }>('/channels', { type: 'group', name }),
   addGroupMember: (channelId: number, user_id: number) =>
-    post(`/channels/${channelId}/members`, { user_id }),
+    post<InviteResult>(`/channels/${channelId}/members`, { user_id }),
   /** Переименовать беседу или канал сервера */
   renameChannel: (channelId: number, name: string) =>
     post<{ channel_id: number; name: string }>(`/channels/${channelId}/update`, { name }),
@@ -820,6 +836,12 @@ export const api = {
   /** Удалить канал сервера (владелец) или беседу (её владелец) */
   deleteChannel: (channelId: number) => del(`/channels/${channelId}`),
   leaveGroup: (channelId: number) => post(`/channels/${channelId}/leave`),
+
+  // ── Приглашения в беседу и на сервер (docs/API.md §7.1) ──
+  invites: () => get<{ invites: Invite[] }>('/invites').then((r) => r.invites),
+  acceptInvite: (id: number) =>
+    post<{ status: string; kind: 'group' | 'server'; channel_id?: number; server_id?: number }>(`/invites/${id}/accept`),
+  declineInvite: (id: number) => post(`/invites/${id}/decline`),
 
   // ── Сообщения ──
   messages: (channelId: number, opts: { before?: number; limit?: number } = {}) => {
@@ -888,7 +910,7 @@ export const api = {
   createServerChannel: (id: number, name: string, is_voice: boolean) =>
     post(`/servers/${id}/channels`, { name, is_voice: is_voice ? 1 : 0 }),
   members: (id: number) => get<{ members: Member[] }>(`/servers/${id}/members`).then((r) => r.members),
-  addServerMember: (id: number, user_id: number) => post(`/servers/${id}/members`, { user_id }),
+  addServerMember: (id: number, user_id: number) => post<InviteResult>(`/servers/${id}/members`, { user_id }),
   kick: (id: number, uid: number) => del(`/servers/${id}/members/${uid}`),
   renameServer: (id: number, name: string) => post<ServerUpdate>(`/servers/${id}/update`, { name }),
   /** Название, тег, значок тега и описание (поля, которых нет, не меняются) */

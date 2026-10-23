@@ -38,6 +38,26 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Ссылки на сайт — приглашения, подарки, профили, чаты — открываются в приложении.
+                 autoVerify: Android проверяет /.well-known/assetlinks.json на сайте (подпись постоянным ключом) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${appHost}" />
+                <data android:pathPrefix="/invite/" />
+                <data android:pathPrefix="/gift/" />
+                <data android:pathPrefix="/u/" />
+                <data android:pathPrefix="/users/" />
+                <data android:pathPrefix="/channels/" />
+            </intent-filter>
+            <!-- vicinity://invite/КОД — кнопка «Открыть в приложении» на сайте -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="vicinity" />
+            </intent-filter>
         </activity>
 
         <service
