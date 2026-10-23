@@ -12,6 +12,18 @@ const OVERLAY_URL = APP_URL + '/overlay';
 app.setAppUserModelId('app.vicinity.desktop');
 nativeTheme.themeSource = 'dark';
 
+// Голос не должен «проседать», когда окно в фоне (alt-tab в игру): Chromium по умолчанию замедляет
+// таймеры, понижает приоритет и считает перекрытое игрой окно скрытым — звук и сеть идут рывками,
+// у собеседников это треск. Мессенджеру с голосом это не нужно (так же делает Discord)
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch(
+  'disable-features',
+  // Окно за игрой — не «перекрытое»; таймеры и WebSocket не душатся в фоне; процесс не переводится в EcoQoS
+  ['CalculateNativeWinOcclusion', 'IntensiveWakeUpThrottling', 'AllowAggressiveThrottlingWithWebSocket', 'UseEcoQoSForBackgroundProcess'].join(','),
+);
+
 // Ссылки vicinity://invite/КОД (и https-ссылки на сайт) открывают приложение (1.2.0+).
 // В разработке (electron .) Windows должна запускать electron с путём к приложению.
 const PROTOCOL = 'vicinity';
@@ -210,6 +222,7 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
       spellcheck: true,
+      backgroundThrottling: false,
     },
   });
   win.removeMenu();

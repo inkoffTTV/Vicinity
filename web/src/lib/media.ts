@@ -16,15 +16,17 @@ export const canPickOutput = typeof HTMLMediaElement !== 'undefined' && 'setSink
 export const canShareScreen = () => !!navigator.mediaDevices?.getDisplayMedia;
 
 /** Обработка микрофона с учётом профиля ввода (Настройки → Голос и видео) */
-export function micConstraints(deviceId: string, p: MediaPrefs = useMediaPrefs.getState()): MediaTrackConstraints {
+// rnnoise — поток дальше пройдёт через RNNoise: встроенное шумоподавление браузера тогда выключаем,
+// иначе голос давят дважды и он звучит «металлически» (эхоподавление и АРУ остаются)
+export function micConstraints(deviceId: string, p: MediaPrefs = useMediaPrefs.getState(), rnnoise = false): MediaTrackConstraints {
   const e = effectiveProcessing(p);
   return {
     channelCount: 1,
     echoCancellation: e.echo,
-    noiseSuppression: e.noise !== 'off',
+    noiseSuppression: e.noise !== 'off' && !rnnoise,
     autoGainControl: e.agc,
     // «Усиленное» — изоляция голоса, где браузер её умеет (Chrome на macOS/Windows); остальные ограничение пропустят
-    ...(e.noise === 'max' ? ({ voiceIsolation: true } as MediaTrackConstraints) : {}),
+    ...(e.noise === 'max' && !rnnoise ? ({ voiceIsolation: true } as MediaTrackConstraints) : {}),
     ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
   };
 }
@@ -69,17 +71,48 @@ export function stopStream(s: MediaStream | null) {
   cleanups.delete(s);
 }
 
+/** RNNoise включён в настройках и браузер его потянет */
+export const wantDenoise = () => useMediaPrefs.getState().denoise && canDenoise();
+
 /** Микрофон с выбранного устройства; выбранное пропало — с устройства по умолчанию.
- *  С включённым RNNoise поток проходит через worklet шумоподавления (голосовые каналы и звонки) */
-export async function openMic(deviceId: string): Promise<MediaStream> {
+ *  С включённым RNNoise поток проходит через worklet шумоподавления (звонки). inline — RNNoise вставит
+ *  вызывающий в свой же AudioContext (голосовые каналы): поток без второго контекста, только без
+ *  встроенного шумоподавления браузера */
+export async function openMic(deviceId: string, opts: { inline?: boolean } = {}): Promise<MediaStream> {
+  const rnnoise = wantDenoise();
   let mic: MediaStream;
   try {
-    mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) });
+    mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId, undefined, rnnoise) });
   } catch (e) {
     if (!deviceId || !(e instanceof DOMException) || e.name !== 'OverconstrainedError') throw e;
-    mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints('') });
+    mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints('', undefined, rnnoise) });
   }
-  return useMediaPrefs.getState().denoise ? denoise(mic) : mic;
+  return rnnoise && !opts.inline ? denoise(mic) : mic;
+}
+
+/**
+ * Узел RNNoise в данном контексте (модель загружена и готова). Голосовые каналы ставят его прямо в свой
+ * граф: один контекст — одни часы, без моста MediaStream между контекстами, который рвётся (треск),
+ * когда другое приложение забирает звуковое устройство (alt-tab в игру).
+ */
+export async function createDenoiseNode(ctx: BaseAudioContext): Promise<AudioWorkletNode> {
+  useDenoise.setState({ status: 'loading', error: '' });
+  try {
+    await ctx.audioWorklet.addModule(DENOISE_URL);
+    const node = new AudioWorkletNode(ctx, 'vicinity-denoise', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+    await new Promise<void>((resolve, reject) => {
+      node.port.onmessage = (e) => {
+        if (e.data?.ready) resolve();
+        else if (e.data?.error) reject(new Error(String(e.data.error)));
+      };
+      window.setTimeout(() => reject(new Error('Модель не загрузилась за 20 с')), 20_000);
+    });
+    useDenoise.setState({ status: 'on', error: '' });
+    return node;
+  } catch (e) {
+    useDenoise.setState({ status: 'error', error: e instanceof Error ? e.message : 'Не удалось загрузить RNNoise' });
+    throw e;
+  }
 }
 
 // ── RNNoise: нейросетевое шумоподавление (public/worklets/voice-denoise.js) ──

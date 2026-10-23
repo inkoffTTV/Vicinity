@@ -162,6 +162,10 @@ const FLUSH_IDLE = 1600; // кадры не идут 100 мс — доиграт
 const FORGET_IDLE = 5 * VOICE_RATE; // тишина 5 с — забыть отправителя
 const RING = 8192; // ёмкость буфера, степень двойки; кадр сервера не больше 4092 сэмплов
 const CHUNK = 16; // микшируем порциями по 1 мс
+// Плавные переходы, 3 мс: старт после паузы — нарастание, буфер кончился посреди речи — затухание,
+// выброшено отставание — перекрёстное затухание старого места в новое. Без них каждый такой стык — щелчок,
+// а при пачках с сети (alt-tab, слабый Wi-Fi) щелчки идут подряд и слышны как треск
+const FADE = 48;
 
 class Jitter {
   constructor() {
@@ -173,6 +177,9 @@ class Jitter {
     this.target = PREBUFFER_MIN;
     this.stable = 0; // сэмплов воспроизведено без разрывов
     this.drained = -1; // сэмплов с момента опустошения (−1 — не опустошались)
+    this.fadeIn = 0; // сэмплов нарастания осталось
+    this.xFrom = 0; // откуда доигрывать старое при перекрёстном затухании
+    this.xLeft = 0; // сэмплов перекрёстного затухания осталось
   }
 
   push(view) {
@@ -189,6 +196,10 @@ class Jitter {
     }
     if (this.count > this.target + SLACK) {
       const drop = this.count - (this.target + TRIM_SLACK);
+      if (this.playing) {
+        this.xFrom = this.read;
+        this.xLeft = FADE;
+      }
       this.read = (this.read + drop) & (RING - 1);
       this.count -= drop;
     }
@@ -200,11 +211,30 @@ class Jitter {
     this.idle += n;
     if (this.drained >= 0) this.drained += n;
     if (!this.playing) {
-      if (this.count >= this.target || (this.count > 0 && this.idle >= FLUSH_IDLE)) this.playing = true;
-      else return;
+      if (this.count >= this.target || (this.count > 0 && this.idle >= FLUSH_IDLE)) {
+        this.playing = true;
+        this.fadeIn = FADE;
+        this.xLeft = 0;
+      } else return;
     }
     const take = Math.min(n, this.count);
-    for (let i = 0; i < take; i++) out[i] += this.buf[(this.read + i) & (RING - 1)];
+    // Данных меньше, чем нужно, и новых нет — затухание на последних сэмплах вместо обрыва
+    const tailFrom = take < n ? Math.max(0, take - FADE) : take;
+    for (let i = 0; i < take; i++) {
+      let v = this.buf[(this.read + i) & (RING - 1)];
+      if (this.xLeft > 0) {
+        const t = 1 - this.xLeft / FADE;
+        v = v * t + this.buf[(this.xFrom + i) & (RING - 1)] * (1 - t);
+        this.xLeft--;
+      }
+      if (this.fadeIn > 0) {
+        v *= 1 - this.fadeIn / FADE;
+        this.fadeIn--;
+      }
+      if (i >= tailFrom) v *= (take - i) / (take - tailFrom + 1);
+      out[i] += v;
+    }
+    if (this.xLeft > 0) this.xFrom = (this.xFrom + take) & (RING - 1);
     this.read = (this.read + take) & (RING - 1);
     this.count -= take;
     this.stable += take;

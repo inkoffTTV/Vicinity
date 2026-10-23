@@ -1,5 +1,18 @@
 import { create } from 'zustand';
-import { applyOutput, HTTPS_REQUIRED, mediaAvailable, mediaError, openMic, processingKey, speakThreshold, stopStream, useMediaPrefs } from './media';
+import {
+  applyOutput,
+  createDenoiseNode,
+  HTTPS_REQUIRED,
+  mediaAvailable,
+  mediaError,
+  openMic,
+  processingKey,
+  speakThreshold,
+  stopStream,
+  useDenoise,
+  useMediaPrefs,
+  wantDenoise,
+} from './media';
 import { pttHeld } from './ptt';
 import { playSound } from './sounds';
 import { useStore } from './store';
@@ -46,15 +59,21 @@ class Engine {
   private capture: AudioWorkletNode | null = null;
   private playback: AudioWorkletNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
+  // RNNoise в этом же контексте: микрофон → шумоподавление → захват (без второго AudioContext)
+  private denoise: AudioWorkletNode | null = null;
+  private denoiseLoad: Promise<AudioWorkletNode | null> | null = null;
   private mic: MediaStream | null = null;
   // Смена устройства во время открытия микрофона: побеждает последний выбор, а не последний ответ
   private micSeq = 0;
   private closed = false;
 
   // Создаётся прямо в обработчике клика: контекст и <audio> сразу получают право играть звук.
-  // Частота контекста — родная для устройства: передискретизация в 16 кГц сделана в ворклете.
+  // Передискретизация в 16 кГц сделана в ворклете. Chromium (Chrome, приложения для Windows и Android) —
+  // контекст на 48 кГц: на ней обучен RNNoise, а микрофон с другой частотой браузер приведёт сам.
+  // Firefox микрофон с другой частотой в такой контекст не примет — у него родная частота устройства.
   constructor() {
-    this.ctx = new AudioContext({ latencyHint: 'interactive' });
+    const chromium = /Chrome\//.test(navigator.userAgent);
+    this.ctx = new AudioContext(chromium ? { latencyHint: 'interactive', sampleRate: 48000 } : { latencyHint: 'interactive' });
     void this.ctx.resume().catch(() => {});
     this.out = this.ctx.createGain();
     this.dest = this.ctx.createMediaStreamDestination();
@@ -83,15 +102,31 @@ class Engine {
     this.setGain(useMediaPrefs.getState().micGain);
   }
 
+  /** Узел RNNoise (один на движок); не загрузился — null, голос идёт без него */
+  private loadDenoise(): Promise<AudioWorkletNode | null> {
+    this.denoiseLoad ??= createDenoiseNode(this.ctx).then(
+      (node) => (this.denoise = node),
+      () => null,
+    );
+    return this.denoiseLoad;
+  }
+
   async openMic(deviceId: string) {
     const seq = ++this.micSeq;
-    const mic = await openMic(deviceId);
+    const rnnoise = wantDenoise();
+    const [mic, denoise] = await Promise.all([openMic(deviceId, { inline: true }), rnnoise ? this.loadDenoise() : null]);
     if (this.closed || !this.capture || seq !== this.micSeq) return stopStream(mic);
     this.source?.disconnect();
+    this.denoise?.disconnect();
     stopStream(this.mic);
     this.mic = mic;
     this.source = this.ctx.createMediaStreamSource(mic);
-    this.source.connect(this.capture);
+    if (denoise) {
+      this.source.connect(denoise).connect(this.capture);
+    } else {
+      this.source.connect(this.capture);
+      if (!rnnoise && useDenoise.getState().status === 'on') useDenoise.setState({ status: 'off' });
+    }
     mic.getAudioTracks()[0]?.addEventListener('ended', () => {
       if (this.mic === mic)
         useStore.getState().toast('Микрофон отключился — выберите другой в настройках голоса', 'error');
@@ -122,6 +157,8 @@ class Engine {
   close() {
     this.closed = true;
     this.source?.disconnect();
+    this.denoise?.disconnect();
+    if (this.denoise && useDenoise.getState().status === 'on') useDenoise.setState({ status: 'off' });
     stopStream(this.mic);
     this.mic = null;
     this.audio.pause();
