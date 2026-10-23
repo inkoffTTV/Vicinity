@@ -57,7 +57,15 @@ run_update() {
         git -C "$repo" checkout -q "$branch" || { say "не удалось переключиться на $branch"; echo "$remote_sha" > "$failed"; return 1; }
     fi
     # 2. Само обновление: копия → pull → сборка → перезапуск → проверка (update.sh)
-    if sh "$here/update.sh" >> "$log" 2>&1; then
+    # Из cron — только в журнал; при ручном `now` ход сборки виден и на экране
+    if [ "${1:-}" = force ]; then
+        say "идёт update.sh (копия → pull → сборка → перезапуск), обычно 3–10 минут…"
+        sh "$here/update.sh" 2>&1 | tee -a "$log"
+        upd_ok=$([ "$(sed -n '$p' "$log")" = "Обновление завершено" ] && echo 1 || echo 0)
+    else
+        sh "$here/update.sh" >> "$log" 2>&1 && upd_ok=1 || upd_ok=0
+    fi
+    if [ "$upd_ok" = 1 ]; then
         if [ "$(git -C "$repo" rev-parse HEAD)" != "$remote_sha" ]; then
             # update.sh отработал, но код не сменился (например, pull не прошёл) — не крутить сборку каждые 5 минут
             echo "$remote_sha" > "$failed"
