@@ -11,9 +11,12 @@ import {
   mediaError,
   micConstraints,
   NoiseMode,
+  SCREEN_FPS,
+  SCREEN_HEIGHTS,
+  screenQuality,
   stopStream,
-  useDenoise,
   TIER_NAMES,
+  useDenoise,
   useMediaPrefs,
 } from '../../lib/media';
 import { usePlan } from '../../lib/plan';
@@ -441,15 +444,18 @@ export function VoiceScreen() {
             </span>
             <div className="acc-sep" />
             <Segmented
-              label="Режим показа"
-              value={prefs.screenMode}
-              options={[
-                ['motion', 'Плавность'],
-                ['detail', 'Чёткость'],
-              ]}
-              onChange={(screenMode) => set({ screenMode })}
+              label="Разрешение"
+              value={String(screenQuality(myTier).height)}
+              options={SCREEN_HEIGHTS.filter((h) => h <= screenQuality(myTier).limit.height).map((h) => [String(h), `${h}p`] as [string, string])}
+              onChange={(v) => set({ screenHeight: Number(v) })}
             />
-            <span className="muted small vs-hint">Плавность — для игр и видео, чёткость — для текста и кода (30 кадров).</span>
+            <Segmented
+              label="Кадров в секунду"
+              value={String(screenQuality(myTier).fps)}
+              options={SCREEN_FPS.filter((f) => f <= screenQuality(myTier).limit.fps).map((f) => [String(f), String(f)] as [string, string])}
+              onChange={(v) => set({ screenFps: Number(v) })}
+            />
+            <span className="muted small vs-hint">60 кадров — для игр и видео, 30 и 15 — для текста и кода и слабого интернета. Что выше подписки — не показано.</span>
           </div>
         </section>
       )}

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api } from './api';
+import { api, type Plan } from './api';
 import { usePlan } from './plan';
 
 // Микрофон, камера и вывод звука — общее для голосовых каналов и звонков
@@ -223,8 +223,9 @@ export interface MediaPrefs {
   pttKey: string;
   /** Задержка отпускания, мс */
   pttDelay: number;
-  /** Показ экрана: плавность (60 к/с на Ultra) или чёткость текста */
-  screenMode: ScreenMode;
+  /** Показ экрана: разрешение 720 | 1080 | 1440 и кадров в секунду 15 | 30 | 60; 0 — максимум подписки */
+  screenHeight: number;
+  screenFps: number;
   /** Показ экрана со звуком (вкладки, окна, всего экрана — что даёт браузер) */
   screenAudio: boolean;
   /** Усиление микрофона, 0…2 */
@@ -253,7 +254,8 @@ const DEFAULTS: MediaPrefs = {
   ptt: false,
   pttKey: 'AltLeft',
   pttDelay: 200,
-  screenMode: 'motion',
+  screenHeight: 0,
+  screenFps: 0,
   screenAudio: true,
   micGain: 1,
   volume: 1,
@@ -281,7 +283,9 @@ function loadPrefs(): MediaPrefs {
       ptt: bool(raw.ptt, DEFAULTS.ptt),
       pttKey: typeof raw.pttKey === 'string' && raw.pttKey ? raw.pttKey : DEFAULTS.pttKey,
       pttDelay: clampNum(raw.pttDelay, 0, 1000, DEFAULTS.pttDelay),
-      screenMode: raw.screenMode === 'detail' ? 'detail' : 'motion',
+      screenHeight: SCREEN_HEIGHTS.includes(raw.screenHeight) ? raw.screenHeight : 0,
+      // Старая настройка «Чёткость» — это 30 кадров
+      screenFps: SCREEN_FPS.includes(raw.screenFps) ? raw.screenFps : raw.screenMode === 'detail' ? 30 : 0,
       screenAudio: bool(raw.screenAudio, DEFAULTS.screenAudio),
       micGain: clampLevel(raw.micGain, DEFAULTS.micGain),
       volume: clampLevel(raw.volume, DEFAULTS.volume),
@@ -319,13 +323,16 @@ export async function rtcIceServers(): Promise<RTCIceServer[]> {
   }
 }
 
-// ── Качество показа экрана по подписке ──
+// ── Качество показа экрана: выбор пользователя в пределах подписки ──
 // Потолок задаёт сервер (GET /subscription → screen {height, fps}, backend/utils/Tiers.cc):
 // без подписки 1080p30, Basic 1080p60, Standard 1440p30, Ultra 1440p60. Выше 1440p не бывает:
-// 4K съедает канал и процессор без заметной пользы. «Чёткость» — то же разрешение при 30 к/с.
+// 4K съедает канал и процессор без заметной пользы. Пользователь выбирает разрешение и кадры сам
+// (720p/1080p/1440p × 15/30/60, как в Discord); что выше потолка — заперто.
 // Десктоп-клиент декодирует H264 уровня 3.1 — собеседнику-десктопу больше 1080p30 не шлём.
 
 export type ScreenMode = 'motion' | 'detail';
+export const SCREEN_HEIGHTS = [720, 1080, 1440];
+export const SCREEN_FPS = [15, 30, 60];
 
 export interface ScreenQuality {
   width: number;
@@ -339,6 +346,9 @@ export interface ScreenQuality {
   upgradable: boolean;
   /** Ограничено собеседником (десктоп) */
   capped: boolean;
+  /** Потолок сейчас: подписка, а в звонке с десктопом — 1080p30 */
+  limit: { height: number; fps: number };
+  /** 60 к/с — плавность (игры, видео), 30 и ниже — чёткость (текст, код) */
   contentHint: 'motion' | 'detail';
 }
 
@@ -349,16 +359,24 @@ function bitrateFor(height: number, fps: number): number {
   return Math.round(Math.min(10_000_000, 4_000_000 * ((height * height) / (1080 * 1080)) * Math.sqrt(fps / 30)));
 }
 
-export function screenQuality(tier: number, mode: ScreenMode, opts: { desktopPeer?: boolean } = {}): ScreenQuality {
-  const plan = usePlan.getState().current.screen;
-  let height = Math.min(plan.height, 1440);
-  let fps = mode === 'motion' ? plan.fps : 30;
+/** Качество показа: выбор из настроек (height/fps переопределяют его), обрезанный потолком */
+export function screenQuality(
+  tier: number,
+  opts: { desktopPeer?: boolean; height?: number; fps?: number; plan?: Plan['screen'] } = {},
+): ScreenQuality {
+  const plan = opts.plan ?? usePlan.getState().current.screen;
+  const prefs = useMediaPrefs.getState();
+  const limit = { height: Math.min(plan.height, 1440), fps: plan.fps };
   let capped = false;
-  if (opts.desktopPeer && (height > 1080 || fps > 30)) {
-    height = Math.min(height, 1080);
-    fps = 30;
+  if (opts.desktopPeer && (limit.height > 1080 || limit.fps > 30)) {
+    limit.height = Math.min(limit.height, 1080);
+    limit.fps = 30;
     capped = true;
   }
+  const wantH = opts.height ?? prefs.screenHeight;
+  const wantF = opts.fps ?? prefs.screenFps;
+  const height = Math.min(wantH || limit.height, limit.height);
+  const fps = Math.min(wantF || limit.fps, limit.fps);
   return {
     width: Math.round((height * 16) / 9),
     height,
@@ -367,8 +385,15 @@ export function screenQuality(tier: number, mode: ScreenMode, opts: { desktopPee
     label: `${height}p${fps}`,
     upgradable: tier < 3,
     capped,
-    contentHint: mode,
+    limit,
+    contentHint: fps > 30 ? 'motion' : 'detail',
   };
+}
+
+/** С какой подписки доступно такое качество; null — ни с какой (нет в тарифах) */
+export function screenUnlockTier(height: number, fps: number, plans: Plan[] = usePlan.getState().plans): number | null {
+  const hit = plans.filter((p) => p.screen.height >= height && p.screen.fps >= fps).sort((a, b) => a.tier - b.tier)[0];
+  return hit ? hit.tier : null;
 }
 
 /** Параметры getDisplayMedia под выбранное качество (и со звуком, если он включён в настройках) */

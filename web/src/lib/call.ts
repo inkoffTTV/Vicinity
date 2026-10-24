@@ -456,11 +456,7 @@ async function startVideo(s: Session, role: 'video' | 'screen') {
   const t = s.transceivers[role];
   if (!t) return;
   // Качество экрана — по подписке; собеседнику-десктопу — не выше 1080p30
-  const quality = screenQuality(
-    useStore.getState().me?.subscription_tier ?? 0,
-    useMediaPrefs.getState().screenMode,
-    { desktopPeer: useCall.getState().desktopPeer },
-  );
+  const quality = screenQuality(useStore.getState().me?.subscription_tier ?? 0, { desktopPeer: useCall.getState().desktopPeer });
   let stream: MediaStream;
   try {
     stream =
@@ -537,10 +533,10 @@ export const useCall = create<CallState>((set, get) => ({
       const video = pc.addTransceiver('video', { direction: 'sendrecv' });
       const screen = pc.addTransceiver('video', { direction: 'sendrecv' });
       // Кодеки: что кодирует видеокарта — первым (десктоп всё равно найдёт в списке свой H264)
-      const mode = useMediaPrefs.getState().screenMode;
+      const screenQ = screenQuality(store.me?.subscription_tier ?? 0);
       const [camCodecs, screenCodecs] = await Promise.all([
         chooseVideoCodecs(cameraTarget(), false),
-        chooseVideoCodecs(screenQuality(store.me?.subscription_tier ?? 0, mode), mode === 'detail'),
+        chooseVideoCodecs(screenQ, screenQ.contentHint === 'detail'),
       ]);
       if (sess !== s) return;
       applyCodecOrder(video, camCodecs.order);

@@ -1,6 +1,7 @@
-import { ChevronUp, ScreenShare, ScreenShareOff, Sparkles } from 'lucide-react';
+import { ChevronUp, Lock, ScreenShare, ScreenShareOff, Sparkles } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { canShareScreen, screenQuality, TIER_NAMES, useMediaPrefs } from '../lib/media';
+import { canShareScreen, SCREEN_FPS, SCREEN_HEIGHTS, screenQuality, screenUnlockTier, TIER_NAMES, useMediaPrefs } from '../lib/media';
+import { usePlan } from '../lib/plan';
 import { useStore } from '../lib/store';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
@@ -17,11 +18,13 @@ interface Props {
   btnClass: string;
 }
 
-/** Кнопка показа экрана со значком качества и выбором «Плавность / Чёткость» */
+/** Кнопка показа экрана со значком качества и выбором разрешения и частоты кадров */
 export function ScreenShareControl({ active, activeLabel, onToggle, desktopPeer, btnClass }: Props) {
   const tier = useStore((s) => s.me?.subscription_tier ?? 0);
-  const mode = useMediaPrefs((s) => s.screenMode);
-  const q = screenQuality(tier, mode, { desktopPeer });
+  const prefH = useMediaPrefs((s) => s.screenHeight);
+  const prefF = useMediaPrefs((s) => s.screenFps);
+  const plan = usePlan((s) => s.current.screen);
+  const q = screenQuality(tier, { desktopPeer, height: prefH, fps: prefF, plan });
   const label = active && activeLabel ? activeLabel : q.label;
   const [menu, setMenu] = useState(false);
   const more = useRef<HTMLButtonElement>(null);
@@ -62,24 +65,54 @@ export function ScreenShareControl({ active, activeLabel, onToggle, desktopPeer,
   );
 }
 
-/** Выбор режима и объяснение, откуда взялось качество */
+/** Разрешение и кадры в секунду — на выбор, что выше подписки — заперто с подсказкой */
 export function ScreenQualityPanel({ desktopPeer }: { desktopPeer?: boolean }) {
   const tier = useStore((s) => s.me?.subscription_tier ?? 0);
-  const mode = useMediaPrefs((s) => s.screenMode);
+  const prefH = useMediaPrefs((s) => s.screenHeight);
+  const prefF = useMediaPrefs((s) => s.screenFps);
   const setPrefs = useMediaPrefs((s) => s.set);
   const screenAudio = useMediaPrefs((s) => s.screenAudio);
-  const motion = screenQuality(tier, 'motion', { desktopPeer });
-  const detail = screenQuality(tier, 'detail', { desktopPeer });
+  const plan = usePlan((s) => s.current.screen);
+  const plans = usePlan((s) => s.plans);
+  const q = screenQuality(tier, { desktopPeer, height: prefH, fps: prefF, plan });
+  const lockTitle = (height: number, fps: number) => {
+    const t = screenUnlockTier(height, fps, plans);
+    return t === null ? 'Нет в тарифах' : `Со ${TIER_NAMES[t]}`;
+  };
+  const chip = (kind: 'height' | 'fps', value: number) => {
+    const locked = kind === 'height' ? value > q.limit.height : value > q.limit.fps;
+    const on = kind === 'height' ? q.height === value : q.fps === value;
+    const title = locked ? (q.capped && (value > 1080 || value > 30) ? 'Собеседник на десктопе — не выше 1080p30' : lockTitle(kind === 'height' ? value : 720, kind === 'fps' ? value : 15)) : undefined;
+    return (
+      <button
+        key={value}
+        role="radio"
+        aria-checked={on}
+        aria-disabled={locked}
+        disabled={locked}
+        title={title}
+        className={`${on ? 'on' : ''}${locked ? ' locked' : ''}`}
+        onClick={() => setPrefs(kind === 'height' ? { screenHeight: value } : { screenFps: value })}
+      >
+        {kind === 'height' ? `${value}p` : value}
+        {locked && <Icon icon={Lock} size={12} />}
+      </button>
+    );
+  };
   return (
     <div className="stack screen-quality">
       <strong>Качество показа экрана</strong>
-      <div className="seg" role="radiogroup" aria-label="Режим показа экрана">
-        <button role="radio" aria-checked={mode === 'motion'} className={mode === 'motion' ? 'on' : ''} onClick={() => setPrefs({ screenMode: 'motion' })}>
-          Плавность <span className="muted small">{motion.label}</span>
-        </button>
-        <button role="radio" aria-checked={mode === 'detail'} className={mode === 'detail' ? 'on' : ''} onClick={() => setPrefs({ screenMode: 'detail' })}>
-          Чёткость <span className="muted small">{detail.label}</span>
-        </button>
+      <span className="seg-label" id="sq-res">
+        Разрешение
+      </span>
+      <div className="seg" role="radiogroup" aria-labelledby="sq-res">
+        {SCREEN_HEIGHTS.map((h) => chip('height', h))}
+      </div>
+      <span className="seg-label" id="sq-fps">
+        Кадров в секунду
+      </span>
+      <div className="seg" role="radiogroup" aria-labelledby="sq-fps">
+        {SCREEN_FPS.map((f) => chip('fps', f))}
       </div>
       <label className="row screen-audio">
         <input type="checkbox" checked={screenAudio} onChange={(e) => setPrefs({ screenAudio: e.target.checked })} />
@@ -88,10 +121,11 @@ export function ScreenQualityPanel({ desktopPeer }: { desktopPeer?: boolean }) {
         </span>
       </label>
       <div className="muted small">
-        Подписка: {TIER_NAMES[Math.max(0, Math.min(3, tier))]}. Плавность — для игр и видео, чёткость — для текста и кода.
+        Подписка: {TIER_NAMES[Math.max(0, Math.min(3, tier))]} — до {q.limit.height}p{q.limit.fps}. 60 кадров — для игр и видео, 30 и 15 — для
+        текста и кода (и слабого интернета).
       </div>
-      {motion.capped && <div className="muted small">У собеседника десктоп-клиент — не выше 1080p30.</div>}
-      {motion.upgradable && (
+      {q.capped && <div className="muted small">У собеседника десктоп-клиент — не выше 1080p30.</div>}
+      {q.upgradable && (
         <div className="upgrade-hint">
           <Icon icon={Sparkles} size={16} anim="pulse" />
           <span>

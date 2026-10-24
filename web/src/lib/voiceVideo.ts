@@ -12,7 +12,6 @@ import {
   stopStream,
   tuneCameraSender,
   tuneScreenSender,
-  useMediaPrefs,
   withStartBitrate,
 } from './media';
 import { playSound } from './sounds';
@@ -123,7 +122,7 @@ function screenShare(n: number, hardware: boolean, q: { maxBitrate: number; heig
 function retuneScreens() {
   const peers = [...outgoing.entries()].filter(([k, p]) => k.endsWith(':screen') && p.screen && p.described && !p.closed);
   if (!peers.length) return;
-  const quality = screenQuality(useStore.getState().me?.subscription_tier ?? 0, useMediaPrefs.getState().screenMode);
+  const quality = screenQuality(useStore.getState().me?.subscription_tier ?? 0);
   for (const [, p] of peers) void tuneScreenSender(p.screen!.sender, quality, screenShare(peers.length, p.screen!.hardware, quality));
 }
 
@@ -199,9 +198,8 @@ async function onWatch(viewer: number, kind: StreamKind) {
   if (peer.closed) return;
   const pc = new RTCPeerConnection({ iceServers: ice, bundlePolicy: 'max-bundle' });
   peer.pc = pc;
-  const mode = useMediaPrefs.getState().screenMode;
-  const quality = screenQuality(useStore.getState().me?.subscription_tier ?? 0, mode);
-  const codecs = await chooseVideoCodecs(kind === 'screen' ? quality : cameraTarget(), kind === 'screen' && mode === 'detail');
+  const quality = screenQuality(useStore.getState().me?.subscription_tier ?? 0);
+  const codecs = await chooseVideoCodecs(kind === 'screen' ? quality : cameraTarget(), kind === 'screen' && quality.contentHint === 'detail');
   if (peer.closed) {
     pc.close();
     return;
@@ -248,7 +246,7 @@ async function onAnswer(viewer: number, kind: StreamKind, ev: WsEvent) {
     const viewers = [...outgoing.keys()].filter((k) => k.endsWith(`:${kind}`)).length;
     const target =
       kind === 'screen'
-        ? screenShare(viewers, p.screen?.hardware ?? false, screenQuality(useStore.getState().me?.subscription_tier ?? 0, useMediaPrefs.getState().screenMode)).bitrate
+        ? screenShare(viewers, p.screen?.hardware ?? false, screenQuality(useStore.getState().me?.subscription_tier ?? 0)).bitrate
         : 1_500_000;
     await p.pc.setRemoteDescription({ type: 'answer', sdp: withStartBitrate(ev.sdp, Math.min(target * 0.6, 6_000_000) / 1000) });
     await flushIce(p);
@@ -412,7 +410,7 @@ export const useVoiceVideo = create<VoiceVideoState>((set, get) => ({
     if (get().screen) return stopOwn('screen');
     if (!useVoice.getState().joined) return;
     if (!canShareScreen()) return toast('Этот браузер не умеет показывать экран', 'error');
-    const quality = screenQuality(useStore.getState().me?.subscription_tier ?? 0, useMediaPrefs.getState().screenMode);
+    const quality = screenQuality(useStore.getState().me?.subscription_tier ?? 0);
     let stream: MediaStream;
     try {
       stream = await openScreen(quality);
