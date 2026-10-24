@@ -371,6 +371,13 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8081/                 
   ```bash
   ufw allow 3478 && ufw allow 49160:49200/udp
   ufw allow 7882/udp && ufw allow 7881/tcp                # голос через SFU (docs/VOICE-SFU.md)
+```
+
+> **Сценарий Б и SFU.** nginx хоста должен пропускать WebSocket на `/livekit/` (как на `/ws`): в уже
+> установленный конфиг блок добавит `ssh root@IP_VPS 'sh -s' < deploy/host-proxy/add-livekit-location.sh`
+> (с резервной копией и `nginx -t`). Caddy пропускает WebSocket сам.
+
+```sh
   ufw allow 80/tcp && ufw allow 443                   # сценарий А
   ufw allow 8080/tcp                                  # десктоп по http://IP:8080
   ```

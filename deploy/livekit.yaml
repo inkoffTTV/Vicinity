@@ -9,8 +9,9 @@ rtc:
   tcp_port: 7881
   use_external_ip: false
   node_ip: __PUBLIC_IP__
+# В кавычках: ключ из hex-цифр YAML иначе может прочитать как число
 keys:
-  __KEY__: __SECRET__
+  "__KEY__": "__SECRET__"
 room:
   auto_create: true
   empty_timeout: 300
