@@ -188,6 +188,13 @@ export function mediaError(e: unknown, what: 'mic' | 'camera' | 'screen' = 'mic'
   return `Не удалось включить ${device}`;
 }
 
+/** То же для AudioContext (Chrome 110+): звук, который идёт через контекст, а не через <audio> */
+export function applyOutputToContext(ctx: AudioContext, deviceId: string) {
+  const c = ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+  if (!canPickOutput || typeof c.setSinkId !== 'function') return;
+  void c.setSinkId(deviceId || '').catch(() => {});
+}
+
 /** Направить звук элемента на выбранное устройство вывода (где браузер это умеет) */
 export function applyOutput(el: HTMLMediaElement, deviceId: string) {
   if (!canPickOutput) return;

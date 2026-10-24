@@ -376,6 +376,15 @@ export interface Group {
   last_message?: LastMessage | null;
 }
 
+/** Ответ GET /rtc/sfu: куда и с каким токеном входить в комнату голосового канала */
+export interface SfuJoin {
+  /** Адрес сигналинга — путь на том же хосте («/livekit») или полный wss:// */
+  url: string;
+  room: string;
+  token: string;
+  identity: string;
+}
+
 /** Приглашение в беседу или на сервер: человек сам принимает или отклоняет (docs/API.md §7.1) */
 export interface Invite {
   id: number;
@@ -989,6 +998,8 @@ export const api = {
 
   // ── Звонки ──
   /** STUN/TURN для RTCPeerConnection (TURN — временные учётки, docs/API.md §12) */
+  /** Вход в голосовой канал через SFU (docs/VOICE-SFU.md); 404 — SFU не настроен, голос через /ws */
+  sfu: (channelId: number) => get<SfuJoin>(`/rtc/sfu?channel_id=${channelId}`),
   rtcIce: () =>
     get<{ ice_servers?: RTCIceServer[] }>('/rtc/ice').then((r) => (Array.isArray(r.ice_servers) ? r.ice_servers : [])),
 };

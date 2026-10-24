@@ -1,0 +1,25 @@
+# Шаблон конфига LiveKit (голос в каналах через SFU, docs/VOICE-SFU.md).
+# docker-compose.yml при старте контейнера подставляет __PUBLIC_IP__, __KEY__ и __SECRET__ из deploy/.env
+# и запускает сервер с готовым файлом; сам шаблон не меняется.
+port: 7880
+rtc:
+  # Один UDP-порт на всех участников (мультиплексирование) и TCP на случай закрытого UDP;
+  # оба публикуются из контейнера, ICE-кандидаты объявляют публичный IP VPS
+  udp_port: 7882
+  tcp_port: 7881
+  use_external_ip: false
+  node_ip: __PUBLIC_IP__
+keys:
+  __KEY__: __SECRET__
+room:
+  auto_create: true
+  empty_timeout: 300
+  max_participants: 100
+audio:
+  # Индикатор «говорит»: порог громкости и частота обновления (мс)
+  active_level: 35
+  min_percentile: 40
+  update_interval: 400
+  smooth_intervals: 2
+logging:
+  level: warn

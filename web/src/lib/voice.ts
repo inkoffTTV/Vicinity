@@ -14,6 +14,8 @@ import {
   wantDenoise,
 } from './media';
 import { pttHeld } from './ptt';
+import { api, ApiError } from './api';
+import { SfuEngine } from './sfu';
 import { playSound } from './sounds';
 import { useStore } from './store';
 import { socket } from './ws';
@@ -32,8 +34,8 @@ const PREROLL_FRAMES = 2;
 // Сервер молча игнорирует voice_join без доступа — не ждём подтверждения вечно
 const JOIN_TIMEOUT = 8000;
 
-/** Счётчики кадров — для отладки (и e2e): window.__vicinityVoiceStats */
-const stats = { framesSent: 0, framesDropped: 0, framesReceived: 0 };
+/** Счётчики кадров — для отладки (и e2e): window.__vicinityVoiceStats; sfu — голос идёт через SFU, а не кадрами */
+const stats = { framesSent: 0, framesDropped: 0, framesReceived: 0, sfu: false, sfuPacketsSent: 0, sfuBytesReceived: 0, sfuPeers: 0 };
 (window as unknown as { __vicinityVoiceStats: typeof stats }).__vicinityVoiceStats = stats;
 
 interface VoiceState {
@@ -142,6 +144,9 @@ class Engine {
     this.playback?.port.postMessage({ reset: true });
   }
 
+  /** Кадры в тишине не отправляются и так (onCaptured) — здесь нечего делать */
+  setMuted(_muted: boolean, _deafened: boolean) {}
+
   setGain(g: number) {
     this.capture?.port.postMessage({ gain: g });
   }
@@ -167,7 +172,8 @@ class Engine {
   }
 }
 
-let engine: Engine | null = null;
+// Старый путь (PCM через WebSocket) или SFU (docs/VOICE-SFU.md) — решается при входе в первый канал
+let engine: Engine | SfuEngine | null = null;
 // Канал, о входе в который уже прозвучал сигнал (после переподключения — без звука)
 let announced: number | null = null;
 let joinTimer: number | undefined;
@@ -235,6 +241,41 @@ function onCaptured({ pcm, rms }: { pcm: ArrayBuffer; rms: number }) {
   }
 }
 
+// Попробовать SFU: 404 — не настроен, не подключились за 8 с или SFU упал — голос через WebSocket, как раньше.
+// Микрофон спрашиваем уже после подключения к комнате: отказ в доступе — та же ошибка, что и в старом пути.
+async function startSfu(channelId: number): Promise<SfuEngine | null> {
+  let info;
+  try {
+    info = await api.sfu(channelId);
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 404)) console.warn('[voice] SFU недоступен:', e);
+    return null;
+  }
+  const eng = new SfuEngine({
+    onSpeaking: setSpeaking,
+    onStats: (s) => Object.assign(stats, s),
+    onLost: () => {
+      if (engine !== eng) return;
+      const ch = useVoice.getState().channelId;
+      engine.close();
+      engine = null;
+      stats.sfu = false;
+      if (ch === null) return;
+      // Войти заново: новый токен, а если SFU не поднялся — старый путь
+      useVoice.setState({ channelId: null, joined: false });
+      void useVoice.getState().join(ch);
+    },
+  });
+  try {
+    await eng.connect(info);
+    return eng;
+  } catch (e) {
+    console.warn('[voice] SFU не подключился, голос через WebSocket:', e);
+    eng.close();
+    return null;
+  }
+}
+
 function sendJoin() {
   const ch = useVoice.getState().channelId;
   if (!ch) return;
@@ -256,6 +297,7 @@ function stopLocal() {
   resetSpeaking();
   engine?.close();
   engine = null;
+  stats.sfu = false;
   useVoice.setState({ channelId: null, joined: false });
 }
 
@@ -282,30 +324,64 @@ export const useVoice = create<VoiceState>((set, get) => ({
     setSpeaking(false);
     resetSpeaking();
     set({ channelId, joined: false });
-    if (engine) {
-      // Переход в другой канал: звук уже запущен, недоигранное из прошлого канала — выбросить
-      engine.reset();
-    } else {
-      const eng = (engine = new Engine());
+    if (engine instanceof SfuEngine) {
+      // Переход в другой канал — другая комната SFU; не вышло — дальше как с нуля
+      const eng = engine;
       try {
-        await eng.load(onCaptured);
+        await eng.connect(await api.sfu(channelId));
       } catch {
         if (engine === eng) {
-          get().leave();
-          store.toast('Не удалось запустить звук в браузере', 'error');
+          eng.close();
+          engine = null;
+          stats.sfu = false;
         }
+      }
+      if (get().channelId !== channelId) return;
+    } else if (engine) {
+      // Переход в другой канал: звук уже запущен, недоигранное из прошлого канала — выбросить
+      engine.reset();
+    }
+    if (!engine) {
+      const sfu = await startSfu(channelId);
+      if (get().channelId !== channelId) {
+        sfu?.close();
         return;
       }
-      try {
-        await eng.openMic(useMediaPrefs.getState().inputId);
-      } catch (e) {
-        if (engine === eng) {
-          get().leave();
-          store.toast(mediaError(e), 'error');
+      if (sfu) {
+        engine = sfu;
+        stats.sfu = true;
+        try {
+          await sfu.openMic(useMediaPrefs.getState().inputId);
+        } catch (e) {
+          if (engine === sfu) {
+            get().leave();
+            store.toast(mediaError(e), 'error');
+          }
+          return;
         }
-        return;
+        if (engine !== sfu) return;
+      } else {
+        const eng = (engine = new Engine());
+        try {
+          await eng.load(onCaptured);
+        } catch {
+          if (engine === eng) {
+            get().leave();
+            store.toast('Не удалось запустить звук в браузере', 'error');
+          }
+          return;
+        }
+        try {
+          await eng.openMic(useMediaPrefs.getState().inputId);
+        } catch (e) {
+          if (engine === eng) {
+            get().leave();
+            store.toast(mediaError(e), 'error');
+          }
+          return;
+        }
+        if (engine !== eng) return; // вышли, пока запускался звук
       }
-      if (engine !== eng) return; // вышли, пока запускался звук
     }
     // Пока запускался звук, перешли в другой канал — тот вызов уже отправил свой voice_join
     if (get().channelId !== channelId) return;
@@ -324,6 +400,7 @@ export const useVoice = create<VoiceState>((set, get) => ({
     // Как в Discord: включить микрофон при «не слышать» — снова слышать
     set(deafened ? { muted: false, deafened: false } : { muted: !muted });
     playSound(deafened ? 'undeafen' : get().muted ? 'mute' : 'unmute');
+    engine?.setMuted(get().muted, get().deafened);
     if (!get().muted) return;
     setSpeaking(false);
     resetSpeaking();
@@ -333,6 +410,7 @@ export const useVoice = create<VoiceState>((set, get) => ({
     const deafened = !get().deafened;
     set({ deafened });
     playSound(deafened ? 'deafen' : 'undeafen');
+    engine?.setMuted(get().muted, deafened);
     if (!deafened) return;
     engine?.reset();
     setSpeaking(false);
@@ -342,7 +420,7 @@ export const useVoice = create<VoiceState>((set, get) => ({
 
 socket.onBinary((data) => {
   const v = useVoice.getState();
-  if (!engine || v.channelId === null || v.deafened || data.byteLength <= 8) return;
+  if (!(engine instanceof Engine) || v.channelId === null || v.deafened || data.byteLength <= 8) return;
   const view = new DataView(data);
   const sender = view.getUint32(0, true) + view.getInt32(4, true) * 2 ** 32;
   stats.framesReceived++;
@@ -391,6 +469,7 @@ useMediaPrefs.subscribe((p, prev) => {
   if (p.outputId !== prev.outputId) engine.setOutput(p.outputId);
   if (p.inputId !== prev.inputId || processingKey(p) !== processingKey(prev))
     engine.openMic(p.inputId).catch((e) => useStore.getState().toast(mediaError(e), 'error'));
+  if (p.ptt !== prev.ptt && engine instanceof SfuEngine) engine.setPtt();
 });
 
 if (tabs)

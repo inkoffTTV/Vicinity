@@ -37,6 +37,10 @@ services:
       VICINITY_SMTP_PASSWORD: ${VICINITY_SMTP_PASSWORD:-}
       VICINITY_SMTP_FROM: ${VICINITY_SMTP_FROM:-}
       VICINITY_SMTP_SECURITY: ${VICINITY_SMTP_SECURITY:-}
+      # Голос через SFU (сервис livekit ниже): сервер выдаёт токены комнат теми же ключами
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      VICINITY_SFU_URL: ${VICINITY_SFU_URL:-}
     ports:
       # Прямой доступ для десктоп-клиентов: http://IP_VPS:8080. Закрыть снаружи — BACKEND_BIND=127.0.0.1
       # (правила ufw на опубликованные порты Docker не действуют)
@@ -88,6 +92,40 @@ services:
     container_name: vicinity-pereprava
     environment:
       MAX_ROOMS: ${PEREPRAVA_MAX_ROOMS:-30}
+    restart: unless-stopped
+    logging: *logging
+
+  # Голос в каналах через SFU LiveKit (docs/VOICE-SFU.md). Сигналинг идёт через web (/livekit → 7880 внутри
+  # сети compose), медиа — UDP 7882 (и TCP 7881, если UDP закрыт) прямо в контейнер; ICE-кандидаты объявляют
+  # PUBLIC_IP. Ключи LIVEKIT_API_KEY/LIVEKIT_API_SECRET — в .env (их же читает сервер vicinity).
+  # Без ключей контейнер просто ждёт, а голос идёт по-старому — PCM через WebSocket.
+  livekit:
+    image: livekit/livekit-server:v1.13.10
+    container_name: vicinity-livekit
+    environment:
+      PUBLIC_IP: ${PUBLIC_IP:?впиши PUBLIC_IP (публичный IP VPS) в deploy/.env}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+    ports:
+      - "7881:7881/tcp"
+      - "7882:7882/udp"
+    # Секрет не попадает в командную строку (её видит любой пользователь хоста в ps): конфиг собирается из
+    # шаблона внутри контейнера (права 600), секрет убирается из окружения процесса
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -eu
+        if [ -z "$$LIVEKIT_API_KEY" ] || [ -z "$$LIVEKIT_API_SECRET" ]; then
+          echo "LIVEKIT_API_KEY/LIVEKIT_API_SECRET не заданы в deploy/.env — голос через SFU выключен, идёт PCM через WebSocket"
+          while :; do sleep 3600; done
+        fi
+        umask 077
+        conf=$$(mktemp)
+        sed -e "s|__PUBLIC_IP__|$$PUBLIC_IP|" -e "s|__KEY__|$$LIVEKIT_API_KEY|" -e "s|__SECRET__|$$LIVEKIT_API_SECRET|" /etc/livekit.template.yaml > "$$conf"
+        unset LIVEKIT_API_SECRET
+        exec /livekit-server --config "$$conf"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.template.yaml:ro
     restart: unless-stopped
     logging: *logging
 

@@ -38,6 +38,11 @@
             "site_url": ""
         },
         "trusted_proxies": [],
+        "sfu": {
+            "url": "",
+            "key": "",
+            "secret": ""
+        },
         "rtc": {
             "stun": ["stun:stun.l.google.com:19302"],
             "turn": [],

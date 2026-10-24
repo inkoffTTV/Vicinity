@@ -359,6 +359,8 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8081/                 
 | 8080 | TCP | десктоп-клиенты по `http://IP_VPS:8080` | пока ими пользуются |
 | 3478 | TCP и UDP | TURN/STUN для звонков | всегда |
 | 49160–49200 | UDP | TURN relay (сам звук и видео) | всегда |
+| 7882 | UDP | голос в каналах через SFU (LiveKit) | если заданы LIVEKIT_API_KEY/SECRET |
+| 7881 | TCP | то же, запасной путь при закрытом UDP | если заданы LIVEKIT_API_KEY/SECRET |
 
 **Файервол в панели хостера** (Security Group / «Firewall»), если он есть, — открой там эти порты.
 
@@ -368,6 +370,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8081/                 
 
   ```bash
   ufw allow 3478 && ufw allow 49160:49200/udp
+  ufw allow 7882/udp && ufw allow 7881/tcp                # голос через SFU (docs/VOICE-SFU.md)
   ufw allow 80/tcp && ufw allow 443                   # сценарий А
   ufw allow 8080/tcp                                  # десктоп по http://IP:8080
   ```

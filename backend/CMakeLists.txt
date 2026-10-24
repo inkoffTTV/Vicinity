@@ -57,6 +57,7 @@ add_executable(VicinityServer
     utils/NetUtils.cc
     utils/Privacy.cc
     utils/ProfileExt.cc
+    utils/Sfu.cc
     utils/TextUtils.cc
     utils/Tiers.cc
     utils/Totp.cc

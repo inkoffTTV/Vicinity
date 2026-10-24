@@ -383,6 +383,12 @@ POST `/profile/extras` — расширенный профиль целиком 
     `watch` с `reason:"full"` — у трансляции уже максимум зрителей (веб-клиент: 8), без `reason` — трансляции нет.
     Прекратив трансляцию, участник шлёт `stop` всем её зрителям и `voice_media` с новым состоянием.
 
+- **[new] Голос через SFU (docs/VOICE-SFU.md).** GET `/rtc/sfu?channel_id=N` → `{"url":"/livekit","room":"voice-N",
+  "token":"<JWT LiveKit>","identity":"u<user_id>"}` — вход в комнату канала на LiveKit; те же правила, что у `voice_join`
+  (текстовый канал сервера — 400, посторонним — 403, нет канала — 404), лимит как у `voice_join`. SFU не настроен
+  (нет `LIVEKIT_API_KEY/SECRET`) — 404, клиент идёт PCM через WebSocket. Состав канала, `voice_state`, `voice_speaking`
+  и всё остальное по-прежнему идёт по `/ws`; LiveKit несёт только звук.
+
 ## 12. Звонки 1:1
 Сигналинг `call_invite / call_accept / call_reject / call_end / call_busy / rtc_offer / rtc_answer / rtc_ice`
 пересылается адресату `to` с проставленным `from` (поля — см. `docs/CALLS.md`).
