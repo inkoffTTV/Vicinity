@@ -40,11 +40,14 @@ possible_secrets.txt
 tools/
 !design/tools/
 
-# AI local context
-.claude/
+# AI local context: скиллы и личные настройки — локально; CLAUDE.md, правила и хуки — в git
+.claude/*
+!.claude/rules/
+!.claude/hooks/
+!.claude/settings.json
+CLAUDE.local.md
 HANDOFF.md
 PROJECT.md
-CLAUDE.md
 
 # Legacy project copy
 CPMessenger/
