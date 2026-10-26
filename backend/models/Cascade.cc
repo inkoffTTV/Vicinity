@@ -10,6 +10,7 @@ static void channelRows(const std::shared_ptr<drogon::orm::Transaction>& tr, int
     tr->execSqlSync("DELETE FROM channel_reads WHERE channel_id = ?", channelId);
     tr->execSqlSync("DELETE FROM messages WHERE channel_id = ?", channelId);
     tr->execSqlSync("DELETE FROM channel_members WHERE channel_id = ?", channelId);
+    tr->execSqlSync("DELETE FROM invites WHERE kind = 'group' AND target_id = ?", channelId);
     tr->execSqlSync("DELETE FROM channels WHERE id = ?", channelId);
 }
 
@@ -30,6 +31,7 @@ void deleteServer(const drogon::orm::DbClientPtr& db, int64_t serverId) {
         for (const auto& row : channels) channelRows(tr, row["id"].as<int64_t>());
         tr->execSqlSync("DELETE FROM server_bans WHERE server_id = ?", serverId);
         tr->execSqlSync("DELETE FROM server_members WHERE server_id = ?", serverId);
+        tr->execSqlSync("DELETE FROM invites WHERE kind = 'server' AND target_id = ?", serverId);
         tr->execSqlSync("DELETE FROM servers WHERE id = ?", serverId);
     } catch (...) {
         tr->rollback();
@@ -52,6 +54,7 @@ void deleteUser(const drogon::orm::DbClientPtr& db, int64_t userId) {
         tr->execSqlSync("DELETE FROM channel_reads WHERE user_id = ?", userId);
         tr->execSqlSync("DELETE FROM channel_members WHERE user_id = ?", userId);
         tr->execSqlSync("DELETE FROM server_members WHERE user_id = ?", userId);
+        tr->execSqlSync("DELETE FROM invites WHERE inviter_id = ? OR invitee_id = ?", userId, userId);
         tr->execSqlSync("DELETE FROM server_bans WHERE user_id = ?", userId);
         tr->execSqlSync("DELETE FROM user_roles WHERE user_id = ?", userId);
         tr->execSqlSync("DELETE FROM friendships WHERE requester_id = ? OR addressee_id = ?", userId, userId);

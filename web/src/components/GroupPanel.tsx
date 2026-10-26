@@ -92,7 +92,7 @@ export function GroupPanel({ channelId }: { channelId: number }) {
         >
           {amOwner && (members?.length ?? 0) > 1
             ? `Владельцем беседы «${group.name}» станет участник, который в ней дольше всех.`
-            : `Покинуть беседу «${group.name}»? Вернуться можно, только если вас добавят снова.`}
+            : `Покинуть беседу «${group.name}»? Вернуться можно, только если вас пригласят снова.`}
         </ConfirmDialog>
       )}
       {dialog === 'delete' && (

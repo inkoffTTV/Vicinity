@@ -234,11 +234,29 @@ GET `/search?q=<строка ≥2 символов>&channel_id=N` или `&serve
   `channel_removed` всем участникам.
 - **[new]** при добавлении в беседу остальным участникам: `{"type":"channel_member_joined","channel_id":N,"user_id":U}`
   (добавленному — как раньше `channel_added`).
+- **[changed]** POST `/channels/{id}/members` `{user_id}` больше не добавляет сразу, а **приглашает** (§7.1):
+  `{"status":"invited"|"already_invited","channel_id":N}`; уже участник — 409, блокировка между людьми — 403,
+  больше 30 приглашений в минуту — 429.
+
+## 7.1 Приглашения в беседу и на сервер **[new]**
+Человека нельзя добавить без его согласия: ему приходит приглашение, и он сам принимает или отклоняет его.
+Вступление на сервер по ссылке/коду (`/servers/join`) работает как раньше — переход по ссылке и есть согласие.
+- GET `/invites` → `{"invites":[{id, kind:"group"|"server", target_id, name, icon, members, inviter{id, username,
+  display_name, avatar_path}, created_at}]}` — свои ожидающие, новые первыми.
+- POST `/invites/{id}/accept` → `{"status":"joined","kind":"group","channel_id":N}` или `{…,"kind":"server","server_id":S}`.
+  Беседы/сервера уже нет — 404, бан на сервере — 403 (приглашение при этом снимается). Дальше — как при добавлении:
+  остальным `channel_member_joined` / `server_member_joined`, себе во все подключения `channel_added` / `server_added`
+  с `"accepted": true`.
+- POST `/invites/{id}/decline` → `{"status":"declined"}`. Чужое приглашение — 404.
+- WS приглашённому: `{"type":"invite_received","invite":{…как в списке}}`; приглашение закрыто (ответ, вступление
+  по ссылке, бан, удаление беседы/сервера) — `{"type":"invite_removed","invite_id":N}`.
+- WS пригласившему: `{"type":"invite_answered","kind","target_id","name","accepted":true|false,"user_id","user_name"}`.
 
 ## 8. Серверы
 - GET `/servers` — как раньше.
 - POST `/servers/join` `{code}` — как раньше; **[new]** забаненным — 403.
-- POST `/servers/{id}/members` `{user_id}` — как раньше; **[new]** забаненного — 403.
+- **[changed]** POST `/servers/{id}/members` `{user_id}` — **приглашает** (§7.1): `{"status":"invited"|"already_invited",
+  "server_id":S}`; уже участник — 409, забаненного или при блокировке между людьми — 403.
 - **[removed]** POST `/servers/{id}/join` (вступление без кода по id) — отвечает 403, если у пользователя нет приглашения.
 - **[new]** POST `/servers/{id}/leave` → `{"status":"left"}` — выйти (владельцу нельзя — 400, не участнику — 403).
   Ушедшему во все его подключения тоже уходит `server_member_left` про него самого.
@@ -364,6 +382,12 @@ POST `/profile/extras` — расширенный профиль целиком 
     досылает `ice` только для найденных позже — сигналинг делит лимит частоты со звонками. `unwatch` (от зрителя) и `stop` (от транслирующего) закрывают соединение; `stop` в ответ на
     `watch` с `reason:"full"` — у трансляции уже максимум зрителей (веб-клиент: 8), без `reason` — трансляции нет.
     Прекратив трансляцию, участник шлёт `stop` всем её зрителям и `voice_media` с новым состоянием.
+
+- **[new] Голос через SFU (docs/VOICE-SFU.md).** GET `/rtc/sfu?channel_id=N` → `{"url":"/livekit","room":"voice-N",
+  "token":"<JWT LiveKit>","identity":"u<user_id>"}` — вход в комнату канала на LiveKit; те же правила, что у `voice_join`
+  (текстовый канал сервера — 400, посторонним — 403, нет канала — 404), лимит как у `voice_join`. SFU не настроен
+  (нет `LIVEKIT_API_KEY/SECRET`) — 404, клиент идёт PCM через WebSocket. Состав канала, `voice_state`, `voice_speaking`
+  и всё остальное по-прежнему идёт по `/ws`; LiveKit несёт только звук.
 
 ## 12. Звонки 1:1
 Сигналинг `call_invite / call_accept / call_reject / call_end / call_busy / rtc_offer / rtc_answer / rtc_ice`

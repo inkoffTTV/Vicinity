@@ -10,6 +10,7 @@ import {
   Plus,
   Settings,
   ShieldQuestion,
+  Trash2,
   UserRound,
   Users,
   Volume2,
@@ -27,6 +28,7 @@ import { Avatar, PRESENCE_LABEL } from './Avatar';
 import { BadgePick } from './profile/ProfileCard';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Icon } from './Icon';
+import { InviteList } from './InviteList';
 import { Modal } from './Modal';
 import { NotifyMenu } from './NotifyMenu';
 import { ServerSettings, ServerTab } from './ServerSettings';
@@ -55,7 +57,43 @@ function HomeSide() {
   const showAdmin = useStore((s) => !isAdminUsername(s.me?.username));
   const muted = useNotifySettings((s) => s.muted);
   const [creating, setCreating] = useState(false);
-  const [menu, setMenu] = useChannelMenu();
+  const meId = useStore((s) => s.me?.user_id);
+  const leaveGroup = useStore((s) => s.leaveGroup);
+  const deleteChannel = useStore((s) => s.deleteChannel);
+  const toast = useStore((s) => s.toast);
+  const [confirm, setConfirm] = useState<{ kind: 'leave' | 'delete'; id: number; name: string } | null>(null);
+  // Правая кнопка / долгое нажатие на беседе: покинуть, а владельцу ещё и удалить
+  const [menu, setMenu] = useChannelMenu((id, close) => {
+    const g = groups.find((x) => x.id === id);
+    if (!g) return null;
+    return (
+      <>
+        <button
+          role="menuitem"
+          onClick={() => {
+            close();
+            setConfirm({ kind: 'leave', id, name: g.name });
+          }}
+        >
+          <Icon icon={LogOut} size={16} />
+          Покинуть беседу
+        </button>
+        {g.owner_id === meId && (
+          <button
+            role="menuitem"
+            className="danger"
+            onClick={() => {
+              close();
+              setConfirm({ kind: 'delete', id, name: g.name });
+            }}
+          >
+            <Icon icon={Trash2} size={16} />
+            Удалить беседу
+          </button>
+        )}
+      </>
+    );
+  });
   const now = useMinuteClock();
 
   return (
@@ -64,6 +102,7 @@ function HomeSide() {
         <strong>Личные сообщения</strong>
       </div>
       <div className="side-scroll">
+        <InviteList />
         <button
           className={`side-item${view.kind === 'friends' ? ' active' : ''}`}
           onClick={() => open({ kind: 'friends' })}
@@ -125,6 +164,23 @@ function HomeSide() {
       </div>
       {creating && <CreateGroupDialog onClose={() => setCreating(false)} />}
       {menu}
+      {confirm && (
+        <ConfirmDialog
+          title={confirm.kind === 'leave' ? 'Покинуть беседу' : 'Удалить беседу'}
+          action={confirm.kind === 'leave' ? 'Покинуть' : 'Удалить'}
+          danger
+          onClose={() => setConfirm(null)}
+          onConfirm={async () => {
+            const { kind, id, name } = confirm;
+            if (kind === 'leave' ? await leaveGroup(id) : await deleteChannel(id))
+              toast(kind === 'leave' ? `Вы покинули беседу «${name}»` : `Беседа «${name}» удалена`);
+          }}
+        >
+          {confirm.kind === 'leave'
+            ? `Покинуть беседу «${confirm.name}»? Вернуться можно, только если вас пригласят снова.`
+            : `Беседа «${confirm.name}» и вся её история будут удалены у всех участников. Это нельзя отменить.`}
+        </ConfirmDialog>
+      )}
     </>
   );
 }

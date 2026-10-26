@@ -25,6 +25,14 @@ writeFileSync(join(dir, 'config.json'), JSON.stringify(config, null, 2));
 // Где лежит база этого прогона — тесты меняют в ней то, что API не позволяет (например, подписку)
 writeFileSync(join(tmpdir(), `vicinity-e2e-${port}.dir`), dir);
 
-const child = spawn(bin, [], { cwd: dir, stdio: 'inherit' });
+// SFU «настроен», но по адресу никого нет: API отдаёт токены (a3-sfu.spec.ts), а клиент за секунду
+// переходит на голос через WebSocket — тесты голоса идут старым путём
+const env = {
+  ...process.env,
+  VICINITY_SFU_URL: 'ws://127.0.0.1:1',
+  LIVEKIT_API_KEY: 'e2ekey',
+  LIVEKIT_API_SECRET: 'e2e-secret-e2e-secret-e2e-secret-0123456789',
+};
+const child = spawn(bin, [], { cwd: dir, stdio: 'inherit', env });
 child.on('exit', (code) => process.exit(code ?? 0));
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => child.kill(sig));

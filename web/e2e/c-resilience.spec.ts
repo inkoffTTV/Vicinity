@@ -11,6 +11,7 @@ import {
   send,
   tokenOf,
   User,
+  inviteToGroup,
 } from './helpers';
 
 const msgText = (u: User, text: string) => u.page.locator('.msg-text', { hasText: text });
@@ -23,12 +24,9 @@ async function openDmBothSides(a: User, b: User) {
   await expect(msgText(b, 'начало переписки')).toBeVisible();
 }
 
-/** Добавить пользователя в открытую беседу через диалог «Добавить участника». */
+/** Пригласить в открытую беседу (принимать — отдельно: приглашённый тут офлайн) */
 async function addToGroup(owner: User, who: User) {
-  await owner.page.getByRole('button', { name: 'Добавить участника' }).click();
-  await owner.page.locator('.modal input').fill(who.username);
-  await owner.page.locator(`.modal .user-row:has-text("@${who.username}")`).getByRole('button', { name: 'Добавить' }).click();
-  await expect(owner.page.locator('.toast', { hasText: 'добавлен' })).toBeVisible();
+  await inviteToGroup(owner, who);
 }
 
 test('reconnect catch-up: messages, groups and friend requests missed while offline show up', async ({ browser }) => {
@@ -56,7 +54,8 @@ test('reconnect catch-up: messages, groups and friend requests missed while offl
   await sock.drop();
   await expect.poll(() => sock.connections()).toBe(2);
   await expect(msgText(a, 'пока тебя не было')).toHaveCount(1);
-  await expect(a.page.locator('.side-item', { hasText: 'Сбор' })).toBeVisible();
+  // Пропущенное приглашение в беседу — в списке «Приглашения»
+  await expect(a.page.locator('.invite-item', { hasText: 'Сбор' })).toBeVisible();
   await expect(a.page.locator('.side-item', { hasText: 'Друзья' }).locator('.badge')).toHaveText('1');
   await expect(a.page.locator('.user-panel')).toContainText('В сети');
 

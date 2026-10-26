@@ -55,6 +55,9 @@ test('mention autocomplete in a group chat suggests its members', async ({ brows
   const group = await openChannelId(a);
   const bob = await apiUser(request, b);
   expect((await call(request, await apiUser(request, a), 'POST', `/channels/${group}/members`, { user_id: bob.id })).status).toBe(200);
+  // В беседу попадают, приняв приглашение (docs/API.md §7.1)
+  const invite = (await call(request, bob, 'GET', '/invites')).body.invites.find((i: { target_id: number }) => i.target_id === group);
+  expect((await call(request, bob, 'POST', `/invites/${invite.id}/accept`)).status).toBe(200);
   // Новый участник беседы попадает в подсказки сразу (channel_member_joined)
   await composer(a).fill('@бо');
   await expect(a.page.locator('.mention-popup').getByRole('option')).toHaveText([new RegExp(`Боб\\s*@${b.username}`)]);

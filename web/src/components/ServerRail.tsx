@@ -19,7 +19,9 @@ export function ServerRail() {
   // Логотип — выбранный значок приложения (Настройки → Значок приложения)
   const appIcon = useAppearance((s) => s.appIcon);
 
-  const home = homeUnread(state);
+  // Ждущие ответа приглашения в беседы и на серверы — тоже на значке «Личные сообщения»
+  const invites = useStore((s) => s.invites.length);
+  const home = homeUnread(state) + invites;
   const homeActive = view.kind !== 'server';
 
   return (

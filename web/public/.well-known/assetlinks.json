@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.vicinity.android",
+      "sha256_cert_fingerprints": [
+        "72:51:AF:F8:2C:A9:8E:02:66:FD:3D:F2:3F:D9:FD:6D:4D:38:93:54:95:CC:0C:68:DC:69:72:1A:0E:16:CA:B5"
+      ]
+    }
+  }
+]

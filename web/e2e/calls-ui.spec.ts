@@ -55,6 +55,15 @@ test('1:1 call: source swap, fullscreen, tier screen quality, sounds', async ({ 
   await expect(win(b).locator('.quality-badge')).toHaveText('1080p30');
   await win(b).getByRole('button', { name: 'Качество показа экрана' }).click();
   await expect(b.page.locator('.screen-quality-menu .upgrade-hint')).toContainText('Ultra');
+  await expect(b.page.locator('.screen-quality-menu').getByRole('radiogroup', { name: 'Разрешение' }).getByRole('radio', { name: /1440p/ })).toBeDisabled();
+  await expect(b.page.locator('.screen-quality-menu').getByRole('radiogroup', { name: 'Кадров в секунду' }).getByRole('radio', { name: '60' })).toBeDisabled();
+  // 720p и 15 кадров доступны всем — экономия канала
+  await b.page.locator('.screen-quality-menu').getByRole('radiogroup', { name: 'Разрешение' }).getByRole('radio', { name: '720p' }).click();
+  await b.page.locator('.screen-quality-menu').getByRole('radiogroup', { name: 'Кадров в секунду' }).getByRole('radio', { name: '15' }).click();
+  await expect(win(b).locator('.quality-badge')).toHaveText('720p15');
+  await b.page.locator('.screen-quality-menu').getByRole('radiogroup', { name: 'Разрешение' }).getByRole('radio', { name: '1080p' }).click();
+  await b.page.locator('.screen-quality-menu').getByRole('radiogroup', { name: 'Кадров в секунду' }).getByRole('radio', { name: '30' }).click();
+  await expect(win(b).locator('.quality-badge')).toHaveText('1080p30');
   await b.page.keyboard.press('Escape');
   // Первую секунду разговора начальные флаги собеседника не озвучиваются
   await b.page.waitForTimeout(1500);
@@ -123,9 +132,9 @@ test('1:1 call: source swap, fullscreen, tier screen quality, sounds', async ({ 
   await win(a).getByRole('button', { name: 'Остановить показ экрана' }).click();
   await expect.poll(() => soundCount(b.page, 'streamStop')).toBe(1);
 
-  // «Чёткость» на Ultra — 1440p30
+  // 30 кадров на Ultra — 1440p30; 60 и 1440p у Боба без подписки заперты
   await win(a).getByRole('button', { name: 'Качество показа экрана' }).click();
-  await a.page.locator('.screen-quality-menu').getByRole('radio', { name: /Чёткость/ }).click();
+  await a.page.locator('.screen-quality-menu').getByRole('radiogroup', { name: 'Кадров в секунду' }).getByRole('radio', { name: '30' }).click();
   await a.page.keyboard.press('Escape');
   await expect(win(a).locator('.quality-badge')).toHaveText('1440p30');
   await win(a).getByRole('button', { name: 'Показать экран' }).click();

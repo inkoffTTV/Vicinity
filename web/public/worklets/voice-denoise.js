@@ -57,20 +57,24 @@ class DenoiseProcessor extends AudioWorkletProcessor {
       if (this.inLen === this.frameSize) {
         this.inLen = 0;
         const vad = this.state.processFrame(this.inBuf);
-        let gain = 1;
+        // Усиление меняется плавно внутри кадра (от прежнего к новому), а не ступенькой раз в 10 мс:
+        // ступенька — это щелчок на границе кадра, на открытии и закрытии гейта слышно как треск
+        const from = this.gain;
         if (this.gate) {
           if (vad > 0.5) this.hold = 30; // 300 мс после последней уверенной речи
           else if (this.hold > 0) this.hold--;
           const target = vad > 0.5 || this.hold > 0 ? 1 : GATE_FLOOR;
           this.gain += (target - this.gain) * (target > this.gain ? 0.6 : 0.12);
-          gain = this.gain;
+        } else {
+          this.gain = 1;
         }
+        const step = (this.gain - from) / this.frameSize;
         // Вход и выход идут одним темпом, очередь не длиннее пары кадров; упираемся в конец буфера — сдвигаем к началу
         if (this.outRead + this.outLen + this.frameSize > this.outBuf.length) {
           this.outBuf.copyWithin(0, this.outRead, this.outRead + this.outLen);
           this.outRead = 0;
         }
-        for (let j = 0; j < this.frameSize; j++) this.outBuf[this.outRead + this.outLen + j] = (this.inBuf[j] / SCALE) * gain;
+        for (let j = 0; j < this.frameSize; j++) this.outBuf[this.outRead + this.outLen + j] = (this.inBuf[j] / SCALE) * (from + step * (j + 1));
         this.outLen += this.frameSize;
       }
     }

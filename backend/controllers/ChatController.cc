@@ -3,6 +3,7 @@
 #include "../utils/Access.h"
 #include "../utils/Broadcast.h"
 #include "../utils/HttpUtils.h"
+#include "../utils/Invites.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/Messages.h"
 #include "../utils/TextUtils.h"
@@ -271,32 +272,25 @@ void ChatController::addMember(const HttpRequestPtr& req,
         if (ch[0]["type"].as<std::string>() == "dm") {
             cb(error("В личную переписку нельзя добавить участника", k400BadRequest)); return;
         }
-        // Только участник беседы может добавлять
+        // Только участник беседы может приглашать
         auto mem = db->execSqlSync(
             "SELECT 1 FROM channel_members WHERE channel_id = ? AND user_id = ? LIMIT 1", channelId, self);
         if (mem.empty()) { cb(error("Вы не участник этой беседы", k403Forbidden)); return; }
         auto u = db->execSqlSync("SELECT id FROM users WHERE id = ?", target);
         if (u.empty()) { cb(error("Пользователь не найден", k404NotFound)); return; }
-
-        auto ins = db->execSqlSync(
-            "INSERT OR IGNORE INTO channel_members(channel_id, user_id) VALUES(?, ?) RETURNING user_id",
-            channelId, target);
-        // Остальным участникам — новый состав; самому добавленному — беседа в списке
-        if (!ins.empty()) {
-            Json::Value joined;
-            joined["type"]       = "channel_member_joined";
-            joined["channel_id"] = static_cast<Json::Int64>(channelId);
-            joined["user_id"]    = static_cast<Json::Int64>(target);
-            Broadcast::toChannel(channelId, joined, target);
+        if (Access::blockedBetween(db, self, target)) {
+            cb(error("Этого пользователя нельзя пригласить", k403Forbidden)); return;
+        }
+        if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Invite, self)) {
+            cb(error("Слишком много приглашений, попробуйте позже", k429TooManyRequests)); return;
         }
 
-        Json::Value ev;
-        ev["type"]       = "channel_added";
-        ev["channel_id"] = static_cast<Json::Int64>(channelId);
-        ev["name"]       = ch[0]["name"].isNull() ? "" : ch[0]["name"].as<std::string>();
-        Broadcast::toUser(target, ev);
-
-        Json::Value resp; resp["status"] = "added"; resp["channel_id"] = static_cast<Json::Int64>(channelId);
+        // В беседу больше не добавляют сразу: приглашённый сам принимает или отклоняет (InviteController)
+        const auto out = Invites::create(db, Invites::Kind::Group, channelId, self, target);
+        if (out == Invites::Outcome::AlreadyMember) { cb(error("Уже в беседе", k409Conflict)); return; }
+        Json::Value resp;
+        resp["status"]     = out == Invites::Outcome::Invited ? "invited" : "already_invited";
+        resp["channel_id"] = static_cast<Json::Int64>(channelId);
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
         cb(error(e.what(), k500InternalServerError));

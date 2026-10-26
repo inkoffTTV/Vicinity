@@ -40,6 +40,12 @@
 
 ## 2. Voice channels
 
+> **Since the SFU (docs/VOICE-SFU.md):** browsers and the Electron/Android apps send voice to a LiveKit room
+> (`voice-<channelId>`, Opus 48 kHz over WebRTC) whenever the server is configured with LiveKit keys; the
+> control messages below (`voice_join`, `voice_state`, `voice_speaking`, …) are unchanged and remain the source
+> of truth for membership. The PCM-over-WebSocket path described here is still used by the Qt desktop and as the
+> browser fallback when the SFU is unavailable. A Qt desktop and an SFU user in the same channel do not hear each other.
+
 ### 2.1 JSON control messages
 
 | Direction | Message | Server behaviour |

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createGroup, makeFriends, openDm, pageErrors, pngBuffer, registerUser, send, User } from './helpers';
+import { createGroup, inviteToGroup, makeFriends, openDm, pageErrors, pngBuffer, registerUser, send, User } from './helpers';
 
 // Список личек и бесед: превью последнего сообщения, время, свежие сверху, непрочитанное.
 
@@ -64,8 +64,7 @@ test('previews with "Вы:" and author prefixes, attachment icon, live re-sort a
   await createGroup(a, 'Вторая');
   await expect(names(a, 'group')).toHaveText(['Вторая', 'Первая']);
   await item(a, 'Первая').click();
-  await a.page.locator('.chat-head').getByRole('button', { name: 'Добавить участника' }).click();
-  await a.page.locator(`.modal .user-row:has-text("@${b.username}")`).getByRole('button', { name: 'Добавить' }).click();
+  await inviteToGroup(a, b, 'Первая');
   await item(b, 'Первая').click();
   await send(b, 'я тут');
   await expect(names(a, 'group')).toHaveText(['Первая', 'Вторая']);

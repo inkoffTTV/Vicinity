@@ -10,6 +10,7 @@ Limit limitFor(UserRateLimiter::Action a) {
         case A::Message:       return {10, 5};
         case A::Upload:        return {20, 60};
         case A::FriendRequest: return {20, 60};
+        case A::Invite:        return {30, 60};
         case A::JoinByCode:    return {10, 60};
         case A::ChannelCreate: return {10, 60};
         case A::CallInvite:    return {10, 60};

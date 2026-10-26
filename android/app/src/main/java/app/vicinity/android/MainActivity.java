@@ -84,11 +84,41 @@ public class MainActivity extends Activity {
         setupInsets();
         setupWebView();
 
-        String url = BuildConfig.APP_URL + START_PATH;
+        // Открыли по ссылке (приглашение, подарок, профиль) — сразу на нужный экран
+        String link = deepLinkPath(getIntent());
+        String url = BuildConfig.APP_URL + (link != null ? link : START_PATH);
         String tag = getIntent().getStringExtra(EXTRA_TAG);
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
         if (web.getUrl() == null) web.loadUrl(url);
+        else if (link != null) openDeepLink(link);
         if (tag != null) dispatchNotificationClick(tag);
+    }
+
+    /** Путь экрана из ссылки: https://<сайт>/invite/… или vicinity://invite/… → /invite/…; null — не наша ссылка */
+    private String deepLinkPath(Intent intent) {
+        Uri uri = intent == null ? null : intent.getData();
+        if (uri == null) return null;
+        String path;
+        if ("vicinity".equalsIgnoreCase(uri.getScheme())) {
+            String host = uri.getHost() == null ? "" : uri.getHost();
+            path = "/" + host + (uri.getPath() == null ? "" : uri.getPath());
+        } else if (isAppUrl(uri)) {
+            path = uri.getPath();
+        } else {
+            return null;
+        }
+        if (path == null || !path.matches("^/(invite|gift|u|users|channels)/[A-Za-z0-9@_/-]*$")) return null;
+        return path;
+    }
+
+    /** Открыть экран в уже загруженном клиенте без перезагрузки (web/src/lib/router.ts, событие vicinity-open) */
+    private void openDeepLink(String path) {
+        String current = web.getUrl();
+        if (current == null || !isAppUrl(Uri.parse(current))) {
+            web.loadUrl(BuildConfig.APP_URL + path);
+            return;
+        }
+        web.evaluateJavascript("window.dispatchEvent(new CustomEvent('vicinity-open', {detail: " + JSONObject.quote(path) + "}))", null);
     }
 
     // Android 15 рисует окно под системными панелями: отступаем на их высоту и на высоту клавиатуры,
@@ -378,6 +408,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
+        String link = deepLinkPath(intent);
+        if (link != null) openDeepLink(link);
         String tag = intent.getStringExtra(EXTRA_TAG);
         if (tag != null) dispatchNotificationClick(tag);
     }

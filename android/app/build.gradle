@@ -20,8 +20,10 @@ android {
         minSdk 26
         targetSdk 35
         versionCode((System.getenv('VICINITY_VERSION_CODE') ?: '1') as int)
-        versionName '1.0.0'
+        versionName '1.1.0'
         buildConfigField 'String', 'APP_URL', "\"${appUrl}\""
+        // Хост сайта для ссылок, которые открываются в приложении (AndroidManifest.xml)
+        manifestPlaceholders = [appHost: new URI(appUrl).host]
     }
 
     signingConfigs {

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api } from './api';
+import { api, type Plan } from './api';
 import { usePlan } from './plan';
 
 // Микрофон, камера и вывод звука — общее для голосовых каналов и звонков
@@ -16,15 +16,17 @@ export const canPickOutput = typeof HTMLMediaElement !== 'undefined' && 'setSink
 export const canShareScreen = () => !!navigator.mediaDevices?.getDisplayMedia;
 
 /** Обработка микрофона с учётом профиля ввода (Настройки → Голос и видео) */
-export function micConstraints(deviceId: string, p: MediaPrefs = useMediaPrefs.getState()): MediaTrackConstraints {
+// rnnoise — поток дальше пройдёт через RNNoise: встроенное шумоподавление браузера тогда выключаем,
+// иначе голос давят дважды и он звучит «металлически» (эхоподавление и АРУ остаются)
+export function micConstraints(deviceId: string, p: MediaPrefs = useMediaPrefs.getState(), rnnoise = false): MediaTrackConstraints {
   const e = effectiveProcessing(p);
   return {
     channelCount: 1,
     echoCancellation: e.echo,
-    noiseSuppression: e.noise !== 'off',
+    noiseSuppression: e.noise !== 'off' && !rnnoise,
     autoGainControl: e.agc,
     // «Усиленное» — изоляция голоса, где браузер её умеет (Chrome на macOS/Windows); остальные ограничение пропустят
-    ...(e.noise === 'max' ? ({ voiceIsolation: true } as MediaTrackConstraints) : {}),
+    ...(e.noise === 'max' && !rnnoise ? ({ voiceIsolation: true } as MediaTrackConstraints) : {}),
     ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
   };
 }
@@ -69,17 +71,48 @@ export function stopStream(s: MediaStream | null) {
   cleanups.delete(s);
 }
 
+/** RNNoise включён в настройках и браузер его потянет */
+export const wantDenoise = () => useMediaPrefs.getState().denoise && canDenoise();
+
 /** Микрофон с выбранного устройства; выбранное пропало — с устройства по умолчанию.
- *  С включённым RNNoise поток проходит через worklet шумоподавления (голосовые каналы и звонки) */
-export async function openMic(deviceId: string): Promise<MediaStream> {
+ *  С включённым RNNoise поток проходит через worklet шумоподавления (звонки). inline — RNNoise вставит
+ *  вызывающий в свой же AudioContext (голосовые каналы): поток без второго контекста, только без
+ *  встроенного шумоподавления браузера */
+export async function openMic(deviceId: string, opts: { inline?: boolean } = {}): Promise<MediaStream> {
+  const rnnoise = wantDenoise();
   let mic: MediaStream;
   try {
-    mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) });
+    mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId, undefined, rnnoise) });
   } catch (e) {
     if (!deviceId || !(e instanceof DOMException) || e.name !== 'OverconstrainedError') throw e;
-    mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints('') });
+    mic = await navigator.mediaDevices.getUserMedia({ audio: micConstraints('', undefined, rnnoise) });
   }
-  return useMediaPrefs.getState().denoise ? denoise(mic) : mic;
+  return rnnoise && !opts.inline ? denoise(mic) : mic;
+}
+
+/**
+ * Узел RNNoise в данном контексте (модель загружена и готова). Голосовые каналы ставят его прямо в свой
+ * граф: один контекст — одни часы, без моста MediaStream между контекстами, который рвётся (треск),
+ * когда другое приложение забирает звуковое устройство (alt-tab в игру).
+ */
+export async function createDenoiseNode(ctx: BaseAudioContext): Promise<AudioWorkletNode> {
+  useDenoise.setState({ status: 'loading', error: '' });
+  try {
+    await ctx.audioWorklet.addModule(DENOISE_URL);
+    const node = new AudioWorkletNode(ctx, 'vicinity-denoise', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+    await new Promise<void>((resolve, reject) => {
+      node.port.onmessage = (e) => {
+        if (e.data?.ready) resolve();
+        else if (e.data?.error) reject(new Error(String(e.data.error)));
+      };
+      window.setTimeout(() => reject(new Error('Модель не загрузилась за 20 с')), 20_000);
+    });
+    useDenoise.setState({ status: 'on', error: '' });
+    return node;
+  } catch (e) {
+    useDenoise.setState({ status: 'error', error: e instanceof Error ? e.message : 'Не удалось загрузить RNNoise' });
+    throw e;
+  }
 }
 
 // ── RNNoise: нейросетевое шумоподавление (public/worklets/voice-denoise.js) ──
@@ -155,6 +188,13 @@ export function mediaError(e: unknown, what: 'mic' | 'camera' | 'screen' = 'mic'
   return `Не удалось включить ${device}`;
 }
 
+/** То же для AudioContext (Chrome 110+): звук, который идёт через контекст, а не через <audio> */
+export function applyOutputToContext(ctx: AudioContext, deviceId: string) {
+  const c = ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+  if (!canPickOutput || typeof c.setSinkId !== 'function') return;
+  void c.setSinkId(deviceId || '').catch(() => {});
+}
+
 /** Направить звук элемента на выбранное устройство вывода (где браузер это умеет) */
 export function applyOutput(el: HTMLMediaElement, deviceId: string) {
   if (!canPickOutput) return;
@@ -183,8 +223,9 @@ export interface MediaPrefs {
   pttKey: string;
   /** Задержка отпускания, мс */
   pttDelay: number;
-  /** Показ экрана: плавность (60 к/с на Ultra) или чёткость текста */
-  screenMode: ScreenMode;
+  /** Показ экрана: разрешение 720 | 1080 | 1440 и кадров в секунду 15 | 30 | 60; 0 — максимум подписки */
+  screenHeight: number;
+  screenFps: number;
   /** Показ экрана со звуком (вкладки, окна, всего экрана — что даёт браузер) */
   screenAudio: boolean;
   /** Усиление микрофона, 0…2 */
@@ -213,7 +254,8 @@ const DEFAULTS: MediaPrefs = {
   ptt: false,
   pttKey: 'AltLeft',
   pttDelay: 200,
-  screenMode: 'motion',
+  screenHeight: 0,
+  screenFps: 0,
   screenAudio: true,
   micGain: 1,
   volume: 1,
@@ -241,7 +283,9 @@ function loadPrefs(): MediaPrefs {
       ptt: bool(raw.ptt, DEFAULTS.ptt),
       pttKey: typeof raw.pttKey === 'string' && raw.pttKey ? raw.pttKey : DEFAULTS.pttKey,
       pttDelay: clampNum(raw.pttDelay, 0, 1000, DEFAULTS.pttDelay),
-      screenMode: raw.screenMode === 'detail' ? 'detail' : 'motion',
+      screenHeight: SCREEN_HEIGHTS.includes(raw.screenHeight) ? raw.screenHeight : 0,
+      // Старая настройка «Чёткость» — это 30 кадров
+      screenFps: SCREEN_FPS.includes(raw.screenFps) ? raw.screenFps : raw.screenMode === 'detail' ? 30 : 0,
       screenAudio: bool(raw.screenAudio, DEFAULTS.screenAudio),
       micGain: clampLevel(raw.micGain, DEFAULTS.micGain),
       volume: clampLevel(raw.volume, DEFAULTS.volume),
@@ -279,13 +323,16 @@ export async function rtcIceServers(): Promise<RTCIceServer[]> {
   }
 }
 
-// ── Качество показа экрана по подписке ──
+// ── Качество показа экрана: выбор пользователя в пределах подписки ──
 // Потолок задаёт сервер (GET /subscription → screen {height, fps}, backend/utils/Tiers.cc):
 // без подписки 1080p30, Basic 1080p60, Standard 1440p30, Ultra 1440p60. Выше 1440p не бывает:
-// 4K съедает канал и процессор без заметной пользы. «Чёткость» — то же разрешение при 30 к/с.
+// 4K съедает канал и процессор без заметной пользы. Пользователь выбирает разрешение и кадры сам
+// (720p/1080p/1440p × 15/30/60, как в Discord); что выше потолка — заперто.
 // Десктоп-клиент декодирует H264 уровня 3.1 — собеседнику-десктопу больше 1080p30 не шлём.
 
 export type ScreenMode = 'motion' | 'detail';
+export const SCREEN_HEIGHTS = [720, 1080, 1440];
+export const SCREEN_FPS = [15, 30, 60];
 
 export interface ScreenQuality {
   width: number;
@@ -299,6 +346,9 @@ export interface ScreenQuality {
   upgradable: boolean;
   /** Ограничено собеседником (десктоп) */
   capped: boolean;
+  /** Потолок сейчас: подписка, а в звонке с десктопом — 1080p30 */
+  limit: { height: number; fps: number };
+  /** 60 к/с — плавность (игры, видео), 30 и ниже — чёткость (текст, код) */
   contentHint: 'motion' | 'detail';
 }
 
@@ -309,16 +359,24 @@ function bitrateFor(height: number, fps: number): number {
   return Math.round(Math.min(10_000_000, 4_000_000 * ((height * height) / (1080 * 1080)) * Math.sqrt(fps / 30)));
 }
 
-export function screenQuality(tier: number, mode: ScreenMode, opts: { desktopPeer?: boolean } = {}): ScreenQuality {
-  const plan = usePlan.getState().current.screen;
-  let height = Math.min(plan.height, 1440);
-  let fps = mode === 'motion' ? plan.fps : 30;
+/** Качество показа: выбор из настроек (height/fps переопределяют его), обрезанный потолком */
+export function screenQuality(
+  tier: number,
+  opts: { desktopPeer?: boolean; height?: number; fps?: number; plan?: Plan['screen'] } = {},
+): ScreenQuality {
+  const plan = opts.plan ?? usePlan.getState().current.screen;
+  const prefs = useMediaPrefs.getState();
+  const limit = { height: Math.min(plan.height, 1440), fps: plan.fps };
   let capped = false;
-  if (opts.desktopPeer && (height > 1080 || fps > 30)) {
-    height = Math.min(height, 1080);
-    fps = 30;
+  if (opts.desktopPeer && (limit.height > 1080 || limit.fps > 30)) {
+    limit.height = Math.min(limit.height, 1080);
+    limit.fps = 30;
     capped = true;
   }
+  const wantH = opts.height ?? prefs.screenHeight;
+  const wantF = opts.fps ?? prefs.screenFps;
+  const height = Math.min(wantH || limit.height, limit.height);
+  const fps = Math.min(wantF || limit.fps, limit.fps);
   return {
     width: Math.round((height * 16) / 9),
     height,
@@ -327,8 +385,15 @@ export function screenQuality(tier: number, mode: ScreenMode, opts: { desktopPee
     label: `${height}p${fps}`,
     upgradable: tier < 3,
     capped,
-    contentHint: mode,
+    limit,
+    contentHint: fps > 30 ? 'motion' : 'detail',
   };
+}
+
+/** С какой подписки доступно такое качество; null — ни с какой (нет в тарифах) */
+export function screenUnlockTier(height: number, fps: number, plans: Plan[] = usePlan.getState().plans): number | null {
+  const hit = plans.filter((p) => p.screen.height >= height && p.screen.fps >= fps).sort((a, b) => a.tier - b.tier)[0];
+  return hit ? hit.tier : null;
 }
 
 /** Параметры getDisplayMedia под выбранное качество (и со звуком, если он включён в настройках) */

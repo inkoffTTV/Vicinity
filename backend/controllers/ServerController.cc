@@ -7,6 +7,7 @@
 #include "../utils/Access.h"
 #include "../utils/Privacy.h"
 #include "../utils/Broadcast.h"
+#include "../utils/Invites.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/TextUtils.h"
 #include "../utils/ProfileExt.h"
@@ -278,6 +279,7 @@ void ServerController::joinServer(const HttpRequestPtr& req,
             auto ins = db->execSqlSync("INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?) RETURNING user_id",
                                        serverId, userId);
             if (!ins.empty()) memberEvent("server_member_joined", serverId, userId);
+            Invites::drop(db, Invites::Kind::Server, serverId, userId);
         }
         Json::Value resp; resp["status"] = "joined"; resp["server_id"] = serverId;
         cb(jsonResp(resp));
@@ -316,6 +318,8 @@ void ServerController::joinByCode(const HttpRequestPtr& req,
             "INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?) RETURNING user_id",
             serverId, userId);
         if (!ins.empty()) memberEvent("server_member_joined", serverId, userId);
+        // Вступил по ссылке — личное приглашение на этот сервер больше не нужно
+        Invites::drop(db, Invites::Kind::Server, serverId, userId);
         Json::Value resp;
         resp["server_id"] = serverId;
         resp["name"]      = s[0]["name"].as<std::string>();
@@ -347,20 +351,19 @@ void ServerController::addMember(const HttpRequestPtr& req,
         if (Access::isBanned(db, serverId, target)) {
             cb(errResp("Пользователь заблокирован на этом сервере", k403Forbidden)); return;
         }
+        if (Access::blockedBetween(db, self, target)) {
+            cb(errResp("Этого пользователя нельзя пригласить", k403Forbidden)); return;
+        }
+        if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Invite, self)) {
+            cb(errResp("Слишком много приглашений, попробуйте позже", k429TooManyRequests)); return;
+        }
 
-        auto ins = db->execSqlSync(
-            "INSERT OR IGNORE INTO server_members(server_id, user_id) VALUES(?, ?) RETURNING user_id",
-            serverId, target);
-        if (!ins.empty()) memberEvent("server_member_joined", serverId, target);
-
-        // Живое уведомление добавленному пользователю — обновить список серверов
-        Json::Value ev;
-        ev["type"]      = "server_added";
-        ev["server_id"] = static_cast<Json::Int64>(serverId);
-        ev["name"]      = s[0]["name"].as<std::string>();
-        Broadcast::toUser(target, ev);
-
-        Json::Value resp; resp["status"] = "added"; resp["server_id"] = static_cast<Json::Int64>(serverId);
+        // На сервер больше не добавляют сразу: приглашённый сам принимает или отклоняет (InviteController)
+        const auto out = Invites::create(db, Invites::Kind::Server, serverId, self, target);
+        if (out == Invites::Outcome::AlreadyMember) { cb(errResp("Уже на сервере", k409Conflict)); return; }
+        Json::Value resp;
+        resp["status"]    = out == Invites::Outcome::Invited ? "invited" : "already_invited";
+        resp["server_id"] = static_cast<Json::Int64>(serverId);
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
         cb(errResp(e.what(), k500InternalServerError));
@@ -713,6 +716,7 @@ void ServerController::banMember(const HttpRequestPtr& req,
             cb(errResp("Пользователь не найден", k404NotFound)); return;
         }
         db->execSqlSync("INSERT OR IGNORE INTO server_bans(server_id, user_id) VALUES(?, ?)", serverId, target);
+        Invites::drop(db, Invites::Kind::Server, serverId, target);
         if (dropMember(db, serverId, target))
             serverRemoved(target, serverId, serverInfo(db, serverId)["name"].asString());
 

@@ -225,3 +225,26 @@ export function pngBuffer(w = 120, h = 80): Buffer {
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
+
+/** Принять приглашение в беседу/на сервер из списка «Приглашения» (docs/API.md §7.1); открывает беседу */
+export async function acceptInvite(who: User, name: string) {
+  await who.page.locator('.rail-item.home').click();
+  const item = who.page.locator('.invite-item', { hasText: name });
+  await item.getByRole('button', { name: 'Принять' }).click();
+  await expect(item).toHaveCount(0);
+}
+
+/**
+ * Пригласить в открытую беседу (кнопка «Добавить участника» в шапке) — человека больше не добавляют сразу.
+ * groupName — тогда приглашённый сразу принимает приглашение.
+ */
+export async function inviteToGroup(owner: User, who: User, groupName?: string) {
+  await owner.page.locator('.chat-head').getByRole('button', { name: 'Добавить участника' }).click();
+  await owner.page.locator('.modal input').fill(who.username);
+  const row = owner.page.locator(`.modal .user-row:has-text("@${who.username}")`);
+  await row.getByRole('button', { name: 'Пригласить' }).click();
+  await expect(row).toContainText('Отправлено');
+  await owner.page.keyboard.press('Escape');
+  await expect(owner.page.locator('.modal')).toHaveCount(0);
+  if (groupName) await acceptInvite(who, groupName);
+}

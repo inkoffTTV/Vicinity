@@ -35,6 +35,10 @@ static void applyEnvOverrides(Json::Value& config) {
     if (const auto v = env("VICINITY_TURN_URLS"); !v.empty())       custom["rtc"]["turn"] = list(v);
     if (const auto v = env("VICINITY_STUN_URLS"); !v.empty())       custom["rtc"]["stun"] = list(v);
     if (const auto v = env("VICINITY_TRUSTED_PROXIES"); !v.empty()) custom["trusted_proxies"] = list(v);
+    // Голос через SFU LiveKit (docs/VOICE-SFU.md): ключи общие с контейнером livekit
+    if (const auto v = env("VICINITY_SFU_URL"); !v.empty())         custom["sfu"]["url"] = v;
+    if (const auto v = env("LIVEKIT_API_KEY"); !v.empty())          custom["sfu"]["key"] = v;
+    if (const auto v = env("LIVEKIT_API_SECRET"); !v.empty())       custom["sfu"]["secret"] = v;
     // Web Push: контакт администратора в подписи VAPID (сервисы пушей пишут туда при проблемах)
     if (const auto v = env("VICINITY_PUSH_SUBJECT"); !v.empty())    custom["push"]["subject"] = v;
 

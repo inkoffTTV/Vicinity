@@ -440,6 +440,17 @@ void initialize() {
          "user_id INTEGER NOT NULL,"
          "PRIMARY KEY(theme_id, user_id))");
 
+    // Приглашения в беседу и на сервер: человек сам принимает или отклоняет (controllers/InviteController.cc)
+    exec("CREATE TABLE IF NOT EXISTS invites ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+         "kind TEXT NOT NULL CHECK(kind IN ('group','server')),"
+         "target_id INTEGER NOT NULL,"
+         "inviter_id INTEGER NOT NULL,"
+         "invitee_id INTEGER NOT NULL,"
+         "created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "UNIQUE(kind, target_id, invitee_id))");
+    exec("CREATE INDEX IF NOT EXISTS idx_invites_invitee ON invites(invitee_id)");
+
     initFts();
 
     exec("CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id)");
