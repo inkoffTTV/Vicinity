@@ -42,15 +42,6 @@ export function ServerRail() {
         <Icon icon={Home} size={22} />
       </button>
       <button
-        className={`rail-item home${homeActive && view.kind !== 'home' ? ' active' : ''}`}
-        title="Личные сообщения"
-        aria-label="Личные сообщения"
-        onClick={() => open({ kind: 'friends' })}
-      >
-        <img src={appIconSrc(appIcon)} alt="" width={48} height={48} />
-        {home > 0 && <span className="badge">{home}</span>}
-      </button>
-      <button
         className={`rail-item friends${view.kind === 'friends' ? ' active' : ''}`}
         title="Друзья"
         aria-label={incoming > 0 ? `Друзья, заявок: ${incoming}` : 'Друзья'}
@@ -97,6 +88,19 @@ export function ServerRail() {
         onClick={() => setAdding(true)}
       >
         <Icon icon={Plus} size={24} className="anim-turn" />
+      </button>
+      <div className="rail-spacer" />
+      <div className="rail-sep" />
+      <div className="rail-spacer" />
+      <div className="rail-sep" />
+      <button
+        className={`rail-item home${homeActive && view.kind !== 'home' ? ' active' : ''}`}
+        title="Личные сообщения"
+        aria-label="Личные сообщения"
+        onClick={() => open({ kind: 'friends' })}
+      >
+        <img src={appIconSrc(appIcon)} alt="" width={48} height={48} />
+        {home > 0 && <span className="badge">{home}</span>}
       </button>
       {adding && <AddServerDialog onClose={() => setAdding(false)} />}
     </nav>

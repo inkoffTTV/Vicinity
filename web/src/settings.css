@@ -1105,7 +1105,7 @@ input.invalid {
 /* ── Уровень и награды (settings/ActivityScreen.tsx) ── */
 .lvl-card {
   display: flex;
-  gap: var(--space-5);
+  gap: var(--space-6);
   align-items: center;
 }
 .lvl-ring {
