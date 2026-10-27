@@ -96,7 +96,10 @@ PATCH `/settings/appearance` `{любые поля settings}` → то же. `se
 | `sync_devices` | bool — синхронизировать между устройствами |
 | `apply_to_profiles` | bool — чужие профили в своих цветах |
 | `server_theme` | `mine` \| `default` — тема на серверах |
-| `accent` | `""` \| `#rrggbb` |
+| `accent` | `""` \| `#rrggbb` — свой цвет акцента; пустой — подбирается под тему |
+| `style` | `strict` \| `glass` \| `neon` — строгий (плоские панели, без стекла, градиентов и свечений), стекло, неон (свечение акцентом) |
+| `panels` | `cards` \| `solid` \| `sharp` — панели карточками с зазором, встык, с острыми углами |
+| `columns` | `narrow` \| `normal` \| `wide` — ширина боковых колонок |
 | `font_size` | `s` \| `m` \| `l` |
 | `radius` | `none` \| `small` \| `medium` \| `large` — скругление углов (`data-radius`) |
 | `font_family` | `default` \| `system` \| `comfortaa` \| `oswald` \| `exo` \| `playfair` \| `jetbrains` \| `caveat` \| `lobster` \| `pressstart` \| `russo` \| `unbounded` — шрифт интерфейса (`web/src/lib/fonts.ts`) |

@@ -72,6 +72,9 @@ export interface AppearanceSettings {
   /** Нет у старых серверов */
   app_icon?: string;
   radius?: 'none' | 'small' | 'medium' | 'large';
+  style?: 'strict' | 'glass' | 'neon';
+  panels?: 'cards' | 'solid' | 'sharp';
+  columns?: 'narrow' | 'normal' | 'wide';
   font_family?: string;
   font_px?: number;
   font_weight?: number;

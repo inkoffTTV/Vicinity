@@ -8,7 +8,7 @@ import { Icon } from './Icon';
 import { Workshop } from './Workshop';
 import { loadPlan, usePlan } from '../lib/plan';
 import { useStore } from '../lib/store';
-import { Eco, FontSize, Radius, ServerTheme, useAppearance } from '../lib/prefs';
+import { Columns, Eco, FontSize, Panels, Radius, ServerTheme, Style, useAppearance } from '../lib/prefs';
 import { BASE_THEMES, COLOR_THEMES, CustomTheme, gradientCss, themeById } from '../lib/themes';
 import { Cards, Segmented, Slider, Toggle } from './SettingControls';
 
@@ -232,6 +232,21 @@ function LookPane({ goTo }: { goTo: GoTo }) {
         </div>
       </section>
 
+      <section className="theme-section" aria-label="Стиль">
+        <Cards<Style>
+          label="Стиль"
+          hint="Строгий — плоские панели без стекла, градиентов и свечений. Стекло — панели над фоном. Неон — свечение акцентом. Работает с любой темой"
+          value={a.style}
+          options={[
+            { id: 'strict', name: 'Строгий', icon: <StyleDemo kind="strict" /> },
+            { id: 'glass', name: 'Стекло', icon: <StyleDemo kind="glass" /> },
+            { id: 'neon', name: 'Неон', icon: <StyleDemo kind="neon" /> },
+          ]}
+          onChange={(style) => a.set({ style })}
+        />
+        <AccentRow />
+      </section>
+
       <section className="theme-section" aria-label="Готовые темы">
         <h3>Готовые темы</h3>
         <span className="muted small">
@@ -377,6 +392,27 @@ function LookPane({ goTo }: { goTo: GoTo }) {
       </section>
 
       <section className="theme-section" aria-label="Форма и масштаб">
+        <Cards<Panels>
+          label="Панели"
+          hint="Отдельные карточки с зазором, сплошные колонки встык или острые углы"
+          value={a.panels}
+          options={[
+            { id: 'cards', name: 'Отдельные', icon: <StyleDemo kind="cards" /> },
+            { id: 'solid', name: 'Сплошные', icon: <StyleDemo kind="solid" /> },
+            { id: 'sharp', name: 'Острые', icon: <StyleDemo kind="sharp" /> },
+          ]}
+          onChange={(panels) => a.set({ panels })}
+        />
+        <Segmented<Columns>
+          label="Ширина колонок"
+          value={a.columns}
+          options={[
+            ['narrow', 'Узкие'],
+            ['normal', 'Обычные'],
+            ['wide', 'Широкие'],
+          ]}
+          onChange={(columns) => a.set({ columns })}
+        />
         <Cards<Radius>
           label="Скругление углов"
           hint="Радиус скругления элементов интерфейса и карточек"
@@ -451,6 +487,56 @@ function LookPane({ goTo }: { goTo: GoTo }) {
         </button>
       </div>
     </>
+  );
+}
+
+/** Миниатюра стиля или формы панелей для карточек выбора */
+function StyleDemo({ kind }: { kind: 'strict' | 'glass' | 'neon' | 'cards' | 'solid' | 'sharp' }) {
+  return (
+    <span className={`style-demo ${kind}`}>
+      <i />
+      <i />
+    </span>
+  );
+}
+
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/** Свой цвет акцента: квадрат выбора любого цвета, код цвета и возврат к цвету темы */
+function AccentRow() {
+  const accent = useAppearance((s) => s.accent);
+  const set = useAppearance((s) => s.set);
+  const [text, setText] = useState(accent);
+  useEffect(() => setText(accent), [accent]);
+  const current = accent || (typeof getComputedStyle === 'function' ? getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() : '') || '#2bc6a4';
+  const commit = () => {
+    const v = text.trim().toLowerCase();
+    if (HEX.test(v)) set({ accent: v });
+    else setText(accent);
+  };
+  return (
+    <div className="setting-block">
+      <span className="toggle-label">Акцент</span>
+      <span className="muted small toggle-hint">Любой цвет, не только из набора. Текст на кнопках подберётся сам, чтобы читался</span>
+      <div className="accent-row">
+        <input type="color" aria-label="Выбрать цвет акцента" value={HEX.test(current) ? current : '#2bc6a4'} onChange={(e) => set({ accent: e.target.value.toLowerCase() })} />
+        <input
+          type="text"
+          aria-label="Код цвета"
+          placeholder={current}
+          value={text}
+          maxLength={7}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === 'Enter' && commit()}
+        />
+        {accent && (
+          <button type="button" className="btn small" onClick={() => set({ accent: '' })}>
+            Как у темы
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

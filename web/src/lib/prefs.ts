@@ -12,6 +12,12 @@ export type ServerTheme = 'mine' | 'default';
 export type Radius = 'none' | 'small' | 'medium' | 'large';
 /** Экономия эффектов: никогда, в свёрнутом окне, когда окно не в фокусе */
 export type Eco = 'off' | 'minimized' | 'unfocused';
+/** Стиль: строгий — плоские панели без стекла, градиентов и свечений; стекло — панели над фоном; неон — свечение акцентом */
+export type Style = 'strict' | 'glass' | 'neon';
+/** Панели: отдельные карточки с зазором, сплошные колонки встык, острые углы с зазором */
+export type Panels = 'cards' | 'solid' | 'sharp';
+/** Ширина боковых колонок */
+export type Columns = 'narrow' | 'normal' | 'wide';
 /** Фон приложения: своя картинка или из мастерской (from — id записи) */
 export interface AppBackground {
   image: string;
@@ -31,8 +37,11 @@ export interface Appearance {
   applyToProfiles: boolean;
   /** На серверах: моя тема или стандартная тёмная без цветовой темы */
   serverTheme: ServerTheme;
-  /** Устарело: акцент теперь подбирается под тему; поле осталось для совместимости с сохранёнными настройками */
+  /** Свой цвет акцента (#rrggbb); пустой — подбирается под тему */
   accent: string;
+  style: Style;
+  panels: Panels;
+  columns: Columns;
   /** Компактная лента: меньше отступы и аватары */
   compact: boolean;
   fontSize: FontSize;
@@ -92,6 +101,9 @@ export const DEFAULTS: Appearance = {
   applyToProfiles: false,
   serverTheme: 'mine',
   accent: '',
+  style: 'glass',
+  panels: 'cards',
+  columns: 'normal',
   compact: false,
   fontSize: 'm',
   radius: 'medium',
@@ -141,6 +153,9 @@ export function sanitize(raw: any): Appearance {
     applyToProfiles: src.applyToProfiles === true,
     serverTheme: src.serverTheme === 'default' ? 'default' : 'mine',
     accent: typeof src.accent === 'string' && HEX.test(src.accent) ? src.accent.toLowerCase() : '',
+    style: src.style === 'strict' || src.style === 'neon' ? src.style : 'glass',
+    panels: src.panels === 'solid' || src.panels === 'sharp' ? src.panels : 'cards',
+    columns: src.columns === 'narrow' || src.columns === 'wide' ? src.columns : 'normal',
     compact: src.compact === true,
     fontSize: src.fontSize === 's' || src.fontSize === 'l' ? src.fontSize : 'm',
     radius: ['none', 'small', 'medium', 'large'].includes(src.radius) ? src.radius : 'medium',
@@ -250,19 +265,25 @@ function apply(s: State) {
     root.style.removeProperty('--theme-gradient');
     root.style.removeProperty('--theme-tint');
   }
-  // Акцент — от темы: у цветовой темы вычисляется из её цветов, у базовых — свой в theme.css
-  const accent = g ? accentForTheme(g.gradient) : '';
+  // Акцент: свой цвет, иначе от цветовой темы (из её цветов), иначе базовый из theme.css
+  const accent = s.accent || (g ? accentForTheme(g.gradient) : '');
   if (accent) {
     root.style.setProperty('--accent', accent);
     root.style.setProperty('--accent-hover', darken(accent));
+    root.style.setProperty('--accent-soft', `${accent}29`);
     root.style.setProperty('--on-accent', onAccent(accent));
     root.style.setProperty('--link', accent);
   } else {
     root.style.removeProperty('--link');
     root.style.removeProperty('--accent');
     root.style.removeProperty('--accent-hover');
+    root.style.removeProperty('--accent-soft');
     root.style.removeProperty('--on-accent');
   }
+  // Стиль, форма панелей и ширина колонок — CSS в theme.css
+  root.setAttribute('data-style', s.style);
+  root.setAttribute('data-panels', s.panels);
+  root.setAttribute('data-columns', s.columns);
   root.toggleAttribute('data-compact', s.compact);
   root.setAttribute('data-font', s.fontSize);
   root.setAttribute('data-radius', s.radius);
@@ -275,7 +296,7 @@ function apply(s: State) {
     root.removeAttribute('data-bg');
     root.style.removeProperty('--app-bg');
   }
-  const glass = s.transparency && (!!g || !!bg);
+  const glass = s.style !== 'strict' && s.transparency && (!!g || !!bg);
   root.toggleAttribute('data-glass', glass);
   root.style.setProperty('--panel-alpha', String(s.panelOpacity / 100));
   root.style.setProperty('--glass-blur', `${s.glassBlur}px`);

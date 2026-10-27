@@ -72,6 +72,81 @@
   --radius-md: 18px;
   --radius-lg: 26px;
 }
+/* ── Стиль (data-style, Настройки → Внешний вид → Стиль) ──
+   strict — плоско: без стекла (prefs.ts не ставит data-glass), без градиента темы, без свечений и подпрыгиваний;
+   glass — как обычно; neon — свечение акцентом у активных элементов и тонкая акцентная обводка панелей */
+:root[data-style='strict'][data-gradient] body {
+  background: var(--theme-tint);
+}
+:root[data-style='strict'] .app-bg {
+  filter: none;
+}
+:root[data-style='strict'] .rail-item:hover {
+  transform: none;
+}
+:root[data-style='strict'] .composer-row:focus-within {
+  box-shadow: none;
+  border-color: var(--accent);
+}
+:root[data-style='strict'] .rail-item.active {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+:root[data-style='neon'] .rail,
+:root[data-style='neon'] .sidebar,
+:root[data-style='neon'] .main,
+:root[data-style='neon'] .members,
+:root[data-style='neon'] .group-panel,
+:root[data-style='neon'] .search-panel {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 24px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+:root[data-style='neon'] .rail-item.active {
+  box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 4px var(--accent), 0 0 18px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+:root[data-style='neon'] .btn.primary {
+  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+:root[data-style='neon'] .side-item.active {
+  box-shadow: inset 3px 0 0 var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 25%, transparent);
+  color: var(--accent);
+}
+:root[data-style='neon'] .avatar.speaking {
+  box-shadow: 0 0 0 2px var(--ok), 0 0 14px var(--ok);
+}
+:root[data-style='neon'] .composer-row:focus-within {
+  box-shadow: 0 0 0 1px var(--accent), 0 0 18px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+/* Панели (data-panels): карточки с зазором (по умолчанию), встык, острые углы */
+:root[data-panels='solid'] {
+  --gap: 0px;
+  --panel-radius: 0;
+}
+:root[data-panels='solid'] .sidebar,
+:root[data-panels='solid'] .main,
+:root[data-panels='solid'] .members,
+:root[data-panels='solid'] .group-panel,
+:root[data-panels='solid'] .search-panel {
+  border-left: 1px solid var(--border);
+}
+:root[data-panels='sharp'] {
+  --panel-radius: 0;
+}
+/* Ширина боковых колонок (data-columns) — только на широком экране, на телефоне ширина своя */
+@media (min-width: 900px) {
+  :root[data-columns='narrow'] .sidebar {
+    width: 220px;
+  }
+  :root[data-columns='narrow'] .members,
+  :root[data-columns='narrow'] .group-panel {
+    width: 210px;
+  }
+  :root[data-columns='wide'] .sidebar {
+    width: 320px;
+  }
+  :root[data-columns='wide'] .members,
+  :root[data-columns='wide'] .group-panel {
+    width: 300px;
+  }
+}
 /* Масштаб интерфейса */
 :root[data-scaled] #root {
   zoom: var(--ui-scale, 1);
@@ -1292,6 +1367,69 @@ button.settings-download {
   border-color: var(--text);
   background: var(--bg-input);
   color: var(--text);
+}
+.style-demo {
+  display: flex;
+  gap: 3px;
+  width: 64px;
+  height: 36px;
+  padding: 4px;
+  border-radius: 6px;
+  box-sizing: border-box;
+  background: var(--bg-ground);
+  border: 1px solid var(--border);
+}
+.style-demo i {
+  display: block;
+  border-radius: 3px;
+  background: var(--bg-raised);
+}
+.style-demo i:first-child {
+  width: 12px;
+}
+.style-demo i:last-child {
+  flex: 1;
+}
+.style-demo.glass {
+  background: radial-gradient(40px 24px at 30% 30%, color-mix(in srgb, var(--accent) 50%, transparent), transparent 70%), var(--bg-ground);
+}
+.style-demo.glass i {
+  background: color-mix(in srgb, var(--bg-panel) 60%, transparent);
+  border: 1px solid var(--border);
+}
+.style-demo.neon i {
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.style-demo.solid {
+  gap: 0;
+}
+.style-demo.solid i {
+  border-radius: 0;
+}
+.style-demo.solid i:first-child {
+  border-right: 1px solid var(--bg-ground);
+}
+.style-demo.sharp i {
+  border-radius: 0;
+}
+.accent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.accent-row input[type='color'] {
+  width: 56px;
+  height: 36px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  cursor: pointer;
+}
+.accent-row input[type='text'] {
+  width: 96px;
+  font-variant-numeric: tabular-nums;
 }
 .radius-demo {
   display: block;

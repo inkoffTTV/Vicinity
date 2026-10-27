@@ -40,6 +40,19 @@ test('appearance: radius, scale, font and glass apply to <html> and sync to the 
   await expect(html).toHaveAttribute('data-scaled', '');
   await a.page.getByRole('radio', { name: 'Не в фокусе' }).click();
   await expect(html).toHaveAttribute('data-eco-mode', 'unfocused');
+  // Стиль, панели, колонки и свой акцент
+  await expect(html).toHaveAttribute('data-style', 'glass');
+  await a.page.getByRole('radio', { name: 'Строгий' }).click();
+  await expect(html).toHaveAttribute('data-style', 'strict');
+  await a.page.getByRole('radio', { name: 'Сплошные' }).click();
+  await expect(html).toHaveAttribute('data-panels', 'solid');
+  await a.page.getByRole('radio', { name: 'Широкие' }).click();
+  await expect(html).toHaveAttribute('data-columns', 'wide');
+  await a.page.getByLabel('Код цвета').fill('#FF7A00');
+  await a.page.getByLabel('Код цвета').press('Enter');
+  expect(await a.page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim())).toBe('#ff7a00');
+  await a.page.getByRole('button', { name: 'Как у темы' }).click();
+  expect(await a.page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim())).not.toBe('#ff7a00');
 
   // Шрифт
   await a.page.getByRole('tab', { name: 'Шрифт' }).click();
@@ -53,7 +66,9 @@ test('appearance: radius, scale, font and glass apply to <html> and sync to the 
   const alice = await apiUser(request, a);
   await expect
     .poll(async () => (await call(request, alice, 'GET', '/settings/appearance')).body.settings)
-    .toMatchObject({ radius: 'large', scale: 110, eco: 'unfocused', font_family: 'comfortaa', font_px: 18, font_weight: 600 });
+    .toMatchObject({ radius: 'large', scale: 110, eco: 'unfocused', font_family: 'comfortaa', font_px: 18, font_weight: 600, style: 'strict', panels: 'solid', columns: 'wide', accent: '' });
+  expect((await call(request, alice, 'PATCH', '/settings/appearance', { style: 'plasma' })).status).toBe(400);
+  expect((await call(request, alice, 'PATCH', '/settings/appearance', { panels: 'round' })).status).toBe(400);
   expect((await call(request, alice, 'PATCH', '/settings/appearance', { radius: 'oval' })).status).toBe(400);
   expect((await call(request, alice, 'PATCH', '/settings/appearance', { scale: 101 })).status).toBe(400);
   expect((await call(request, alice, 'PATCH', '/settings/appearance', { background: { image: 'https://evil/x.png' } })).status).toBe(400);

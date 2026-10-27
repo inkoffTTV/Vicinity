@@ -75,6 +75,9 @@ static Json::Value defaults() {
     v["high_contrast"]     = false;
     v["app_icon"]          = "classic";
     v["radius"]            = "medium";   // скругление углов: none | small | medium | large
+    v["style"]             = "glass";    // стиль: strict (плоско, без стекла и свечений) | glass | neon
+    v["panels"]            = "cards";    // панели: cards (карточки с зазором) | solid (встык) | sharp (острые углы)
+    v["columns"]           = "normal";   // ширина боковых колонок: narrow | normal | wide
     v["font_family"]       = "default";  // шрифт интерфейса (список в web/src/lib/fonts.ts)
     v["font_px"]           = 0;          // базовый размер шрифта, 0 — авто
     v["font_weight"]       = 0;          // 0 — авто, 400…700
@@ -177,6 +180,9 @@ void SettingsController::patchAppearance(const HttpRequestPtr& req, std::functio
         if (!oneOf("server_theme", {"mine", "default"}))                  { bad("server_theme"); return; }
         if (!oneOf("font_size", {"s", "m", "l"}))                          { bad("font_size"); return; }
         if (!oneOf("radius", {"none", "small", "medium", "large"}))         { bad("radius"); return; }
+        if (!oneOf("style", {"strict", "glass", "neon"}))                   { bad("style"); return; }
+        if (!oneOf("panels", {"cards", "solid", "sharp"}))                  { bad("panels"); return; }
+        if (!oneOf("columns", {"narrow", "normal", "wide"}))                { bad("columns"); return; }
         if (!oneOf("eco", {"off", "minimized", "unfocused"}))              { bad("eco"); return; }
         if (!oneOf("font_family", {"default", "system", "comfortaa", "oswald", "exo", "playfair", "jetbrains",
                                    "caveat", "lobster", "pressstart", "russo", "unbounded"}))   { bad("font_family"); return; }
