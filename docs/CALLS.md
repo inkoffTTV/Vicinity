@@ -182,6 +182,15 @@ The client (`web/src/lib/listen.ts`) mirrors the state, plays `queue[0].preview`
 `position_ms + (now − received)` and re-seeks when it drifts by more than a second; it is silent while deafened or
 not joined. Music volume is a local slider on top of the output volume. When the channel empties the room is dropped.
 
+### 2.8 Live ping
+
+While connected through the SFU, `web/src/lib/sfu.ts` samples the local microphone sender's `getStats()` every 2 s
+(every fourth stats tick) and takes `currentRoundTripTime` of the nominated `candidate-pair`. `lib/voice.ts` keeps
+`rtt` (ms) and `net` (`good` < 150 ms, `fair` < 400 ms, otherwise `poor`; `unknown` without a sample or on the
+WebSocket PCM path) and updates them only when the value moves by ≥ 5 ms. The chip (`VoicePing` in
+`components/VoiceBar.tsx`) sits next to «Голос подключён» in the voice bar and next to the member counter in the
+stage header; it is hidden until the first sample. Colours: `ok` / `idle` / `dnd` tokens.
+
 ## 3. 1:1 calls
 
 ### 3.1 Server relay

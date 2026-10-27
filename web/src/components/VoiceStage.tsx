@@ -32,7 +32,7 @@ import { ScreenShareControl } from './ScreenShareControl';
 import { ActivitiesButton } from './Activities';
 import { ListenPanel } from './ListenTogether';
 import { useListen } from '../lib/listen';
-import { voicePlace } from './VoiceBar';
+import { voicePlace, VoicePing } from './VoiceBar';
 import { useVoiceUsers } from './VoiceRoom';
 
 type StoreState = ReturnType<typeof useStore.getState>;
@@ -91,6 +91,7 @@ export function VoiceStage({ onMenu }: { onMenu: () => void }) {
         <span className="stage-count" title="Участников в канале">
           <Icon icon={Users} size={16} /> {users.length}
         </span>
+        {live && <VoicePing />}
         {streaming > 0 && (
           <span className="live-badge" title="Идут трансляции">
             LIVE {streaming}
@@ -99,7 +100,6 @@ export function VoiceStage({ onMenu }: { onMenu: () => void }) {
       </header>
 
       <div className={`stage-body${streams.length ? ' has-focus' : ''}`}>
-        {(listenOpen || listenQueue > 0) && <ListenPanel names={Object.fromEntries(users.map((u) => [u.user_id, u.name]))} />}
         {streams.length > 0 && (
           <div className={`stage-focus n${Math.min(streams.length, 4)}`}>
             {streams.map(([key, w]) => (
@@ -113,6 +113,7 @@ export function VoiceStage({ onMenu }: { onMenu: () => void }) {
           ))}
           {!live && <div className="stage-wait muted">{connected ? 'Подключение…' : 'Нет связи…'}</div>}
         </div>
+        {(listenOpen || listenQueue > 0) && <ListenPanel names={Object.fromEntries(users.map((u) => [u.user_id, u.name]))} />}
       </div>
 
       <div className="stage-controls" role="toolbar" aria-label="Управление голосом">
@@ -206,8 +207,6 @@ function Tile({ user, watching, compact }: { user: VoiceUser; watching: Record<s
     >
       {camStream ? (
         <StreamVideo stream={camStream} className={`stage-tile-video${me ? ' mirror' : ''}`} />
-      ) : me && ownScreen && !compact ? (
-        <StreamVideo stream={ownScreen} className="stage-tile-video screen-preview" />
       ) : (
         <Avatar name={user.name} src={avatar} id={user.user_id} size={compact ? 48 : 80} speaking={speaking} />
       )}
@@ -225,10 +224,11 @@ function Tile({ user, watching, compact }: { user: VoiceUser; watching: Record<s
         )}
       </div>
       {user.screen && (
-        <span className="live-badge stage-live" title="Показывает экран">
+        <span className="live-badge stage-live" title={me ? 'Вы показываете экран' : 'Показывает экран'}>
           LIVE
         </span>
       )}
+      {me && ownScreen && <span className="stage-tile-own-screen">Вы показываете экран</span>}
       {cam && cam.state === 'connecting' && <span className="stage-tile-wait">Подключение камеры…</span>}
       {!me && user.screen && (
         <button
