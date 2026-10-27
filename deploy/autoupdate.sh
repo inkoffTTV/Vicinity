@@ -19,6 +19,12 @@ branch=${BRANCH:-$(git -C "$repo" rev-parse --abbrev-ref HEAD 2>/dev/null || ech
 every=${EVERY:-5}
 
 say() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$log"; }
+# Оповещение о падении: VICINITY_ALERT_URL в deploy/.env (healthchecks.io, ntfy, свой вебхук) — туда уходит POST с текстом
+alert() {
+    url=$(sed -n 's/^VICINITY_ALERT_URL=//p' "$here/.env" 2>/dev/null | tr -d '"' | head -n 1)
+    [ -n "$url" ] || return 0
+    curl -fsS -m 10 -X POST --data-raw "vicinity autoupdate: $*" "$url" >/dev/null 2>&1 || say "оповещение не отправилось ($url)"
+}
 
 cron_line() {
     printf '*/%s * * * * sh %s/autoupdate.sh >/dev/null 2>&1\n' "$every" "$here"
@@ -40,6 +46,7 @@ run_update() {
     # 1. Что в ветке
     if ! git -C "$repo" fetch -q origin "$branch"; then
         say "не удалось получить origin/$branch (нет сети или доступа к GitHub)"
+        alert "не удалось получить origin/$branch"
         return 1
     fi
     local_sha=$(git -C "$repo" rev-parse HEAD)
@@ -70,6 +77,7 @@ run_update() {
             # update.sh отработал, но код не сменился (например, pull не прошёл) — не крутить сборку каждые 5 минут
             echo "$remote_sha" > "$failed"
             say "ОШИБКА: update.sh завершился, но сервер остался на $(printf '%.7s' "$(git -C "$repo" rev-parse HEAD)") — см. $log"
+            alert "update.sh завершился, но сервер остался на старом коммите"
             return 1
         fi
         rm -f "$failed"
@@ -77,6 +85,7 @@ run_update() {
     else
         echo "$remote_sha" > "$failed"
         say "ОШИБКА: обновление на $(printf '%.7s' "$remote_sha") не удалось — подробности выше в $log; повтор после нового коммита или: sh deploy/autoupdate.sh now"
+        alert "обновление на $(printf '%.7s' "$remote_sha") упало, см. deploy/autoupdate.log"
         return 1
     fi
 }

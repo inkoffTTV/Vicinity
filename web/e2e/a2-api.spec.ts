@@ -542,7 +542,7 @@ test.describe.serial('backend feature API', () => {
     // Новый код приглашения: старый перестаёт работать
     expect((await api(request, b, 'POST', `/servers/${srv.id}/invite`)).status).toBe(403);
     const invite = await api(request, a, 'POST', `/servers/${srv.id}/invite`);
-    expect(invite.body.invite_code).toMatch(/^[A-Z2-9]{6}$/);
+    expect(invite.body.invite_code).toMatch(/^[A-Z2-9]{8}$/);
     expect(invite.body.invite_code).not.toBe(srv.code);
     expect((await api(request, c, 'POST', '/servers/join', { code: srv.code })).status).toBe(404);
     expect((await api(request, c, 'POST', '/servers/join', { code: invite.body.invite_code })).status).toBe(200);
@@ -631,4 +631,12 @@ test.describe.serial('backend feature API', () => {
     expect(rest.body.sessions[0].current).toBe(true);
     expect((await request.get(`${API}/auth/sessions`)).status()).toBe(401);
   });
+});
+
+// GET /health — проверка базы для healthcheck Docker и мониторинга (docs/API.md §0)
+test('health endpoint answers without a token and checks the database', async ({ request }) => {
+  const r = await request.get('/api/v1/health');
+  expect(r.status()).toBe(200);
+  expect(await r.json()).toEqual({ ok: true });
+  expect(r.headers()['cache-control']).toContain('no-store');
 });

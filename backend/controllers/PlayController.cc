@@ -1,4 +1,5 @@
 #include "PlayController.h"
+#include "../utils/HttpUtils.h"
 #include "../utils/Activity.h"
 #include "../managers/UserRateLimiter.h"
 #include "../models/User.h"
@@ -123,7 +124,7 @@ void PlayController::me(const HttpRequestPtr& req, std::function<void(const Http
     try {
         cb(jsonResp(statsJson(loadStats(app().getDbClient(), self, game), tierOf(self))));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -185,7 +186,7 @@ void PlayController::result(const HttpRequestPtr& req, std::function<void(const 
         for (const auto& f : fresh) out["fresh"].append(f);
         cb(jsonResp(out));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -214,7 +215,7 @@ void PlayController::cosmetic(const HttpRequestPtr& req, std::function<void(cons
         s.cosmetic = c;
         cb(jsonResp(statsJson(s, tier)));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -251,6 +252,6 @@ void PlayController::daily(const HttpRequestPtr& req, std::function<void(const H
         }
         cb(jsonResp(out));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }

@@ -408,6 +408,8 @@ void WSController::handleNewMessage(const WebSocketConnectionPtr& conn,
         if (!s || s->closing) return;
         const int64_t userId = s->userId;
 
+        // Текстовый кадр больше 64 КБ — не наш протокол (самое крупное — activity 16 КБ)
+        if (type != WebSocketMessageType::Binary && msg.size() > 64 * 1024) return;
         if (type == WebSocketMessageType::Binary) {
             relayVoice(userId, conn, msg);
             return;

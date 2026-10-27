@@ -1,4 +1,5 @@
 #include "AdminController.h"
+#include "../utils/HttpUtils.h"
 #include "../utils/Gifts.h"
 #include "../models/Cascade.h"
 #include "../models/User.h"
@@ -47,6 +48,8 @@ static void banUser(int64_t id) {
 // GET /api/v1/admin/users?q=&limit= — пользователи (новые первыми) и самые частые IP регистраций за неделю
 void AdminController::listUsers(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
     if (!requireAdmin(req, cb)) return;
+    LOG_INFO << "admin " << req->attributes()->get<int64_t>("user_id") << " " << req->methodString() << " " << req->path()
+             << " " << req->body().substr(0, 300);
     const std::string q = TextUtils::trim(req->getParameter("q"));
     int limit = 200;
     try { if (!req->getParameter("limit").empty()) limit = std::stoi(req->getParameter("limit")); } catch (...) {}
@@ -103,7 +106,7 @@ void AdminController::listUsers(const HttpRequestPtr& req, std::function<void(co
         resp["banned"]  = static_cast<Json::Int64>(totals[0]["banned"].isNull() ? 0 : totals[0]["banned"].as<int64_t>());
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -111,6 +114,8 @@ void AdminController::listUsers(const HttpRequestPtr& req, std::function<void(co
 void AdminController::setBanned(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb,
                                 int64_t id) {
     if (!requireAdmin(req, cb)) return;
+    LOG_INFO << "admin " << req->attributes()->get<int64_t>("user_id") << " " << req->methodString() << " " << req->path()
+             << " " << req->body().substr(0, 300);
     auto json = req->getJsonObject();
     const bool banned = json ? JsonUtils::getBool(*json, "banned", true) : true;
     const int64_t self = req->attributes()->get<int64_t>("user_id");
@@ -127,7 +132,7 @@ void AdminController::setBanned(const HttpRequestPtr& req, std::function<void(co
         resp["banned"] = banned;
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -135,6 +140,8 @@ void AdminController::setBanned(const HttpRequestPtr& req, std::function<void(co
 void AdminController::setTier(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb,
                               int64_t id) {
     if (!requireAdmin(req, cb)) return;
+    LOG_INFO << "admin " << req->attributes()->get<int64_t>("user_id") << " " << req->methodString() << " " << req->path()
+             << " " << req->body().substr(0, 300);
     auto json = req->getJsonObject();
     if (!json || !json->isObject() || !(*json)["tier"].isIntegral()) { cb(error("Invalid JSON", k400BadRequest)); return; }
     const int tier = (*json)["tier"].asInt();
@@ -148,7 +155,7 @@ void AdminController::setTier(const HttpRequestPtr& req, std::function<void(cons
         cb(jsonResp(std::move(resp)));
         Broadcast::userUpdated(id);   // значок у ника обновится у друзей и на общих серверах
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -156,6 +163,8 @@ void AdminController::setTier(const HttpRequestPtr& req, std::function<void(cons
 void AdminController::deleteUser(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb,
                                  int64_t id) {
     if (!requireAdmin(req, cb)) return;
+    LOG_INFO << "admin " << req->attributes()->get<int64_t>("user_id") << " " << req->methodString() << " " << req->path()
+             << " " << req->body().substr(0, 300);
     auto target = UserModel::findById(id);
     if (!target) { cb(error("Пользователь не найден", k404NotFound)); return; }
     // Защита от случайного клика: удалить можно только того, кого уже заблокировали
@@ -172,13 +181,15 @@ void AdminController::deleteUser(const HttpRequestPtr& req, std::function<void(c
         resp["status"] = "ok";
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
 // GET /api/v1/admin/blocked-ips
 void AdminController::listBlocked(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
     if (!requireAdmin(req, cb)) return;
+    LOG_INFO << "admin " << req->attributes()->get<int64_t>("user_id") << " " << req->methodString() << " " << req->path()
+             << " " << req->body().substr(0, 300);
     try {
         auto rows = drogon::app().getDbClient()->execSqlSync(
             "SELECT b.ip, b.note, b.created_at, "
@@ -197,7 +208,7 @@ void AdminController::listBlocked(const HttpRequestPtr& req, std::function<void(
         resp["blocked"] = arr;
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -205,6 +216,8 @@ void AdminController::listBlocked(const HttpRequestPtr& req, std::function<void(
 // ban_accounts — заодно заблокировать все аккаунты, зарегистрированные с него (кроме администраторов)
 void AdminController::blockIp(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
     if (!requireAdmin(req, cb)) return;
+    LOG_INFO << "admin " << req->attributes()->get<int64_t>("user_id") << " " << req->methodString() << " " << req->path()
+             << " " << req->body().substr(0, 300);
     auto json = req->getJsonObject();
     if (!json || !json->isObject()) { cb(error("Invalid JSON", k400BadRequest)); return; }
     const std::string ip = TextUtils::trim(JsonUtils::getStr(*json, "ip"));
@@ -229,7 +242,7 @@ void AdminController::blockIp(const HttpRequestPtr& req, std::function<void(cons
         resp["banned"] = bannedCount;
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -237,19 +250,23 @@ void AdminController::blockIp(const HttpRequestPtr& req, std::function<void(cons
 void AdminController::unblockIp(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb,
                                 const std::string& ip) {
     if (!requireAdmin(req, cb)) return;
+    LOG_INFO << "admin " << req->attributes()->get<int64_t>("user_id") << " " << req->methodString() << " " << req->path()
+             << " " << req->body().substr(0, 300);
     try {
         drogon::app().getDbClient()->execSqlSync("DELETE FROM blocked_ips WHERE ip = ?", ip);
         Json::Value resp;
         resp["status"] = "ok";
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
 // POST /api/v1/admin/gifts {tier 1..3, days 1..3650, count 1..50, note} → {codes:[{code, tier, days}]}
 void AdminController::createGifts(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
     if (!requireAdmin(req, cb)) return;
+    LOG_INFO << "admin " << req->attributes()->get<int64_t>("user_id") << " " << req->methodString() << " " << req->path()
+             << " " << req->body().substr(0, 300);
     const int64_t self = req->attributes()->get<int64_t>("user_id");
     auto json = req->getJsonObject();
     if (!json || !json->isObject()) { cb(error("Invalid JSON", k400BadRequest)); return; }
@@ -265,18 +282,20 @@ void AdminController::createGifts(const HttpRequestPtr& req, std::function<void(
         resp["codes"] = Gifts::create(self, tier, days, count, note);
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
 // GET /api/v1/admin/gifts → {gifts:[...]}
 void AdminController::listGifts(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
     if (!requireAdmin(req, cb)) return;
+    LOG_INFO << "admin " << req->attributes()->get<int64_t>("user_id") << " " << req->methodString() << " " << req->path()
+             << " " << req->body().substr(0, 300);
     try {
         Json::Value resp;
         resp["gifts"] = Gifts::list();
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }

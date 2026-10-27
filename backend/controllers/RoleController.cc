@@ -1,4 +1,5 @@
 #include "RoleController.h"
+#include "../utils/HttpUtils.h"
 #include "../models/User.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/TextUtils.h"
@@ -40,7 +41,7 @@ void RoleController::listRoles(const HttpRequestPtr& req,
         Json::Value resp; resp["roles"] = arr;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -83,7 +84,7 @@ void RoleController::createRole(const HttpRequestPtr& req,
         resp["color"] = color; resp["is_premium"] = isPremium; resp["icon"] = icon;
         cb(jsonResp(resp, k201Created));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -109,7 +110,7 @@ void RoleController::myRoles(const HttpRequestPtr& req,
         Json::Value resp; resp["roles"] = arr;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -152,7 +153,7 @@ void RoleController::assignRole(const HttpRequestPtr& req,
         Json::Value resp; resp["status"] = "assigned";
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -172,6 +173,6 @@ void RoleController::unassignRole(const HttpRequestPtr& req,
         Json::Value resp; resp["status"] = "unassigned";
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }

@@ -1,4 +1,5 @@
 #include "AccountController.h"
+#include "../utils/HttpUtils.h"
 #include "../models/User.h"
 #include "../utils/Broadcast.h"
 #include "../utils/CryptoUtils.h"
@@ -90,7 +91,7 @@ void AccountController::info(const HttpRequestPtr& req, std::function<void(const
         v["mail"]                = Mailer::configured();
         cb(jsonResp(std::move(v)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -144,7 +145,7 @@ void AccountController::setUsername(const HttpRequestPtr& req, std::function<voi
     } catch (const drogon::orm::DrogonDbException&) {
         cb(error("Этот логин уже занят", k409Conflict));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -158,7 +159,7 @@ void AccountController::email(const HttpRequestPtr& req, std::function<void(cons
         resp->addHeader("Cache-Control", "no-store");
         cb(resp);
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -202,7 +203,7 @@ void AccountController::emailStart(const HttpRequestPtr& req, std::function<void
         v["resend_in"]    = RESEND_COOLDOWN;
         cb(jsonResp(std::move(v)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -245,7 +246,7 @@ void AccountController::emailVerify(const HttpRequestPtr& req, std::function<voi
     } catch (const drogon::orm::DrogonDbException&) {
         cb(error("Эта почта уже привязана к другому аккаунту", k409Conflict));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -270,7 +271,7 @@ void AccountController::emailResend(const HttpRequestPtr& req, std::function<voi
         v["resend_in"] = RESEND_COOLDOWN;
         cb(jsonResp(std::move(v)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -291,7 +292,7 @@ void AccountController::totpSetup(const HttpRequestPtr& req, std::function<void(
         v["uri"]    = Totp::uri(secret, me->username);
         cb(jsonResp(std::move(v)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -315,7 +316,7 @@ void AccountController::totpEnable(const HttpRequestPtr& req, std::function<void
         for (const auto& c : codes) v["backup_codes"].append(c);
         cb(jsonResp(std::move(v)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -332,6 +333,6 @@ void AccountController::totpDisable(const HttpRequestPtr& req, std::function<voi
         v["status"] = "ok";
         cb(jsonResp(std::move(v)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }

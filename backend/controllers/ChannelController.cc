@@ -108,7 +108,7 @@ void ChannelController::members(const HttpRequestPtr& req,
         resp["members"] = arr;
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -155,7 +155,7 @@ void ChannelController::leave(const HttpRequestPtr& req,
         resp["status"] = "left";
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -209,7 +209,7 @@ void ChannelController::update(const HttpRequestPtr& req,
         if (info.serverId != 0) serverChannelsChanged(info.serverId);
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -238,7 +238,7 @@ void ChannelController::uploadBackground(const HttpRequestPtr& req,
         resp["file_url"] = saved.url;
         cb(HttpUtils::json(std::move(resp), k201Created));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -280,7 +280,7 @@ void ChannelController::remove(const HttpRequestPtr& req,
         resp["status"] = "deleted";
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -314,7 +314,7 @@ void ChannelController::listPins(const HttpRequestPtr& req,
         resp["pins"] = arr;
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -348,7 +348,7 @@ void ChannelController::pin(const HttpRequestPtr& req,
         resp["status"] = "pinned";
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -373,6 +373,6 @@ void ChannelController::unpin(const HttpRequestPtr& req,
         resp["status"] = "unpinned";
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }

@@ -101,6 +101,6 @@ void SearchController::search(const HttpRequestPtr& req,
         resp["results"] = arr;
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }

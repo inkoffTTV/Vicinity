@@ -1,4 +1,5 @@
 #include "AuthController.h"
+#include "../utils/HttpUtils.h"
 #include "../models/User.h"
 #include "../managers/SessionManager.h"
 #include "../utils/CryptoUtils.h"
@@ -12,6 +13,9 @@
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/HttpResponse.h>
 #include <drogon/drogon.h>
+#include <mutex>
+#include <map>
+#include <chrono>
 #include <cctype>
 #include <cstdio>
 #include <optional>
@@ -169,7 +173,7 @@ static HttpResponsePtr createAccount(const std::string& username, const std::str
         if (!email.empty()) return error("Эта почта уже привязана к другому аккаунту", k409Conflict);
         return error(e.base().what(), k500InternalServerError);
     } catch (const std::exception& e) {
-        return error(e.what(), k500InternalServerError);
+        return error(HttpUtils::internal(e), k500InternalServerError);
     }
 }
 
@@ -191,7 +195,7 @@ void AuthController::challenge(const HttpRequestPtr&, std::function<void(const H
         resp->addHeader("Cache-Control", "no-store");
         cb(resp);
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -290,7 +294,7 @@ void AuthController::registerStart(const HttpRequestPtr& req,
         resp["resend_in"]  = RESEND_COOLDOWN;
         cb(jsonResp(std::move(resp), k202Accepted));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -342,7 +346,7 @@ void AuthController::registerVerify(const HttpRequestPtr& req,
             db->execSqlSync("DELETE FROM pending_signups WHERE id = ?", id);
         cb(resp);
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -381,12 +385,39 @@ void AuthController::registerResend(const HttpRequestPtr& req,
         resp["expires_in"] = CODE_TTL_MIN * 60;
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
 static HttpResponsePtr sessionResponseImpl(const User& user, const HttpRequestPtr& req);
 static HttpResponsePtr sessionResponse(const User& user, const HttpRequestPtr& req) { return sessionResponseImpl(user, req); }
+
+// Подбор пароля по аккаунту: лимит по IP обходится ротацией адресов, поэтому считаем неудачи и по логину.
+// 5 ошибок подряд — 15 минут отказа (ответ 429, не раскрывает, существует ли аккаунт).
+namespace {
+struct LoginFails { int count = 0; std::chrono::steady_clock::time_point until{}; };
+std::mutex g_loginMu;
+std::map<std::string, LoginFails> g_loginFails;
+constexpr int kLoginMaxFails = 5;
+constexpr auto kLoginLock = std::chrono::minutes(15);
+bool loginLocked(const std::string& username) {
+    std::lock_guard<std::mutex> lk(g_loginMu);
+    const auto it = g_loginFails.find(username);
+    return it != g_loginFails.end() && it->second.count >= kLoginMaxFails && std::chrono::steady_clock::now() < it->second.until;
+}
+void loginFailed(const std::string& username) {
+    std::lock_guard<std::mutex> lk(g_loginMu);
+    if (g_loginFails.size() > 10000) g_loginFails.clear();   // память: при потопе логинов сбрасываем счётчики
+    auto& f = g_loginFails[username];
+    if (f.count >= kLoginMaxFails && std::chrono::steady_clock::now() >= f.until) f.count = 0;
+    if (++f.count >= kLoginMaxFails) f.until = std::chrono::steady_clock::now() + kLoginLock;
+}
+void loginSucceeded(const std::string& username) {
+    std::lock_guard<std::mutex> lk(g_loginMu);
+    g_loginFails.erase(username);
+}
+}  // namespace
+
 
 void AuthController::login(const HttpRequestPtr& req,
                            std::function<void(const HttpResponsePtr&)>&& cb) {
@@ -396,10 +427,17 @@ void AuthController::login(const HttpRequestPtr& req,
     std::string username = JsonUtils::getStr(*json, "username");
     std::string password = JsonUtils::getStr(*json, "password");
 
+    if (loginLocked(username)) {
+        LOG_WARN << "login locked for '" << username << "' from " << NetUtils::clientIp(req);
+        cb(error("Слишком много неудачных попыток, подождите 15 минут", k429TooManyRequests)); return;
+    }
     auto user = UserModel::findByUsername(username);
     if (!user || !CryptoUtils::verifyPassword(password, user->passwordHash)) {
+        LOG_WARN << "login failed for '" << username << "' from " << NetUtils::clientIp(req);
+        loginFailed(username);
         cb(error("Invalid credentials", k401Unauthorized)); return;
     }
+    loginSucceeded(username);
     // Только после проверки пароля: иначе по ответу можно было бы узнать, что аккаунт существует
     if (user->banned) { cb(error("Аккаунт заблокирован администратором", k403Forbidden)); return; }
 
@@ -448,7 +486,7 @@ void AuthController::loginTwoFactor(const HttpRequestPtr& req, std::function<voi
         if (!user || user->banned) { cb(error("Вход недоступен", k403Forbidden)); return; }
         cb(sessionResponse(*user, req));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -458,7 +496,7 @@ static HttpResponsePtr sessionResponseImpl(const User& user, const HttpRequestPt
     try {
         token = AppSessionManager::instance().createSession(user.id, req->getHeader("User-Agent"), NetUtils::clientIp(req));
     } catch (const std::exception& e) {
-        return error(e.what(), k500InternalServerError);
+        return error(HttpUtils::internal(e), k500InternalServerError);
     }
     const auto* u = &user;
 
@@ -538,7 +576,7 @@ void AuthController::changePassword(const HttpRequestPtr& req,
         resp["revoked"] = revoked;
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -563,7 +601,7 @@ void AuthController::sessions(const HttpRequestPtr& req,
         resp["sessions"] = arr;
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -578,7 +616,7 @@ void AuthController::revokeOthers(const HttpRequestPtr& req,
         resp["revoked"] = AppSessionManager::instance().deleteOtherSessions(userId, token);
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -595,6 +633,6 @@ void AuthController::revokeSession(const HttpRequestPtr& req,
         resp["status"] = "ok";
         cb(jsonResp(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }

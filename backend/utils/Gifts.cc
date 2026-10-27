@@ -102,11 +102,13 @@ bool redeem(int64_t userId, const std::string& raw, Json::Value& out, std::strin
     // Тот же уровень с датой окончания — продлеваем от неё (если она в будущем), иначе от сегодня
     const bool extend = cur == tier && hasUntil;
     const std::string shift = "+" + std::to_string(days) + " days";
+    // Сначала занимаем код одним условным UPDATE: два одновременных запроса не активируют его дважды
+    auto taken = db->execSqlSync("UPDATE gift_codes SET redeemed_by = ?, redeemed_at = CURRENT_TIMESTAMP WHERE code = ? AND redeemed_by IS NULL RETURNING code", userId, code);
+    if (taken.empty()) { error = "Этот код уже активирован"; status = 409; return false; }
     if (extend)
         db->execSqlSync("UPDATE users SET subscription_until = datetime(MAX(subscription_until, CURRENT_TIMESTAMP), ?) WHERE id = ?", shift, userId);
     else
         db->execSqlSync("UPDATE users SET subscription_tier = ?, subscription_until = datetime(CURRENT_TIMESTAMP, ?) WHERE id = ?", tier, shift, userId);
-    db->execSqlSync("UPDATE gift_codes SET redeemed_by = ?, redeemed_at = CURRENT_TIMESTAMP WHERE code = ?", userId, code);
     auto after = db->execSqlSync("SELECT subscription_tier, subscription_until FROM users WHERE id = ?", userId);
     out["tier"]  = after[0]["subscription_tier"].as<int>();
     out["name"]  = tierName(out["tier"].asInt());

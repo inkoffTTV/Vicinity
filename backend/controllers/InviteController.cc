@@ -64,7 +64,7 @@ void InviteController::list(const HttpRequestPtr& req, std::function<void(const 
         resp["invites"] = arr;
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -138,7 +138,7 @@ void InviteController::accept(const HttpRequestPtr& req, std::function<void(cons
         }
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -157,6 +157,6 @@ void InviteController::decline(const HttpRequestPtr& req, std::function<void(con
         resp["status"] = "declined";
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }

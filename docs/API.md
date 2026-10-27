@@ -14,6 +14,10 @@ WebSocket `/ws` принимает токен в заголовке или ка�
 
 ## 0. Регистрация и админ-панель **[new]**
 
+GET `/health` (без авторизации) → `{ok: true}` 200, если сервер и база отвечают (`SELECT 1`), иначе `{ok: false}` 503.
+Для healthcheck Docker (`deploy/docker-compose.yml`) и внешнего мониторинга.
+
+
 Режим регистрации — `custom_config.registration.mode` (Docker: `VICINITY_REGISTRATION`):
 `email` (капча + код из письма; по умолчанию, если настроен SMTP), `captcha` (только капча; по умолчанию без SMTP),
 `open` (без проверок), `closed`. Лимит — `signups_per_ip_per_day` успешных регистраций с одного IP за сутки

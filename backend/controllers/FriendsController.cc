@@ -1,4 +1,5 @@
 #include "FriendsController.h"
+#include "../utils/HttpUtils.h"
 #include "../managers/UserRateLimiter.h"
 #include "../utils/Broadcast.h"
 #include "../utils/JsonUtils.h"
@@ -55,7 +56,7 @@ void FriendsController::listFriends(const HttpRequestPtr& req,
         for (const auto& row : r) arr.append(userSummary(row, self));
         Json::Value resp; resp["friends"] = arr;
         cb(jsonResp(resp));
-    } catch (const std::exception& e) { cb(errResp(e.what(), k500InternalServerError)); }
+    } catch (const std::exception& e) { cb(errResp(HttpUtils::internal(e), k500InternalServerError)); }
 }
 
 // GET /api/v1/friends/pending — входящие/исходящие заявки
@@ -77,7 +78,7 @@ void FriendsController::pending(const HttpRequestPtr& req,
         for (const auto& row : out) outgoing.append(userSummary(row));
         Json::Value resp; resp["incoming"] = incoming; resp["outgoing"] = outgoing;
         cb(jsonResp(resp));
-    } catch (const std::exception& e) { cb(errResp(e.what(), k500InternalServerError)); }
+    } catch (const std::exception& e) { cb(errResp(HttpUtils::internal(e), k500InternalServerError)); }
 }
 
 // POST /api/v1/friends/request {user_id}
@@ -131,7 +132,7 @@ void FriendsController::request(const HttpRequestPtr& req,
         notify(target, "request", self);
         Json::Value resp; resp["status"] = "pending_out";
         cb(jsonResp(resp, k201Created));
-    } catch (const std::exception& e) { cb(errResp(e.what(), k500InternalServerError)); }
+    } catch (const std::exception& e) { cb(errResp(HttpUtils::internal(e), k500InternalServerError)); }
 }
 
 // POST /api/v1/friends/respond {user_id, accept}
@@ -161,7 +162,7 @@ void FriendsController::respond(const HttpRequestPtr& req,
             notify(other, "decline", self);
             Json::Value resp; resp["status"] = "none"; cb(jsonResp(resp));
         }
-    } catch (const std::exception& e) { cb(errResp(e.what(), k500InternalServerError)); }
+    } catch (const std::exception& e) { cb(errResp(HttpUtils::internal(e), k500InternalServerError)); }
 }
 
 // DELETE /api/v1/friends/{id} — удалить друга / отменить заявку / отклонить
@@ -177,5 +178,5 @@ void FriendsController::remove(const HttpRequestPtr& req,
         notify(other, "remove", self);
         Json::Value resp; resp["status"] = "none";
         cb(jsonResp(resp));
-    } catch (const std::exception& e) { cb(errResp(e.what(), k500InternalServerError)); }
+    } catch (const std::exception& e) { cb(errResp(HttpUtils::internal(e), k500InternalServerError)); }
 }

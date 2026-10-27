@@ -94,6 +94,6 @@ void RtcController::sfu(const HttpRequestPtr& req, std::function<void(const Http
         resp["token"]    = Sfu::token(userId, name, room, kSfuTokenTtlSec);
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(HttpUtils::error(e.what(), k500InternalServerError));
+        cb(HttpUtils::error(HttpUtils::internal(e), k500InternalServerError));
     }
 }

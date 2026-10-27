@@ -1,4 +1,5 @@
 #include "SettingsController.h"
+#include "../utils/HttpUtils.h"
 #include "ThemesController.h"
 #include "../models/User.h"
 #include "../utils/JsonUtils.h"
@@ -142,7 +143,7 @@ void SettingsController::getAppearance(const HttpRequestPtr& req, std::function<
         Json::Value v = load(userId, &stored);
         cb(jsonResp(withAccess(v, me ? me->subscriptionTier : 0, stored)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -313,6 +314,6 @@ void SettingsController::patchAppearance(const HttpRequestPtr& req, std::functio
             userId, Json::writeString(w, v));
         cb(jsonResp(withAccess(v, tier)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }

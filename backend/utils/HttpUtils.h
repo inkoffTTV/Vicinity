@@ -3,13 +3,22 @@
 #include <drogon/HttpRequest.h>
 #include <drogon/HttpResponse.h>
 #include <json/json.h>
+#include <trantor/utils/Logger.h>
 #include <cerrno>
+#include <exception>
 #include <cstdint>
 #include <cstdlib>
 #include <string>
 
 // Общие ответы REST-контроллеров: JSON, ошибки {"error": "..."} и разбор параметров запроса.
 namespace HttpUtils {
+
+/** Текст для клиента при необработанном исключении: подробности — в лог, наружу общая фраза
+ *  (текст ошибок SQLite раскрывает имена таблиц и ограничения) */
+inline std::string internal(const std::exception& e) {
+    LOG_ERROR << "internal error: " << e.what();
+    return "Внутренняя ошибка сервера";
+}
 
 inline drogon::HttpResponsePtr json(Json::Value body, drogon::HttpStatusCode code = drogon::k200OK) {
     auto resp = drogon::HttpResponse::newHttpJsonResponse(std::move(body));

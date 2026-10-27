@@ -1,4 +1,5 @@
 #include "ServerController.h"
+#include "../utils/HttpUtils.h"
 #include "../managers/WSManager.h"
 #include "../managers/VoiceManager.h"
 #include "../managers/UserRateLimiter.h"
@@ -6,6 +7,7 @@
 #include "../models/User.h"
 #include "../utils/Access.h"
 #include "../utils/Privacy.h"
+#include "../utils/CryptoUtils.h"
 #include "../utils/Broadcast.h"
 #include "../utils/Invites.h"
 #include "../utils/JsonUtils.h"
@@ -29,9 +31,8 @@ using namespace drogon::orm;
 // Короткий инвайт-код без похожих символов (без 0/O/1/I)
 static std::string genInviteCode() {
     static const char* cs = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    std::random_device rd; std::mt19937 g(rd());
-    std::uniform_int_distribution<> d(0, 31);
-    std::string s; for (int i = 0; i < 6; ++i) s += cs[d(g)];
+    std::string s;
+    for (int i = 0; i < 8; ++i) s += cs[CryptoUtils::randomBelow(32)];   // 32^8 ≈ 2^40 вариантов
     return s;
 }
 
@@ -202,7 +203,7 @@ void ServerController::createServer(const HttpRequestPtr& req,
         resp["invite_code"] = code;
         cb(jsonResp(resp, k201Created));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -232,7 +233,7 @@ void ServerController::listServers(const HttpRequestPtr& req,
         Json::Value resp; resp["servers"] = arr;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -259,7 +260,7 @@ void ServerController::card(const HttpRequestPtr& req, std::function<void(const 
         v["is_member"] = member;
         cb(jsonResp(v));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -284,7 +285,7 @@ void ServerController::joinServer(const HttpRequestPtr& req,
         Json::Value resp; resp["status"] = "joined"; resp["server_id"] = serverId;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -325,7 +326,7 @@ void ServerController::joinByCode(const HttpRequestPtr& req,
         resp["name"]      = s[0]["name"].as<std::string>();
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -343,6 +344,13 @@ void ServerController::addMember(const HttpRequestPtr& req,
     try {
         auto s = db->execSqlSync("SELECT name FROM servers WHERE id = ?", serverId);
         if (s.empty()) { cb(errResp("Сервер не найден", k404NotFound)); return; }
+        // Приглашение ждёт согласия (invites), но заблокировавшему вас слать его нельзя
+        if (target == self || Access::blockedBetween(db, self, target)) {
+            cb(errResp("Этого пользователя пригласить нельзя", k403Forbidden)); return;
+        }
+        if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::FriendRequest, self)) {
+            cb(errResp("Слишком много приглашений, подождите минуту", k429TooManyRequests)); return;
+        }
         if (!Access::isServerMember(db, serverId, self)) {
             cb(errResp("Вы не участник этого сервера", k403Forbidden)); return;
         }
@@ -366,7 +374,7 @@ void ServerController::addMember(const HttpRequestPtr& req,
         resp["server_id"] = static_cast<Json::Int64>(serverId);
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -409,7 +417,7 @@ void ServerController::createServerChannel(const HttpRequestPtr& req,
         resp["is_voice"]   = isVoice;
         cb(jsonResp(resp, k201Created));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -438,7 +446,7 @@ void ServerController::listServerChannels(const HttpRequestPtr& req,
         Json::Value resp; resp["channels"] = arr;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -503,7 +511,7 @@ void ServerController::listMembers(const HttpRequestPtr& req,
         Json::Value resp; resp["members"] = arr;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -527,7 +535,7 @@ void ServerController::removeMember(const HttpRequestPtr& req,
         Json::Value resp; resp["status"] = "removed";
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -551,7 +559,7 @@ void ServerController::leaveServer(const HttpRequestPtr& req,
         Json::Value resp; resp["status"] = "left";
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -578,7 +586,7 @@ void ServerController::deleteServer(const HttpRequestPtr& req,
         Json::Value resp; resp["status"] = "deleted";
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -615,7 +623,7 @@ void ServerController::updateServer(const HttpRequestPtr& req,
         serverUpdated(info);
         cb(jsonResp(info));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -666,7 +674,7 @@ void ServerController::regenerateInvite(const HttpRequestPtr& req,
         Json::Value resp; resp["invite_code"] = code;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -694,7 +702,7 @@ void ServerController::listBans(const HttpRequestPtr& req,
         Json::Value resp; resp["bans"] = arr;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -723,7 +731,7 @@ void ServerController::banMember(const HttpRequestPtr& req,
         Json::Value resp; resp["status"] = "banned";
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -739,6 +747,6 @@ void ServerController::unbanMember(const HttpRequestPtr& req,
         Json::Value resp; resp["status"] = "unbanned";
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }

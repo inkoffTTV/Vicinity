@@ -1,5 +1,6 @@
 #include "ChatController.h"
 #include "../managers/UserRateLimiter.h"
+#include "../utils/Privacy.h"
 #include "../utils/Access.h"
 #include "../utils/Broadcast.h"
 #include "../utils/HttpUtils.h"
@@ -95,7 +96,7 @@ void ChatController::createChannel(const HttpRequestPtr& req,
         resp["status"] = "created";
         cb(HttpUtils::json(std::move(resp), k201Created));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -145,7 +146,7 @@ void ChatController::getMessages(const HttpRequestPtr& req,
         resp["messages"] = arr;
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -246,7 +247,7 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
             resp[key] = msg[key];
         cb(HttpUtils::json(std::move(resp), k201Created));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -276,6 +277,13 @@ void ChatController::addMember(const HttpRequestPtr& req,
         auto mem = db->execSqlSync(
             "SELECT 1 FROM channel_members WHERE channel_id = ? AND user_id = ? LIMIT 1", channelId, self);
         if (mem.empty()) { cb(error("Вы не участник этой беседы", k403Forbidden)); return; }
+        // Приглашение ждёт согласия (invites), но заблокировавшему вас слать его нельзя
+        if (target == self || Access::blockedBetween(db, self, target)) {
+            cb(error("Этого пользователя пригласить нельзя", k403Forbidden)); return;
+        }
+        if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::FriendRequest, self)) {
+            cb(error("Слишком много приглашений, подождите минуту", k429TooManyRequests)); return;
+        }
         auto u = db->execSqlSync("SELECT id FROM users WHERE id = ?", target);
         if (u.empty()) { cb(error("Пользователь не найден", k404NotFound)); return; }
         if (Access::blockedBetween(db, self, target)) {
@@ -293,7 +301,7 @@ void ChatController::addMember(const HttpRequestPtr& req,
         resp["channel_id"] = static_cast<Json::Int64>(channelId);
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -329,7 +337,7 @@ void ChatController::editMessage(const HttpRequestPtr& req,
         Json::Value resp; resp["status"] = "edited";
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -348,9 +356,12 @@ void ChatController::deleteMessage(const HttpRequestPtr& req,
         const bool pinned = !db->execSqlSync("SELECT 1 FROM pins WHERE message_id = ? AND channel_id = ?",
                                              msgId, channelId).empty();
         auto r = db->execSqlSync(
-            "DELETE FROM messages WHERE id = ? AND channel_id = ? AND (author_id = ? OR ?) RETURNING id",
+            "DELETE FROM messages WHERE id = ? AND channel_id = ? AND (author_id = ? OR ?) RETURNING id, attachment",
             msgId, channelId, userId, serverOwner ? 1 : 0);
         if (r.empty()) { cb(error("Можно удалять только свои сообщения", k403Forbidden)); return; }
+        // Файл вложения иначе остался бы доступен по ссылке навсегда
+        if (!r[0]["attachment"].isNull() && !r[0]["attachment"].as<std::string>().empty())
+            Uploads::removeByUrl(r[0]["attachment"].as<std::string>());
         db->execSqlSync("DELETE FROM reactions WHERE message_id = ?", msgId);
         db->execSqlSync("DELETE FROM pins WHERE message_id = ?", msgId);
 
@@ -369,7 +380,7 @@ void ChatController::deleteMessage(const HttpRequestPtr& req,
         Json::Value resp; resp["status"] = "deleted";
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -415,7 +426,7 @@ void ChatController::toggleReaction(const HttpRequestPtr& req,
         resp["reactions"] = ws["reactions"];
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 

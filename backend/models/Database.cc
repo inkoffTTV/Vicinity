@@ -44,6 +44,7 @@ void initialize() {
     };
 
     exec("PRAGMA foreign_keys = ON");
+    exec("PRAGMA busy_timeout = 5000");   // онлайн-бэкап (backup.sh) читает ту же базу — ждём, а не падаем с SQLITE_BUSY
 
     exec("CREATE TABLE IF NOT EXISTS users ("
          "id INTEGER PRIMARY KEY AUTOINCREMENT,"

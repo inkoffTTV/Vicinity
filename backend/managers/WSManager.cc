@@ -21,6 +21,12 @@ WSManager& WSManager::instance() {
 bool WSManager::addConnection(int64_t user_id, const drogon::WebSocketConnectionPtr& conn) {
     std::unique_lock<std::shared_mutex> lock(mutex_);
     auto& list = connections_[user_id];
+    // Не больше 8 подключений на аккаунт (вкладки, десктоп, оверлей): лишние — закрываем самое старое
+    while (list.size() >= 8) {
+        auto old = list.front();
+        list.erase(list.begin());
+        if (old) old->shutdown(drogon::CloseCode::kNormalClosure, "too many connections");
+    }
     list.push_back(conn);
     LOG_INFO << "User " << user_id << " connected via WebSocket (" << list.size() << " connection(s)).";
     return list.size() == 1;

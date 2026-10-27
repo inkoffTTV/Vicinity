@@ -1,4 +1,5 @@
 #include "ProfileController.h"
+#include "../utils/HttpUtils.h"
 #include "../managers/UserRateLimiter.h"
 #include "../utils/Broadcast.h"
 #include "../utils/JsonUtils.h"
@@ -75,7 +76,7 @@ void ProfileController::updateProfile(const HttpRequestPtr& req,
         Broadcast::toUser(user_id, ev);
         Broadcast::userUpdated(user_id);
     } catch (const std::exception& e) {
-        callback(errResp(e.what(), k500InternalServerError));
+        callback(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -167,7 +168,7 @@ void ProfileController::updateBio(const HttpRequestPtr& req,
         callback(HttpResponse::newHttpJsonResponse(resp));
         Broadcast::userUpdated(user_id);
     } catch (const std::exception& e) {
-        callback(errResp(e.what(), k500InternalServerError));
+        callback(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -187,7 +188,7 @@ void ProfileController::clearMedia(const HttpRequestPtr& req,
         Json::Value resp; resp["status"] = "success";
         callback(HttpResponse::newHttpJsonResponse(resp));
         Broadcast::userUpdated(user_id);
-    } catch (const std::exception& e) { callback(errResp(e.what(), k500InternalServerError)); }
+    } catch (const std::exception& e) { callback(errResp(HttpUtils::internal(e), k500InternalServerError)); }
 }
 
 // POST /api/v1/profile/extras {badge_server, frame, effect, name_style, connections, widgets} — расширенный
@@ -216,7 +217,7 @@ void ProfileController::updateExtras(const HttpRequestPtr& req,
         callback(HttpResponse::newHttpJsonResponse(clean));
         Broadcast::userUpdated(user_id);
     } catch (const std::exception& e) {
-        callback(errResp(e.what(), k500InternalServerError));
+        callback(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -276,7 +277,7 @@ void ProfileController::customize(const HttpRequestPtr& req,
         if (prev.empty() || prev[0]["presence"].isNull() || prev[0]["presence"].as<std::string>() != presence)
             Broadcast::presence(user_id);
     } catch (const std::exception& e) {
-        callback(errResp(e.what(), k500InternalServerError));
+        callback(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -295,6 +296,6 @@ void ProfileController::updateAccent(const HttpRequestPtr& req,
         callback(HttpResponse::newHttpJsonResponse(resp));
         Broadcast::userUpdated(user_id);
     } catch (const std::exception& e) {
-        callback(errResp(e.what(), k500InternalServerError));
+        callback(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }

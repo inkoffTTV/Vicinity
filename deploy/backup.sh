@@ -37,6 +37,15 @@ on_exit() {
 }
 trap on_exit EXIT
 trap 'exit 1' INT TERM HUP
+# Падение бэкапа — оповещение по VICINITY_ALERT_URL из deploy/.env (как у autoupdate.sh)
+alert_on_fail() {
+    rc=$?
+    [ "$rc" -eq 0 ] && return 0
+    url=$(sed -n 's/^VICINITY_ALERT_URL=//p' "$here/.env" 2>/dev/null | tr -d '"' | head -n 1)
+    [ -n "$url" ] && curl -fsS -m 10 -X POST --data-raw "vicinity backup: упал с кодом $rc, см. журнал бэкапа" "$url" >/dev/null 2>&1
+    return "$rc"
+}
+trap alert_on_fail EXIT
 
 if docker exec "$CONTAINER" sh -c 'command -v sqlite3' >/dev/null 2>&1; then
     snapshot=/tmp/vicinity-backup-$stamp.db

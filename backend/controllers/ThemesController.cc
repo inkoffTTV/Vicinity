@@ -91,7 +91,7 @@ void ThemesController::list(const HttpRequestPtr& req, std::function<void(const 
         resp["max_own"]     = kMaxOwn;
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -149,7 +149,7 @@ void ThemesController::publish(const HttpRequestPtr& req, std::function<void(con
         auto rows = db->execSqlSync(std::string(kSelect) + "WHERE t.id = ?", userId, id);
         cb(HttpUtils::json(rowToJson(rows[0], userId)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -166,7 +166,7 @@ void ThemesController::upload(const HttpRequestPtr& req, std::function<void(cons
         resp["file_url"] = saved.url;
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -184,7 +184,7 @@ void ThemesController::like(const HttpRequestPtr& req, std::function<void(const 
         resp["likes"] = db->execSqlSync("SELECT COUNT(*) AS n FROM community_theme_likes WHERE theme_id = ?", id)[0]["n"].as<int>();
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -203,6 +203,6 @@ void ThemesController::remove(const HttpRequestPtr& req, std::function<void(cons
         resp["ok"] = true;
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }

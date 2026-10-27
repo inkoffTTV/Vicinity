@@ -11,6 +11,7 @@ add_executable(VicinityServer
     main.cc
     controllers/AccountController.cc
     controllers/ActivityController.cc
+    controllers/HealthController.cc
     controllers/AdminController.cc
     controllers/AuthController.cc
     controllers/ChannelController.cc

@@ -61,7 +61,7 @@ void ActivityController::patchPrivacy(const HttpRequestPtr& req, std::function<v
         Broadcast::presence(userId);
         cb(HttpUtils::json(std::move(out)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 

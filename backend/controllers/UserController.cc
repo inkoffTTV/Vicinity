@@ -1,4 +1,5 @@
 #include "UserController.h"
+#include "../utils/HttpUtils.h"
 #include "../models/User.h"
 #include "../utils/Access.h"
 #include "../utils/Activity.h"
@@ -68,7 +69,7 @@ void UserController::search(const HttpRequestPtr& req,
         Json::Value resp; resp["users"] = arr;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -100,7 +101,7 @@ void UserController::myLink(const HttpRequestPtr& req, std::function<void(const 
         v["code"] = ensureLink(app().getDbClient(), self, false);
         cb(jsonResp(v));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -112,7 +113,7 @@ void UserController::resetLink(const HttpRequestPtr& req, std::function<void(con
         v["code"] = ensureLink(app().getDbClient(), self, true);
         cb(jsonResp(v));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -129,7 +130,7 @@ void UserController::byLink(const HttpRequestPtr& req, std::function<void(const 
         v["user_id"] = static_cast<Json::Int64>(owner);
         cb(jsonResp(v));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -147,7 +148,7 @@ void UserController::profile(const HttpRequestPtr& req,
             cb(errResp("Пользователь не найден", k404NotFound)); return;
         }
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError)); return;
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError)); return;
     }
 
     Json::Value resp;
@@ -269,7 +270,7 @@ void UserController::block(const HttpRequestPtr& req, std::function<void(const H
         resp["blocked"] = true;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -282,7 +283,7 @@ void UserController::unblock(const HttpRequestPtr& req, std::function<void(const
         resp["blocked"] = false;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -306,7 +307,7 @@ void UserController::blocks(const HttpRequestPtr& req, std::function<void(const 
         resp["users"] = arr;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -366,7 +367,7 @@ void UserController::startDm(const HttpRequestPtr& req,
         resp["username"]     = target->username;
         cb(jsonResp(resp, k201Created));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -402,6 +403,6 @@ void UserController::listDms(const HttpRequestPtr& req,
         Json::Value resp; resp["dms"] = arr;
         cb(jsonResp(resp));
     } catch (const std::exception& e) {
-        cb(errResp(e.what(), k500InternalServerError));
+        cb(errResp(HttpUtils::internal(e), k500InternalServerError));
     }
 }

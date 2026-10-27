@@ -42,6 +42,10 @@ void PushController::subscribe(const HttpRequestPtr& req, std::function<void(con
     const std::string prefsText = JsonUtils::write(prefs);
     if (prefsText.size() > kMaxPrefs) { cb(error("Слишком много настроек", k400BadRequest)); return; }
     try {
+        auto owner = app().getDbClient()->execSqlSync("SELECT user_id FROM push_subscriptions WHERE endpoint = ?", endpoint);
+        if (!owner.empty() && owner[0]["user_id"].as<int64_t>() != userId) {
+            cb(error("Эта подписка принадлежит другому аккаунту", k409Conflict)); return;
+        }
         app().getDbClient()->execSqlSync(
             "INSERT INTO push_subscriptions(user_id, endpoint, p256dh, auth, prefs) VALUES(?, ?, ?, ?, ?) "
             "ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, "
@@ -51,7 +55,7 @@ void PushController::subscribe(const HttpRequestPtr& req, std::function<void(con
         resp["ok"] = true;
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
 
@@ -67,6 +71,6 @@ void PushController::unsubscribe(const HttpRequestPtr& req, std::function<void(c
         resp["ok"] = true;
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
-        cb(error(e.what(), k500InternalServerError));
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
     }
 }
