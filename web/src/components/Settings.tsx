@@ -1,5 +1,5 @@
-import { ChevronLeft, LogOut, Search, X } from 'lucide-react';
-import { FormEvent, useCallback, useState } from 'react';
+import { ChevronLeft, ChevronRight, LogOut, Search, X } from 'lucide-react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { NOTIFY_LEVELS, serverLevel, useNotifySettings } from '../lib/notify';
 import { setPushEnabled, supported as pushSupported, usePush } from '../lib/push';
@@ -14,7 +14,6 @@ import { PrivacyScreen } from './settings/PrivacyScreen';
 import { AppIconScreen } from './settings/AppIconScreen';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
-import { Modal } from './Modal';
 import { Toggle } from './SettingControls';
 import { ProfileStudioPanel } from './profile/ProfileStudio';
 import { AccessibilityTab, SubscriptionTab, ThemeTab } from './ThemeSettings';
@@ -68,6 +67,14 @@ export function Settings() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [query, setQuery] = useState('');
   const close = useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
+  // Настройки — страница, а не окно: Esc закрывает её, если поверх нет окна (подтверждение, выбор файла)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !document.querySelector('.modal-backdrop')) close();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [close]);
 
   const groups = isAdmin
     ? [...GROUPS, { title: 'Сервер', items: [{ id: 'admin' as Tab, label: 'Администрирование', keywords: 'пользователи блокировка ip подписки' }] }]
@@ -84,7 +91,7 @@ export function Settings() {
   };
 
   return (
-    <Modal onClose={close} bare label="Настройки">
+    <div className="settings-page" role="region" aria-label="Настройки">
       <div className={`settings-shell${mobileOpen ? ' show-content' : ''}`}>
         <nav className="settings-nav" aria-label="Разделы настроек">
           <div className="settings-me">
@@ -128,6 +135,15 @@ export function Settings() {
             <button type="button" className="icon-btn settings-back" aria-label="К разделам" onClick={() => setMobileOpen(false)}>
               <Icon icon={ChevronLeft} size={20} />
             </button>
+            <nav className="settings-crumbs" aria-label="Путь">
+              <span>Vicinity</span>
+              <Icon icon={ChevronRight} size={14} />
+              <button type="button" className="link-btn" onClick={() => setMobileOpen(false)}>
+                Настройки
+              </button>
+              <Icon icon={ChevronRight} size={14} />
+              <span aria-current="page">{current?.label}</span>
+            </nav>
             <span className="grow" />
             <button type="button" className="icon-btn settings-close" aria-label="Закрыть настройки" onClick={close}>
               <Icon icon={X} size={20} />
@@ -150,7 +166,7 @@ export function Settings() {
           </div>
         </main>
       </div>
-    </Modal>
+    </div>
   );
 }
 

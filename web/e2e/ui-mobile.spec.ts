@@ -62,7 +62,7 @@ async function checkPanel(page: Page, panel: Locator, what: string, frame = '.mo
 test('settings on a 360×640 phone: list of sections, each opens full-screen and scrolls to its last control', async ({ browser }) => {
   const u = await registerUser(browser, 'Мобила', { viewport: PHONE });
   const page = u.page;
-  const frame = '.modal.bare';
+  const frame = '.settings-page';
 
   await openNav(page);
   await page.getByRole('button', { name: 'Настройки', exact: true }).click();

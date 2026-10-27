@@ -59,7 +59,7 @@ test('addresses follow the open screen; reload restores it; back and forward wor
 
   // Выход — адрес прежнего пользователя не остаётся
   await page.getByTitle('Настройки').click();
-  await page.locator('.modal').getByRole('button', { name: 'Выйти' }).click();
+  await page.locator('.settings-page').getByRole('button', { name: 'Выйти' }).click();
   await expect(page.getByText('С возвращением!')).toBeVisible();
   expect(path(page.url())).toBe('/');
 

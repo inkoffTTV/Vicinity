@@ -67,7 +67,7 @@ export default function App() {
   }, [boot]);
 
   // На мобильном — закрывать меню при переходе
-  useEffect(() => setNavOpen(false), [view, stageOpen]);
+  useEffect(() => setNavOpen(false), [view, stageOpen, settingsOpen]);
 
   // «Тема по умолчанию на серверах»: на сервере можно показывать стандартную тему вместо своей
   const inServer = !!me && view.kind === 'server';
@@ -103,7 +103,9 @@ export default function App() {
       </div>
       <div className="nav-scrim" onClick={() => setNavOpen(false)} />
       <main className="main">
-        {stageOpen && inVoice ? (
+        {settingsOpen ? (
+          <Settings />
+        ) : stageOpen && inVoice ? (
           <VoiceStage onMenu={() => setNavOpen(true)} />
         ) : view.kind === 'friends' ? (
           <Friends onMenu={() => setNavOpen(true)} />
@@ -117,13 +119,12 @@ export default function App() {
       </main>
       {searchOpen ? (
         <SearchPanel />
-      ) : stageOpen && inVoice ? null : view.kind === 'server' && membersOpen ? (
+      ) : settingsOpen || (stageOpen && inVoice) ? null : view.kind === 'server' && membersOpen ? (
         <MemberList serverId={view.serverId} />
       ) : (
         view.kind === 'group' && membersOpen && <GroupPanel key={view.channelId} channelId={view.channelId} />
       )}
       {profileUserId !== null && <ProfileModal userId={profileUserId} />}
-      {settingsOpen && <Settings />}
       {studioOpen && <ProfileStudio />}
       {inviteCode && <InviteCard code={inviteCode} />}
       {giftCode && <GiftCard code={giftCode} />}
