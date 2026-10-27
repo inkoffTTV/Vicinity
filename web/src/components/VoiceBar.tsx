@@ -1,4 +1,5 @@
 import {
+  Activity,
   Headphones,
   HeadphoneOff,
   LayoutGrid,
@@ -38,6 +39,21 @@ export function voicePlace(s: StoreState, ch: number | null): { name: string; pl
   return { name: 'Голосовой канал', place: '' };
 }
 
+const NET_TEXT = { good: 'хорошая', fair: 'средняя', poor: 'плохая', unknown: '' };
+
+/** Живой пинг до голосового сервера: чип с задержкой в мс, цвет по качеству; без данных не показывается */
+export function VoicePing() {
+  const rtt = useVoice((s) => s.rtt);
+  const net = useVoice((s) => s.net);
+  if (!rtt || net === 'unknown') return null;
+  return (
+    <span className={`voice-ping net-${net}`} title={`Связь ${NET_TEXT[net]} · задержка ${rtt} мс`} aria-label={`Задержка ${rtt} мс`} aria-live="off">
+      <Icon icon={Activity} size={12} />
+      {rtt} мс
+    </span>
+  );
+}
+
 /** Панель подключённого голоса над панелью пользователя — видна на любом экране */
 export function VoiceBar() {
   const channelId = useVoice((s) => s.channelId);
@@ -66,6 +82,7 @@ export function VoiceBar() {
         <div className="grow">
           <div className={`voice-bar-status${live ? ' live' : ''}`}>
             {!connected ? 'Нет связи…' : joined ? 'Голос подключён' : 'Подключение…'}
+            {live && <VoicePing />}
           </div>
           <div className="voice-bar-channel ellipsis" title={place ? `${name} · ${place}` : name}>
             {name}

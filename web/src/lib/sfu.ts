@@ -39,10 +39,14 @@ interface Hooks {
   onLost: () => void;
   /** Раз в полсекунды: пакеты Opus отправлено, байт получено (с начала входа), участников (window.__vicinityVoiceStats, e2e) */
   onStats: (s: { sfuPacketsSent: number; sfuBytesReceived: number; sfuPeers: number }) => void;
+  /** Раз в ~2 с: задержка до SFU в мс (RTT выбранной пары кандидатов); 0 — ещё не измерена */
+  onRtt: (rttMs: number) => void;
 }
 
 // Как часто обновляем счётчики пакетов (мс)
 const STATS_TICK = 500;
+// Пинг измеряем каждый четвёртый тик статистики (раз в 2 с)
+const RTT_EVERY = 4;
 
 export class SfuEngine {
   readonly room: Room;
@@ -62,6 +66,7 @@ export class SfuEngine {
   private pttTimer: number | undefined;
   private pttOn = false;
   private statsTimer: number | undefined;
+  private statsTick = 0;
   /** Байты приёма по дорожкам: счётчик WebRTC начинается с нуля после переподписки — копим сами */
   private rx = new Map<string, { base: number; last: number }>();
   /** Элементы <audio> удалённых дорожек — вне DOM не играют в Safari */
@@ -159,6 +164,15 @@ export class SfuEngine {
       let received = 0;
       this.rx.forEach((r) => (received += r.base + r.last));
       this.hooks.onStats({ sfuPacketsSent: sent?.packetsSent ?? 0, sfuBytesReceived: received, sfuPeers: this.room.remoteParticipants.size });
+      // Пинг — реже: getStats() со всем отчётом дороже счётчиков
+      if (++this.statsTick % RTT_EVERY === 0 && local) {
+        const report = await local.getRTCStatsReport();
+        let rtt = 0;
+        report?.forEach((r) => {
+          if (r.type === 'candidate-pair' && r.nominated && typeof r.currentRoundTripTime === 'number') rtt = r.currentRoundTripTime * 1000;
+        });
+        this.hooks.onRtt(Math.round(rtt));
+      }
     } catch {
       /* статистика — не повод ронять голос */
     }

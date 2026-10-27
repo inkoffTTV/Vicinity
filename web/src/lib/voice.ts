@@ -38,9 +38,15 @@ const JOIN_TIMEOUT = 8000;
 const stats = { framesSent: 0, framesDropped: 0, framesReceived: 0, sfu: false, sfuPacketsSent: 0, sfuBytesReceived: 0, sfuPeers: 0 };
 (window as unknown as { __vicinityVoiceStats: typeof stats }).__vicinityVoiceStats = stats;
 
+/** Качество связи с голосом: по задержке до SFU (good < 150 мс, fair < 400, poor); unknown — нет данных (старый путь по WebSocket) */
+export type VoiceNet = 'unknown' | 'good' | 'fair' | 'poor';
+
 interface VoiceState {
   /** Канал, в котором мы (или к которому подключаемся) */
   channelId: number | null;
+  /** Задержка до SFU, мс (живой пинг в панели голоса и на сцене); 0 — не измерена */
+  rtt: number;
+  net: VoiceNet;
   /** Сервер подтвердил вход: мы есть в его списке канала */
   joined: boolean;
   muted: boolean;
@@ -254,6 +260,13 @@ async function startSfu(channelId: number): Promise<SfuEngine | null> {
   const eng = new SfuEngine({
     onSpeaking: setSpeaking,
     onStats: (s) => Object.assign(stats, s),
+    onRtt: (rtt) => {
+      if (engine !== eng) return;
+      const st = useVoice.getState();
+      const net: VoiceNet = !rtt ? 'unknown' : rtt < 150 ? 'good' : rtt < 400 ? 'fair' : 'poor';
+      // Обновляем только при заметной разнице — иначе чип дёргается каждые 2 с
+      if (st.net !== net || Math.abs(st.rtt - rtt) >= 5) useVoice.setState({ rtt, net });
+    },
     onLost: () => {
       if (engine !== eng) return;
       const ch = useVoice.getState().channelId;
@@ -298,7 +311,7 @@ function stopLocal() {
   engine?.close();
   engine = null;
   stats.sfu = false;
-  useVoice.setState({ channelId: null, joined: false });
+  useVoice.setState({ channelId: null, joined: false, rtt: 0, net: 'unknown' });
 }
 
 // Голос пользователя может быть только в одной вкладке: сервер слушает последнюю вошедшую
@@ -306,6 +319,8 @@ const tabs = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('vic
 
 export const useVoice = create<VoiceState>((set, get) => ({
   channelId: null,
+  rtt: 0,
+  net: 'unknown',
   joined: false,
   muted: false,
   deafened: false,

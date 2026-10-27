@@ -84,6 +84,9 @@ test('listen together: queue, pause and skip are shared, late joiner catches up,
   await channel(c).click();
   await expect(panel(c).getByTestId('listen-now')).toContainText('Тестовая песня');
   await expect(panel(c).getByRole('button', { name: 'Играть' })).toBeVisible();
+  // Карточка у него свёрнута (панель не открывал) — очередь и поиск после «Развернуть»
+  await expect(panel(c)).toHaveClass(/compact/);
+  await panel(c).getByRole('button', { name: 'Развернуть' }).click();
   await expect(panel(c).locator('.listen-queue li')).toHaveCount(1);
 
   // Ваня переключает дальше — очередь укоротилась у всех; второй «дальше» — пусто

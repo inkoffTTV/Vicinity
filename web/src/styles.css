@@ -595,6 +595,35 @@ button.side-head:hover {
 .voice-bar-status.live {
   color: var(--ok);
 }
+/* Живой пинг до голосового сервера (VoiceBar.tsx: VoicePing) — в панели голоса и в шапке сцены */
+.voice-ping {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 0 6px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+.voice-ping.net-good {
+  color: var(--ok);
+}
+.voice-ping.net-fair {
+  color: var(--idle);
+}
+.voice-ping.net-poor {
+  color: var(--dnd);
+}
+.stage-head .voice-ping {
+  height: 24px;
+  margin-right: 6px;
+  font-size: var(--fs-label);
+}
 .voice-bar-channel {
   font-size: var(--fs-caption);
   color: var(--text-2);
@@ -4106,20 +4135,21 @@ button:hover > .ico.anim-bounce {
 .stage-tile {
   position: relative;
   aspect-ratio: 16 / 10;
-  border-radius: var(--radius-md);
-  background: var(--bg-panel);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
   display: grid;
   place-items: center;
   overflow: hidden;
-  outline: 3px solid transparent;
-  outline-offset: -3px;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
   transition: outline-color var(--dur-fast);
 }
 .stage-tile.compact {
   flex: 0 0 180px;
 }
 .stage-tile.speaking {
-  outline-color: var(--ok);
+  outline-color: var(--speaking);
 }
 .stage-tile.live {
   background: linear-gradient(135deg, color-mix(in srgb, var(--dnd) 18%, var(--bg-panel)), var(--bg-panel) 60%);
@@ -4134,10 +4164,17 @@ button:hover > .ico.anim-bounce {
 .stage-tile-video.mirror {
   transform: scaleX(-1);
 }
-.stage-tile-video.screen-preview {
-  object-fit: contain;
-  background: #000;
-  opacity: 0.85;
+/* Своя демонстрация — только в области экранов (stage-focus) у зрителей; на своей плитке лишь подпись */
+.stage-tile-own-screen {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--scrim);
+  color: var(--on-scrim);
+  font-size: var(--fs-micro);
+  font-weight: 600;
 }
 .stage-tile-name {
   position: absolute;
@@ -5146,13 +5183,21 @@ a:focus-visible > .ico {
 
 /* ── Слушать вместе (ListenTogether.tsx) ── */
 .listen-panel {
-  border: 1px solid var(--border);
-  border-radius: var(--panel-radius);
-  background: var(--bg-panel);
-  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-raised));
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  flex: none;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+/* Свёрнутая карточка: только плеер в одну-две строки, без очереди и поиска */
+.listen-panel.compact {
+  max-width: 640px;
 }
 .listen-head {
   display: flex;
@@ -5163,11 +5208,38 @@ a:focus-visible > .ico {
 .listen-now {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+}
+.listen-kicker {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.listen-chip {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.listen-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.listen-bar .listen-progress {
+  flex: 1;
+}
+.listen-time {
+  font-variant-numeric: tabular-nums;
 }
 .listen-art {
-  width: 56px;
-  height: 56px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-sm);
   object-fit: cover;
   flex: none;
@@ -5185,12 +5257,12 @@ a:focus-visible > .ico {
 .listen-meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   flex: 1;
 }
 .listen-progress {
-  height: 6px;
+  height: 5px;
   border-radius: 3px;
   background: var(--bg-ground);
   overflow: hidden;
@@ -5274,9 +5346,14 @@ a:focus-visible > .ico {
   .listen-now {
     flex-wrap: wrap;
   }
+  .listen-meta {
+    flex-basis: calc(100% - 50px);
+  }
   .listen-ctl {
-    width: 100%;
-    justify-content: flex-end;
+    margin-left: auto;
+  }
+  .listen-bar .listen-volume {
+    display: none;
   }
 }
 
