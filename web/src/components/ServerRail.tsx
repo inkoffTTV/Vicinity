@@ -27,7 +27,7 @@ export function ServerRail() {
   return (
     <nav className="rail">
       <button
-        className={`rail-item main${view.kind === 'home' ? ' active' : ''}`}
+        className={`rail-item start${view.kind === 'home' ? ' active' : ''}`}
         title="Главная"
         aria-label="Главная"
         aria-current={view.kind === 'home' ? 'page' : undefined}

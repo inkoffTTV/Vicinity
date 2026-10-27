@@ -27,7 +27,7 @@ test('home: digest from facts, stats, attention and friend suggestions', async (
   expect(r.body.suggestions.map((s: { display_name: string }) => s.display_name)).toEqual(['Вера']);
 
   // Экран
-  await a.page.getByRole('button', { name: 'Главная' }).click();
+  await a.page.locator('.rail-item.start').click();
   await expect(a.page).toHaveURL(/\/home$/);
   const home = a.page.getByRole('region', { name: 'Главная' });
   await expect(home.getByRole('heading', { name: 'Пока вас не было' })).toBeVisible();

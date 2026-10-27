@@ -5426,7 +5426,9 @@ a:focus-visible > .ico {
 }
 
 /* ── Главная (components/Home.tsx): сводка, статистика, сейчас, внимание, что нового, предложения ── */
-.home {
+.home-page {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   height: 100%;

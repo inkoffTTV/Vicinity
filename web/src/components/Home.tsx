@@ -77,7 +77,7 @@ export function Home({ onMenu }: { onMenu: () => void }) {
 
   const stats = data?.stats;
   return (
-    <div className="home" role="region" aria-label="Главная">
+    <div className="home-page" role="region" aria-label="Главная">
       <header className="chat-head home-head">
         <button className="icon-btn menu-btn" onClick={onMenu} aria-label="Меню">
           <Icon icon={Menu} size={20} />
