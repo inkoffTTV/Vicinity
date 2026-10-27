@@ -460,33 +460,37 @@ select {
   animation: vc-fade var(--dur-slow) ease-out backwards;
 }
 
-/* ── Экран входа ── */
+/* ── Экран входа (макет «Auth» на холсте): слева заголовок и реальные плюсы, справа карточка-стекло ── */
 
 .auth-screen {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
-  padding: 20px;
+  gap: 24px;
+  padding: clamp(20px, 4vw, 56px);
   min-height: 100%;
   height: auto;
   overflow-y: auto;
   box-sizing: border-box;
   align-items: stretch;
-  background: var(--bg-ground);
+  background:
+    radial-gradient(1100px 600px at 25% 20%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 60%),
+    radial-gradient(900px 700px at 95% 90%, color-mix(in srgb, var(--idle) 22%, transparent), transparent 60%),
+    var(--bg-ground);
 }
 .auth-hero {
   flex: 1 1 420px;
   min-width: 0;
-  border-radius: var(--radius-lg);
-  background: var(--bg-panel);
-  padding: clamp(28px, 5vw, 56px);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: center;
   gap: 32px;
   animation: vc-rise var(--dur-slow) var(--ease-out-soft) backwards;
 }
 .auth-brand {
+  position: absolute;
+  left: clamp(20px, 4vw, 56px);
+  top: clamp(20px, 4vw, 56px);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -495,8 +499,8 @@ select {
   font-size: var(--fs-title);
 }
 .auth-mark {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--on-accent);
@@ -506,69 +510,125 @@ select {
   font-weight: 700;
   font-size: var(--fs-title);
 }
+.auth-hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 620px;
+}
 .auth-hero h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(30px, 4vw, 46px);
-  line-height: 1.1;
+  font-size: clamp(32px, 4.2vw, 56px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
 }
 .auth-hero p {
-  margin: 12px 0 0;
+  margin: 0;
   color: var(--text-2);
   font-size: var(--fs-body);
-  line-height: 1.55;
-  max-width: 480px;
+  line-height: 1.5;
+  max-width: 520px;
 }
 .auth-perks {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
-  flex-direction: column;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.auth-perks li {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  line-height: 1.45;
+.auth-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+  font-size: var(--fs-caption);
+  font-weight: 600;
   animation: vc-slide-in var(--dur-slow) var(--ease-out-soft) backwards;
 }
-.auth-perks li:nth-child(1) { animation-delay: 0.15s; }
-.auth-perks li:nth-child(2) { animation-delay: 0.22s; }
-.auth-perks li:nth-child(3) { animation-delay: 0.29s; }
-.auth-perks li:nth-child(4) { animation-delay: 0.36s; }
-.auth-perks li:nth-child(5) { animation-delay: 0.43s; }
-.auth-perks li:nth-child(6) { animation-delay: 0.5s; }
-.auth-perks svg {
-  flex: none;
-  margin-top: 2px;
-  color: var(--accent);
+.auth-chip:nth-child(1) { animation-delay: 0.15s; }
+.auth-chip:nth-child(2) { animation-delay: 0.22s; }
+.auth-chip:nth-child(3) { animation-delay: 0.29s; }
+.auth-chip:nth-child(4) { animation-delay: 0.36s; }
+.auth-chip:nth-child(5) { animation-delay: 0.43s; }
+.auth-chip:nth-child(6) { animation-delay: 0.5s; }
+.auth-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
 }
-.auth-perks strong {
-  display: block;
+.auth-chip.idle .auth-chip-dot {
+  background: var(--idle);
 }
-.auth-perks span {
-  color: var(--text-2);
-  font-size: var(--fs-body-sm);
+.auth-chip.dnd .auth-chip-dot {
+  background: var(--dnd);
 }
 .auth-side {
   flex: 1 1 400px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
   min-width: 0;
 }
+/* Карточка — стекло над сиянием фона; в строгом стиле панель плотная */
 .auth-card {
   max-width: 420px;
   border-radius: var(--radius-lg);
-  background: var(--bg-panel);
+  background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   box-shadow: none;
   animation: vc-pop var(--dur-slow) 0.08s var(--ease-out-soft) backwards;
+}
+:root[data-style='strict'] .auth-card {
+  background: var(--bg-panel);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-style='strict'] .auth-screen {
+  background: var(--bg-ground);
 }
 .auth-card .btn.primary {
   height: 48px;
   border-radius: var(--radius-md);
   font-size: var(--fs-body);
+}
+/* Ссылки на приложения — компактные чипы под карточкой */
+.auth-apps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+}
+.auth-apps .auth-download {
+  gap: 8px;
+  padding: 0 12px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  animation: none;
+}
+.auth-apps .auth-download svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-2);
+}
+.auth-apps .auth-download > span > span {
+  display: none;
 }
 
 /* ── Настройки: «Тема», «Подписка», «Специальные возможности» ── */
@@ -884,9 +944,36 @@ select {
     padding: 12px;
     gap: 12px;
   }
+  /* Телефон: бренд, карточка и первые три плюса */
+  .auth-screen {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: center;
+    gap: 16px;
+  }
   .auth-hero {
-    padding: 24px;
-    gap: 20px;
+    flex: 0 0 auto;
+    width: 100%;
+    gap: 16px;
+    padding-top: 40px;
+  }
+  .auth-hero-text {
+    max-width: 100%;
+  }
+  .auth-side {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  .auth-brand {
+    left: 12px;
+    top: 12px;
+  }
+  .auth-hero h1,
+  .auth-hero p {
+    display: none;
+  }
+  .auth-chip:nth-child(n + 4) {
+    display: none;
   }
 }
 
