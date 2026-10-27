@@ -15,7 +15,7 @@ import {
 } from './media';
 import { pttHeld } from './ptt';
 import { api, ApiError } from './api';
-import { SfuEngine } from './sfu';
+import { SfuEngine, VoiceTransport } from './sfu';
 import { playSound } from './sounds';
 import { useStore } from './store';
 import { socket } from './ws';
@@ -35,7 +35,7 @@ const PREROLL_FRAMES = 2;
 const JOIN_TIMEOUT = 8000;
 
 /** Счётчики кадров — для отладки (и e2e): window.__vicinityVoiceStats; sfu — голос идёт через SFU, а не кадрами */
-const stats = { framesSent: 0, framesDropped: 0, framesReceived: 0, sfu: false, sfuPacketsSent: 0, sfuBytesReceived: 0, sfuPeers: 0 };
+const stats = { framesSent: 0, framesDropped: 0, framesReceived: 0, sfu: false, sfuPacketsSent: 0, sfuBytesReceived: 0, sfuPeers: 0, transport: '' as string };
 (window as unknown as { __vicinityVoiceStats: typeof stats }).__vicinityVoiceStats = stats;
 
 /** Качество связи с голосом: по задержке до SFU (good < 150 мс, fair < 400, poor); unknown — нет данных (старый путь по WebSocket) */
@@ -47,6 +47,8 @@ interface VoiceState {
   /** Задержка до SFU, мс (живой пинг в панели голоса и на сцене); 0 — не измерена */
   rtt: number;
   net: VoiceNet;
+  /** Как идёт звук: sfu-udp, sfu-tcp (UDP закрыт — может рваться), sfu-relay, ws (запасной путь кадрами по WebSocket), '' — не подключены */
+  transport: '' | 'ws' | 'sfu' | 'sfu-udp' | 'sfu-tcp' | 'sfu-relay';
   /** Сервер подтвердил вход: мы есть в его списке канала */
   joined: boolean;
   muted: boolean;
@@ -260,12 +262,14 @@ async function startSfu(channelId: number): Promise<SfuEngine | null> {
   const eng = new SfuEngine({
     onSpeaking: setSpeaking,
     onStats: (s) => Object.assign(stats, s),
-    onRtt: (rtt) => {
+    onRtt: (rtt, tr: VoiceTransport) => {
       if (engine !== eng) return;
       const st = useVoice.getState();
       const net: VoiceNet = !rtt ? 'unknown' : rtt < 150 ? 'good' : rtt < 400 ? 'fair' : 'poor';
+      const transport = tr ? (`sfu-${tr}` as const) : 'sfu';
+      stats.transport = transport;
       // Обновляем только при заметной разнице — иначе чип дёргается каждые 2 с
-      if (st.net !== net || Math.abs(st.rtt - rtt) >= 5) useVoice.setState({ rtt, net });
+      if (st.net !== net || Math.abs(st.rtt - rtt) >= 5 || st.transport !== transport) useVoice.setState({ rtt, net, transport });
     },
     onLost: () => {
       if (engine !== eng) return;
@@ -311,7 +315,7 @@ function stopLocal() {
   engine?.close();
   engine = null;
   stats.sfu = false;
-  useVoice.setState({ channelId: null, joined: false, rtt: 0, net: 'unknown' });
+  useVoice.setState({ channelId: null, joined: false, rtt: 0, net: 'unknown', transport: '' });
 }
 
 // Голос пользователя может быть только в одной вкладке: сервер слушает последнюю вошедшую
@@ -321,6 +325,7 @@ export const useVoice = create<VoiceState>((set, get) => ({
   channelId: null,
   rtt: 0,
   net: 'unknown',
+  transport: '',
   joined: false,
   muted: false,
   deafened: false,
@@ -365,6 +370,8 @@ export const useVoice = create<VoiceState>((set, get) => ({
       if (sfu) {
         engine = sfu;
         stats.sfu = true;
+        stats.transport = 'sfu';
+        set({ transport: 'sfu' });
         try {
           await sfu.openMic(useMediaPrefs.getState().inputId);
         } catch (e) {
@@ -377,6 +384,8 @@ export const useVoice = create<VoiceState>((set, get) => ({
         if (engine !== sfu) return;
       } else {
         const eng = (engine = new Engine());
+        stats.transport = 'ws';
+        set({ transport: 'ws' });
         try {
           await eng.load(onCaptured);
         } catch {

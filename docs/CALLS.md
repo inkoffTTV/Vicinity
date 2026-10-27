@@ -190,6 +190,11 @@ While connected through the SFU, `web/src/lib/sfu.ts` samples the local micropho
 WebSocket PCM path) and updates them only when the value moves by ≥ 5 ms. The chip (`VoicePing` in
 `components/VoiceBar.tsx`) sits next to «Голос подключён» in the voice bar and next to the member counter in the
 stage header; it is hidden until the first sample. Colours: `ok` / `idle` / `dnd` tokens.
+When the nominated candidate pair has no `currentRoundTripTime` (TCP pairs), the RTT comes from
+`remote-inbound-rtp.roundTripTime`. The sample also reports the transport (`udp`, `tcp`, `relay` from the local
+candidate) and `lib/voice.ts` keeps it as `transport` (`sfu-udp` / `sfu-tcp` / `sfu-relay`, or `ws` on the
+WebSocket PCM fallback). The chip shows «· TCP» with a warning tooltip when UDP 7882 is closed and «запасной путь»
+on the fallback, where SFU participants cannot be heard at all.
 
 ### 2.9 Per-person volume and boost
 

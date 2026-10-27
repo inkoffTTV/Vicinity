@@ -39,9 +39,12 @@ interface Hooks {
   onLost: () => void;
   /** Раз в полсекунды: пакеты Opus отправлено, байт получено (с начала входа), участников (window.__vicinityVoiceStats, e2e) */
   onStats: (s: { sfuPacketsSent: number; sfuBytesReceived: number; sfuPeers: number }) => void;
-  /** Раз в ~2 с: задержка до SFU в мс (RTT выбранной пары кандидатов); 0 — ещё не измерена */
-  onRtt: (rttMs: number) => void;
+  /** Раз в ~2 с: задержка до SFU в мс (RTT выбранной пары кандидатов, иначе из remote-inbound-rtp); 0 — ещё не измерена.
+      transport — как идёт медиа: udp, tcp (UDP-порт закрыт, голос может рваться), relay (через TURN) */
+  onRtt: (rttMs: number, transport: VoiceTransport) => void;
 }
+
+export type VoiceTransport = '' | 'udp' | 'tcp' | 'relay';
 
 // Как часто обновляем счётчики пакетов (мс)
 const STATS_TICK = 500;
@@ -185,10 +188,22 @@ export class SfuEngine {
       if (++this.statsTick % RTT_EVERY === 0 && local) {
         const report = await local.getRTCStatsReport();
         let rtt = 0;
+        let transport: VoiceTransport = '';
+        let pair: RTCIceCandidatePairStats | undefined;
         report?.forEach((r) => {
-          if (r.type === 'candidate-pair' && r.nominated && typeof r.currentRoundTripTime === 'number') rtt = r.currentRoundTripTime * 1000;
+          if (r.type === 'candidate-pair' && (r.nominated || r.state === 'succeeded') && (!pair || r.nominated)) pair = r;
         });
-        this.hooks.onRtt(Math.round(rtt));
+        if (pair) {
+          if (typeof pair.currentRoundTripTime === 'number') rtt = pair.currentRoundTripTime * 1000;
+          const localCand = pair.localCandidateId ? report?.get(pair.localCandidateId) : undefined;
+          if (localCand) transport = localCand.candidateType === 'relay' ? 'relay' : localCand.protocol === 'tcp' ? 'tcp' : 'udp';
+        }
+        // По TCP у пары кандидатов RTT не бывает — берём из отчётов приёмника (RTCP)
+        if (!rtt)
+          report?.forEach((r) => {
+            if (r.type === 'remote-inbound-rtp' && typeof r.roundTripTime === 'number' && r.roundTripTime > 0) rtt = r.roundTripTime * 1000;
+          });
+        this.hooks.onRtt(Math.round(rtt), transport);
       }
     } catch {
       /* статистика — не повод ронять голос */

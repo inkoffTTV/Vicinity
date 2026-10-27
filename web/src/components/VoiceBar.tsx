@@ -45,11 +45,23 @@ const NET_TEXT = { good: 'хорошая', fair: 'средняя', poor: 'пло
 export function VoicePing() {
   const rtt = useVoice((s) => s.rtt);
   const net = useVoice((s) => s.net);
+  const transport = useVoice((s) => s.transport);
+  // Запасной путь по WebSocket: пинга нет, качество хуже и участников через SFU не слышно
+  if (transport === 'ws')
+    return (
+      <span className="voice-ping net-poor" title="Голос идёт запасным путём по WebSocket: до сервера голоса (порты UDP 7882 / TCP 7881) не достучаться. Качество хуже, а участников через SFU не слышно. Проверьте брандмауэр или VPN." aria-label="Запасной путь">
+        <Icon icon={Activity} size={12} />
+        запасной путь
+      </span>
+    );
   if (!rtt || net === 'unknown') return null;
+  const tcp = transport === 'sfu-tcp';
+  const relay = transport === 'sfu-relay';
+  const title = `Связь ${NET_TEXT[net]} · задержка ${rtt} мс${tcp ? ' · по TCP: UDP-порт 7882 закрыт, голос может рваться' : relay ? ' · через TURN' : ''}`;
   return (
-    <span className={`voice-ping net-${net}`} title={`Связь ${NET_TEXT[net]} · задержка ${rtt} мс`} aria-label={`Задержка ${rtt} мс`} aria-live="off">
+    <span className={`voice-ping net-${tcp ? 'fair' : net}`} title={title} aria-label={`Задержка ${rtt} мс${tcp ? ', по TCP' : ''}`} aria-live="off">
       <Icon icon={Activity} size={12} />
-      {rtt} мс
+      {rtt} мс{tcp ? ' · TCP' : ''}
     </span>
   );
 }
