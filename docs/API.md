@@ -485,3 +485,20 @@ GET/PATCH `/settings/privacy` → `{status, stats, dm, friend_requests}` (хра
 | POST | `/themes/community` | `{name: 2–30 символов, kind: "theme"\|"background", colors: [2–3 × "#rrggbb"] (у фона необязательно), angle, base, image (у фона — из upload)}` → запись. Тема — **Ultra**, фон — **Standard**, иначе 403; больше 10 своих — 409 |
 | POST | `/themes/community/{id}/like` | поставить или снять сердечко → `{likes, liked}` |
 | DELETE | `/themes/community/{id}` | только автор или разработчик → `{ok}` |
+
+## 19. Главная **[new]**
+
+GET `/home` → главный экран (`backend/controllers/HomeController.cc`, экран `web/src/components/Home.tsx`, адрес `/home`):
+
+```
+{ window_hours: 24,
+  digest: { text, source: "ai" | "rules" },
+  stats: { messages, people, voice_now, friends_online, friends, friend_requests, streak, voice_hours_total, msgs_total },
+  channels: [{ channel_id, kind: dm|group|channel, name, server_id?, server_name?, messages, top_author? }],   // до 6, по числу чужих сообщений за сутки
+  voice:    [{ channel_id, kind, name, server_id?, server_name?, users: [{id, name}] }],                     // доступные голосовые каналы, где кто-то есть
+  suggestions: [{ id, display_name, avatar_path, shared_servers }] }                                         // люди с общих серверов, ещё не друзья, без блокировок
+```
+Сводка `digest`: при заданном `ANTHROPIC_API_KEY` (deploy/env.example) факты (без id и аватаров) уходят в Claude API
+(модель `VICINITY_AI_MODEL`, по умолчанию `claude-opus-5-5`), ответ кэшируется на пользователя: 10 минут, при тех же фактах — час;
+ошибка API или `stop_reason: refusal` → шаблонный текст (`source: rules`). Без ключа — всегда шаблон из тех же фактов.
+«Стоит внимания» и «Что нового» клиент собирает сам (непрочитанные, упоминания, приглашения, заявки; `web/src/lib/changelog.ts`).

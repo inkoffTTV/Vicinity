@@ -15,6 +15,7 @@ import { ServerRail } from './components/ServerRail';
 import { Sidebar } from './components/Sidebar';
 import { Chat } from './components/Chat';
 import { Friends } from './components/Friends';
+import { Home } from './components/Home';
 import { GroupPanel } from './components/GroupPanel';
 import { MemberList } from './components/MemberList';
 import { ProfileModal } from './components/ProfileModal';
@@ -105,6 +106,8 @@ export default function App() {
       <main className="main">
         {stageOpen && inVoice ? (
           <VoiceStage onMenu={() => setNavOpen(true)} />
+        ) : view.kind === 'home' ? (
+          <Home onMenu={() => setNavOpen(true)} />
         ) : view.kind === 'friends' ? (
           <Friends onMenu={() => setNavOpen(true)} />
         ) : (

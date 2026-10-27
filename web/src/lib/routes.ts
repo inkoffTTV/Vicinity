@@ -1,4 +1,5 @@
 // Адреса экранов (History API, без роутера):
+//   /home                              — главная: сводка, статистика, кто в голосе
 //   /channels/@me                      — друзья
 //   /channels/@me/<channelId>          — личка или беседа
 //   /channels/<serverId>/<channelId>   — канал сервера (без channelId — первый текстовый)
@@ -11,6 +12,7 @@ import type { View } from './store';
 
 export type Route =
   | { kind: 'home'; channelId: number | null }
+  | { kind: 'main' }
   | { kind: 'server'; serverId: number; channelId: number | null }
   | { kind: 'invite'; code: string }
   | { kind: 'gift'; code: string }
@@ -22,6 +24,7 @@ const id = (s: string | undefined) => (s && /^\d{1,15}$/.test(s) ? Number(s) : n
 /** Разобрать путь; null — путь не относится к экранам приложения («/» и прочее) */
 export function parsePath(path: string): Route | null {
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
+  if (parts.length === 1 && parts[0] === 'home') return { kind: 'main' };
   if (parts[0] === 'invite' && parts.length === 2 && /^[A-Za-z0-9]{1,32}$/.test(parts[1]))
     return { kind: 'invite', code: parts[1].toUpperCase() };
   if (parts[0] === 'gift' && parts.length === 2 && /^[A-Za-z0-9-]{12,14}$/.test(parts[1]))
@@ -48,6 +51,7 @@ interface Lists {
 
 /** Экран по адресу; null — такого экрана у пользователя нет (чужой сервер, удалённая беседа) */
 export function viewForRoute(s: Lists, r: Route): View | null {
+  if (r.kind === 'main') return { kind: 'home' };
   if (r.kind === 'home') {
     if (r.channelId === null) return { kind: 'friends' };
     if (s.dms.some((d) => d.channel_id === r.channelId)) return { kind: 'dm', channelId: r.channelId };
@@ -62,6 +66,8 @@ export function viewForRoute(s: Lists, r: Route): View | null {
 
 export function pathFor(v: View): string {
   switch (v.kind) {
+    case 'home':
+      return '/home';
     case 'friends':
       return '/channels/@me';
     case 'dm':

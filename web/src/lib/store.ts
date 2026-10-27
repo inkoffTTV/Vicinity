@@ -30,6 +30,7 @@ import { socket, WsEvent } from './ws';
 
 // Что открыто в основной области
 export type View =
+  | { kind: 'home' }
   | { kind: 'friends' }
   | { kind: 'dm'; channelId: number }
   | { kind: 'group'; channelId: number }
@@ -880,10 +881,11 @@ export const useStore = create<State>((set, get) => {
       const last = recallView();
       const ok =
         last.kind === 'friends' ||
+        last.kind === 'home' ||
         (last.kind === 'dm' && s.dms.some((d) => d.channel_id === last.channelId)) ||
         (last.kind === 'group' && s.groups.some((g) => g.id === last.channelId)) ||
         (last.kind === 'server' && s.servers.some((x) => x.id === last.serverId));
-      v = ok ? last : { kind: 'friends' };
+      v = ok ? last : { kind: 'home' };
     }
     // Интерфейс показываем только с загруженными данными нового пользователя
     set({ me, presence: { ...get().presence, [me.user_id]: me.presence } });

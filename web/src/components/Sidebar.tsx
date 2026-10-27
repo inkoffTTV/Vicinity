@@ -1,20 +1,4 @@
-import {
-  ChevronDown,
-  Hash,
-  Image,
-  Link,
-  LogOut,
-  MessagesSquare,
-  Paperclip,
-  Pencil,
-  Plus,
-  Settings,
-  ShieldQuestion,
-  Trash2,
-  UserRound,
-  Users,
-  Volume2,
-} from 'lucide-react';
+import { ChevronDown, Hash, Home, Image, Link, LogOut, MessagesSquare, Paperclip, Pencil, Plus, Settings, ShieldQuestion, Trash2, UserRound, Users, Volume2 } from 'lucide-react';
 import { FormEvent, MouseEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { ADMIN_USERNAME, isAdminUsername, openAdminDm } from '../lib/admin';
 import { api, ApiError, LastMessage, normalizeExt, parseTs, Presence, ServerChannel } from '../lib/api';
@@ -103,6 +87,12 @@ function HomeSide() {
       </div>
       <div className="side-scroll">
         <InviteList />
+        <button className={`side-item${view.kind === 'home' ? ' active' : ''}`} onClick={() => open({ kind: 'home' })}>
+          <span className="side-icon" aria-hidden="true">
+            <Icon icon={Home} />
+          </span>
+          <span className="grow">Главная</span>
+        </button>
         <button
           className={`side-item${view.kind === 'friends' ? ' active' : ''}`}
           onClick={() => open({ kind: 'friends' })}

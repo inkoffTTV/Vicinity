@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { Home, Plus } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useNotifySettings } from '../lib/notify';
@@ -27,7 +27,16 @@ export function ServerRail() {
   return (
     <nav className="rail">
       <button
-        className={`rail-item home${homeActive ? ' active' : ''}`}
+        className={`rail-item main${view.kind === 'home' ? ' active' : ''}`}
+        title="Главная"
+        aria-label="Главная"
+        aria-current={view.kind === 'home' ? 'page' : undefined}
+        onClick={() => open({ kind: 'home' })}
+      >
+        <Icon icon={Home} size={22} />
+      </button>
+      <button
+        className={`rail-item home${homeActive && view.kind !== 'home' ? ' active' : ''}`}
         title="Личные сообщения"
         aria-label="Личные сообщения"
         onClick={() => open({ kind: 'friends' })}

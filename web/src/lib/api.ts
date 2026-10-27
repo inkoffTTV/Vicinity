@@ -488,6 +488,43 @@ export interface Award {
   desc: string;
   earned_at?: string;
 }
+/** Главный экран: GET /home (docs/API.md §19) */
+export interface HomeChannel {
+  channel_id: number;
+  kind: 'dm' | 'group' | 'channel';
+  name: string;
+  server_id?: number;
+  server_name?: string;
+  messages: number;
+  top_author?: string;
+}
+export interface HomeVoice {
+  channel_id: number;
+  kind: 'dm' | 'group' | 'channel';
+  name: string;
+  server_id?: number;
+  server_name?: string;
+  users: { id: number; name: string }[];
+}
+export interface HomeData {
+  window_hours: number;
+  digest: { text: string; source: 'ai' | 'rules' };
+  stats: {
+    messages: number;
+    people: number;
+    voice_now: number;
+    friends_online: number;
+    friends: number;
+    friend_requests: number;
+    streak: number;
+    voice_hours_total: number;
+    msgs_total: number;
+  };
+  channels: HomeChannel[];
+  voice: HomeVoice[];
+  suggestions: { id: number; display_name: string; avatar_path: string; shared_servers: number }[];
+}
+
 export interface ActivitySummary {
   xp: number;
   level: number;
@@ -771,6 +808,7 @@ export const api = {
   subscription: () => get<{ tier: number; until?: string; current: Plan; plans: Plan[] }>('/subscription'),
 
   // ── Активность, приватность, подарки (§15–17) ──
+  home: () => get<HomeData>('/home'),
   activityMe: () => get<{ activity: ActivitySummary; catalog: Award[] }>('/activity/me'),
   activityLeaderboard: () => get<{ users: LeaderboardRow[] }>('/activity/leaderboard').then((r) => r.users),
   activityEquip: (title: string, emblem: string) => post<{ activity: ActivitySummary }>('/activity/equip', { title, emblem }),

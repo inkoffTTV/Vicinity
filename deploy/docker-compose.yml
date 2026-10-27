@@ -36,6 +36,8 @@ services:
       VICINITY_SMTP_USER: ${VICINITY_SMTP_USER:-}
       VICINITY_SMTP_PASSWORD: ${VICINITY_SMTP_PASSWORD:-}
       VICINITY_SMTP_FROM: ${VICINITY_SMTP_FROM:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      VICINITY_AI_MODEL: ${VICINITY_AI_MODEL:-}
       VICINITY_SMTP_SECURITY: ${VICINITY_SMTP_SECURITY:-}
       # Голос через SFU (сервис livekit ниже): сервер выдаёт токены комнат теми же ключами
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}

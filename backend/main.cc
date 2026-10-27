@@ -39,6 +39,9 @@ static void applyEnvOverrides(Json::Value& config) {
     if (const auto v = env("VICINITY_SFU_URL"); !v.empty())         custom["sfu"]["url"] = v;
     if (const auto v = env("LIVEKIT_API_KEY"); !v.empty())          custom["sfu"]["key"] = v;
     if (const auto v = env("LIVEKIT_API_SECRET"); !v.empty())       custom["sfu"]["secret"] = v;
+    // Сводка на главной через Claude API (controllers/HomeController.cc); без ключа — шаблонный текст
+    if (const auto v = env("ANTHROPIC_API_KEY"); !v.empty())           custom["ai"]["key"] = v;
+    if (const auto v = env("VICINITY_AI_MODEL"); !v.empty())           custom["ai"]["model"] = v;
     // Web Push: контакт администратора в подписи VAPID (сервисы пушей пишут туда при проблемах)
     if (const auto v = env("VICINITY_PUSH_SUBJECT"); !v.empty())    custom["push"]["subject"] = v;
 
