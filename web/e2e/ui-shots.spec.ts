@@ -38,6 +38,16 @@ for (const [name, viewport, colorScheme] of [
       await page.screenshot({ path: `${dir}/${name}-${what}.png` });
     };
 
+    // Экран входа — в новой вкладке без сессии
+    {
+      const guest = await browser.newPage({ viewport, colorScheme });
+      await guest.goto('/');
+      await expect(guest.getByRole('button', { name: 'Войти' })).toBeVisible();
+      await guest.waitForTimeout(700);
+      await guest.screenshot({ path: `${dir}/${name}-login.png` });
+      await guest.close();
+    }
+
     await makeFriends(b, a);
     await createGroup(a, 'Поход в горы');
     await createServer(a, 'Мой сервер');

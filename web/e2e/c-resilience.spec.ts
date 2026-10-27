@@ -141,7 +141,7 @@ test('expired session and logout leave nothing for the next user of the tab', as
 
   // Обычный выход и вход прежним пользователем — его данные на месте, чужих нет
   await a.page.getByTitle('Настройки').click();
-  await a.page.locator('.modal').getByRole('button', { name: 'Выйти' }).click();
+  await a.page.locator('.settings-page').getByRole('button', { name: 'Выйти' }).click();
   await expect(a.page.getByText('С возвращением!')).toBeVisible();
   expect(await a.page.evaluate(() => localStorage.getItem('vicinity.view'))).toBeNull();
   await loginAs(a.page, a.username);
@@ -150,7 +150,7 @@ test('expired session and logout leave nothing for the next user of the tab', as
   await expect(a.page.locator('.user-panel')).toContainText('Алиса');
 
   await a.page.getByTitle('Настройки').click();
-  await a.page.locator('.modal').getByRole('button', { name: 'Выйти' }).click();
+  await a.page.locator('.settings-page').getByRole('button', { name: 'Выйти' }).click();
   await registerHere(a.page, 'Глеб');
   await expectClean(a.page);
   await expect(a.page.locator('.user-panel')).toContainText('Глеб');

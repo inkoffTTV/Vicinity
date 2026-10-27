@@ -87,7 +87,7 @@ test('servers: create, join by code, messages, presence, profile, reload, logout
   await b.page.locator('label:has-text("О себе") textarea').fill('Тестовое био');
   await b.page.locator('.studio-section:has(h3:text-is("Аватар")) input[type=file]').setInputFiles({ name: 'a.png', mimeType: 'image/png', buffer: pngBuffer(64, 64) });
   await expect(b.page.locator('.toast', { hasText: 'Аватар обновлён' })).toBeVisible();
-  await b.page.locator('.modal').getByRole('button', { name: 'Сохранить' }).click();
+  await b.page.locator('.settings-page').getByRole('button', { name: 'Сохранить' }).click();
   await expect(b.page.locator('.toast', { hasText: 'Профиль сохранён' })).toBeVisible();
 
   // Перезагрузка сохраняет сессию и экран
@@ -96,7 +96,7 @@ test('servers: create, join by code, messages, presence, profile, reload, logout
 
   // Выход
   await a.page.getByTitle('Настройки').click();
-  await a.page.locator('.modal').getByRole('button', { name: 'Выйти' }).click();
+  await a.page.locator('.settings-page').getByRole('button', { name: 'Выйти' }).click();
   await expect(a.page.getByText('С возвращением!')).toBeVisible();
 });
 

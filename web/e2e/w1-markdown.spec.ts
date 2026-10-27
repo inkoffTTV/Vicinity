@@ -91,7 +91,7 @@ test('markdown renders safely; XSS attempts stay inert text; mentions and emoji-
   await b.page.getByTitle('Настройки').click();
   await b.page.locator('.settings-groups button', { hasText: /^Профиль$/ }).click();
   await b.page.locator('label:has-text("О себе") textarea').fill('**Главное** обо мне и <i>не html</i>');
-  await b.page.locator('.modal').getByRole('button', { name: 'Сохранить' }).click();
+  await b.page.locator('.settings-page').getByRole('button', { name: 'Сохранить' }).click();
   await expect(b.page.locator('.toast', { hasText: 'Профиль сохранён' })).toBeVisible();
   await a.page.locator('.chat-title', { hasText: 'Боб' }).click();
   await expect(a.page.locator('.profile-view .bio strong')).toHaveText('Главное');
