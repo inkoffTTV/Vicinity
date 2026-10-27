@@ -1,10 +1,12 @@
-import { Home, Plus } from 'lucide-react';
+import { Headphones, Home, Plus, Users } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useNotifySettings } from '../lib/notify';
 import { useStore } from '../lib/store';
 import { appIconSrc } from '../lib/appIcon';
 import { useAppearance } from '../lib/prefs';
+import { useVoice } from '../lib/voice';
+import { useVoiceVideo } from '../lib/voiceVideo';
 import { homeUnread, serverHasUnread, serverMentions, useUnreadSlice } from '../lib/unread';
 import { Icon } from './Icon';
 import { Modal } from './Modal';
@@ -21,8 +23,12 @@ export function ServerRail() {
 
   // Ждущие ответа приглашения в беседы и на серверы — тоже на значке «Личные сообщения»
   const invites = useStore((s) => s.invites.length);
+  const incoming = useStore((s) => s.incoming.length);
   const home = homeUnread(state) + invites;
   const homeActive = view.kind !== 'server';
+  const inVoice = useVoice((s) => s.channelId !== null);
+  const stageOpen = useVoiceVideo((s) => s.stageOpen);
+  const vv = useVoiceVideo.getState();
 
   return (
     <nav className="rail">
@@ -43,6 +49,26 @@ export function ServerRail() {
       >
         <img src={appIconSrc(appIcon)} alt="" width={48} height={48} />
         {home > 0 && <span className="badge">{home}</span>}
+      </button>
+      <button
+        className={`rail-item friends${view.kind === 'friends' ? ' active' : ''}`}
+        title="Друзья"
+        aria-label={incoming > 0 ? `Друзья, заявок: ${incoming}` : 'Друзья'}
+        aria-current={view.kind === 'friends' ? 'page' : undefined}
+        onClick={() => open({ kind: 'friends' })}
+      >
+        <Icon icon={Users} size={22} />
+        {incoming > 0 && <span className="badge">{incoming}</span>}
+      </button>
+      <button
+        className={`rail-item voice${stageOpen && inVoice ? ' active' : ''}${inVoice ? ' live' : ''}`}
+        title={inVoice ? 'Голосовой канал' : 'Вы не в голосовом канале'}
+        aria-label="Голос"
+        aria-current={stageOpen && inVoice ? 'page' : undefined}
+        disabled={!inVoice}
+        onClick={() => (stageOpen ? vv.closeStage() : vv.openStage())}
+      >
+        <Icon icon={Headphones} size={22} />
       </button>
       <div className="rail-sep" />
       {servers.map((srv) => {

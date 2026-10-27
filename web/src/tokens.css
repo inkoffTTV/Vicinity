@@ -1,25 +1,25 @@
 /* Vicinity — generated from tokens.json; не редактировать руками */
 :root,
 :root[data-theme='dark'] {
-  --bg-ground: #0e1015;
-  --bg-panel: #161920;
-  --bg-raised: #1e222b;
-  --bg-input: #1e222b;
-  --bg-modal: #181b22;
-  --bg-hover: #ffffff0d;
-  --bg-active: #ffffff17;
-  --border: #ffffff12;
-  --text: #e8eaf0;
-  --text-2: #a3a9b7;
-  --text-3: #8c93a3;
+  --bg-ground: #0b0f14;
+  --bg-panel: #10161f;
+  --bg-raised: #182029;
+  --bg-input: #182029;
+  --bg-modal: #121a24;
+  --bg-hover: #ffffff0f;
+  --bg-active: #ffffff1a;
+  --border: #ffffff14;
+  --text: #edf2f7;
+  --text-2: #a7b3c2;
+  --text-3: #8c97a6;
   --text-faint: #6f7686;
-  --accent: #2bc6a4;
-  --accent-hover: #22a88b;
-  --accent-soft: #2bc6a429;
+  --accent: #2be0b8;
+  --accent-hover: #23c4a1;
+  --accent-soft: #2be0b829;
   --on-accent: #06231c;
-  --link: #7fe3cc;
+  --link: #7df0d6;
   --ok: #3dd68c;
-  --idle: #f2b33d;
+  --idle: #ffb547;
   --dnd: #f0616d;
   --offline: #6b7280;
   --on-ok: #06231c;

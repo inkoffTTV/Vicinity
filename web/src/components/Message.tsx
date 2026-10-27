@@ -103,6 +103,7 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
   };
 
   const classes = ['msg'];
+  if (mine) classes.push('mine');
   if (grouped) classes.push('grouped');
   if (editing) classes.push('editing');
   if (msg.local) classes.push(msg.local === 'sending' ? 'pending' : 'failed');

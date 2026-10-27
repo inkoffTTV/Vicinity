@@ -30,6 +30,30 @@
   --bg-raised: rgba(255, 255, 255, 0.6);
   --bg-modal: rgba(255, 255, 255, 0.97);
 }
+/* Сияние «Лагуна» (data-aurora, prefs.ts): без цветовой темы и картинки — мягкие пятна акцента и янтаря на земле.
+   На светлой основе — бледнее. Экономия ресурсов и строгий стиль сияние не рисуют (prefs.ts не ставит атрибут) */
+:root[data-aurora] body {
+  background:
+    radial-gradient(1100px 640px at 16% 10%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 62%),
+    radial-gradient(900px 720px at 94% 92%, color-mix(in srgb, var(--idle) 18%, transparent), transparent 60%),
+    radial-gradient(700px 520px at 60% 115%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
+    var(--bg-ground) fixed;
+}
+:root[data-aurora][data-theme='light'] body {
+  background:
+    radial-gradient(1100px 640px at 16% 10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 62%),
+    radial-gradient(900px 720px at 94% 92%, color-mix(in srgb, var(--idle) 12%, transparent), transparent 60%),
+    var(--bg-ground) fixed;
+}
+/* Стеклянные панели: тонкая светлая обводка по краю (глубина светлотой, без тени) */
+:root[data-glass] .rail,
+:root[data-glass] .sidebar,
+:root[data-glass] .main,
+:root[data-glass] .members,
+:root[data-glass] .group-panel,
+:root[data-glass] .search-panel {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
 /* Фон приложения: картинка под всем интерфейсом, размытая на --glass-blur (App.tsx: .app-bg) */
 .app-bg {
   display: none;
@@ -150,6 +174,65 @@
 /* Масштаб интерфейса */
 :root[data-scaled] #root {
   zoom: var(--ui-scale, 1);
+}
+
+/* Разделы в рейке (Главная, Друзья, Голос): квадраты со скруглением, активный — мягкая заливка акцентом */
+.rail-item.start,
+.rail-item.friends,
+.rail-item.voice {
+  color: var(--text-2);
+  background: transparent;
+}
+.rail-item.start:hover,
+.rail-item.friends:hover,
+.rail-item.voice:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  transform: none;
+}
+.rail-item.start.active,
+.rail-item.friends.active,
+.rail-item.voice.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: none;
+}
+.rail-item.voice:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.rail-item.voice.live:not(.active) {
+  color: var(--ok);
+}
+/* Сообщения пузырями: свой — с оттенком акцента, чужой — приподнятая поверхность */
+.msg-body {
+  flex: 0 1 auto;
+  max-width: min(100%, 760px);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.msg.mine .msg-body {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-raised));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.msg.grouped .msg-body {
+  margin-top: 2px;
+}
+.msg:hover,
+.msg:focus-within {
+  background: transparent;
+}
+.msg.editing {
+  background: var(--bg-hover);
+}
+.composer-row {
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+}
+.side-item {
+  border-radius: var(--radius-md);
 }
 
 /* Высокий контраст: текст ярче, границы заметнее */

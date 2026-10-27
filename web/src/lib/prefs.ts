@@ -296,7 +296,11 @@ function apply(s: State) {
     root.removeAttribute('data-bg');
     root.style.removeProperty('--app-bg');
   }
-  const glass = s.style !== 'strict' && s.transparency && (!!g || !!bg);
+  // Сияние «Лагуна»: без цветовой темы и картинки фона земля — мягкие пятна акцента и янтаря (theme.css data-aurora);
+  // в строгом стиле — плоский цвет. Стекло — над градиентом, картинкой или сиянием
+  const aurora = s.style !== 'strict' && !g && !bg;
+  root.toggleAttribute('data-aurora', aurora);
+  const glass = s.style !== 'strict' && s.transparency && (!!g || !!bg || aurora);
   root.toggleAttribute('data-glass', glass);
   root.style.setProperty('--panel-alpha', String(s.panelOpacity / 100));
   root.style.setProperty('--glass-blur', `${s.glassBlur}px`);
