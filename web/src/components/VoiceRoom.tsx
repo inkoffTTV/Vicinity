@@ -3,6 +3,7 @@ import { useStore, VoiceUser } from '../lib/store';
 import { useVoice } from '../lib/voice';
 import { useVoiceVideo } from '../lib/voiceVideo';
 import { Avatar } from './Avatar';
+import { avatarOf } from './VoiceStage';
 import { Icon } from './Icon';
 
 const NOBODY: VoiceUser[] = [];
@@ -47,13 +48,14 @@ function VoiceUserRow({ user, mine }: { user: VoiceUser; mine: boolean }) {
   const isMe = useStore((s) => s.me?.user_id === user.user_id);
   const flag = useVoice((s) => (mine && isMe ? (s.deafened ? 'deafened' : s.muted ? 'muted' : '') : ''));
   const openStage = useVoiceVideo((s) => s.openStage);
+  const avatar = useStore((s) => avatarOf(s, user.user_id));
   return (
     <div
       className={`voice-user${mine && user.screen ? ' clickable' : ''}`}
       onClick={mine && user.screen ? openStage : undefined}
       data-user={user.user_id}
     >
-      <Avatar name={user.name} id={user.user_id} size={22} speaking={speaking} />
+      <Avatar name={user.name} src={avatar} id={user.user_id} size={22} speaking={speaking} />
       <span className="grow ellipsis">{user.name}</span>
       <StreamBadges user={user} />
       {flag && (

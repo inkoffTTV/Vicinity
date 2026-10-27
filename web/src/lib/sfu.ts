@@ -17,7 +17,7 @@ import {
   type RemoteTrackPublication,
 } from 'livekit-client';
 import type { SfuJoin } from './api';
-import { applyOutputToContext, createDenoiseNode, openMic, rtcIceServers, stopStream, useDenoise, useMediaPrefs, wantDenoise } from './media';
+import { applyOutputToContext, createDenoiseNode, openMic, rtcIceServers, stopStream, useDenoise, useMediaPrefs, useVoiceVolume, voiceGain, wantDenoise } from './media';
 import { pttHeld } from './ptt';
 import { useStore } from './store';
 
@@ -71,6 +71,10 @@ export class SfuEngine {
   private rx = new Map<string, { base: number; last: number }>();
   /** Элементы <audio> удалённых дорожек — вне DOM не играют в Safari */
   private sink = document.createElement('div');
+  /** Звук собеседников: дорожка → WebAudio → усиление (общая громкость × личная, до 300%) → выход.
+      Элемент <audio> остаётся подключённым, но немым: без него Chromium не отдаёт удалённую дорожку в AudioContext */
+  private remote = new Map<string, { userId: number; src: MediaStreamAudioSourceNode; gain: GainNode; el: HTMLMediaElement }>();
+  private unsubVolumes: (() => void) | null = null;
   private closed = false;
   private wanted = false; // мы хотим быть в комнате (отличает свой disconnect от потери)
 
@@ -94,15 +98,21 @@ export class SfuEngine {
       dynacast: false,
       // Только наша дорожка с обработкой; камера и экран пока идут старым путём (lib/voiceVideo.ts)
       audioCaptureDefaults: { autoGainControl: false, echoCancellation: false, noiseSuppression: false },
-      publishDefaults: { dtx: true, red: true, audioPreset: AudioPresets.speech },
+      publishDefaults: { dtx: true, red: true, audioPreset: AudioPresets.music },
     });
     this.room
       .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub, participant: RemoteParticipant) => {
         if (track.kind !== Track.Kind.Audio) return;
+        const userId = userIdOf(participant.identity);
         const el = track.attach();
-        el.setAttribute('data-user', String(userIdOf(participant.identity)));
+        el.setAttribute('data-user', String(userId));
+        el.muted = true;
         this.sink.appendChild(el);
-        participant.setVolume(this.deafened ? 0 : this.volume);
+        const src = this.ctx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
+        const gain = this.ctx.createGain();
+        gain.gain.value = this.gainFor(userId);
+        src.connect(gain).connect(this.ctx.destination);
+        this.remote.set(track.sid ?? String(userId), { userId, src, gain, el });
       })
       // «Не слышать» — не получать чужой звук вовсе, а не только не играть (канал и процессор)
       .on(RoomEvent.TrackPublished, (pub: RemoteTrackPublication) => {
@@ -110,8 +120,14 @@ export class SfuEngine {
       })
       .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
         track.detach().forEach((el) => el.remove());
+        const key = track.sid ?? '';
+        const r = this.remote.get(key);
+        if (r) {
+          r.src.disconnect();
+          r.gain.disconnect();
+          this.remote.delete(key);
+        }
       })
-      .on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => p.setVolume(this.deafened ? 0 : this.volume))
       .on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => this.onSpeakers(speakers))
       .on(RoomEvent.AudioPlaybackStatusChanged, () => {
         // Браузер не дал играть звук без жеста — включим при первом клике
@@ -124,6 +140,7 @@ export class SfuEngine {
         this.hooks.onLost();
       });
     this.setOutput(p.outputId);
+    this.unsubVolumes = useVoiceVolume.subscribe(() => this.applyVolumes());
     // Для отладки в консоли и e2e: состояние комнаты, подписки, ICE
     (window as unknown as { __vicinitySfuRoom?: Room }).__vicinitySfuRoom = this.room;
   }
@@ -185,7 +202,7 @@ export class SfuEngine {
       name: 'mic',
       dtx: true,
       red: true,
-      audioPreset: AudioPresets.speech,
+      audioPreset: AudioPresets.music,
       stopMicTrackOnMute: false,
     });
     if (this.muted || this.deafened) await this.pub.mute();
@@ -270,11 +287,18 @@ export class SfuEngine {
     this.deafened = deafened;
     const off = muted || deafened;
     if (this.pub) void (off ? this.pub.mute() : this.pub.unmute()).catch(() => {});
-    this.room.remoteParticipants.forEach((p) => {
-      p.setVolume(deafened ? 0 : this.volume);
-      if (deafened !== wasDeaf) p.audioTrackPublications.forEach((pub) => pub.setSubscribed(!deafened));
-    });
+    this.applyVolumes();
+    if (deafened !== wasDeaf) this.room.remoteParticipants.forEach((p) => p.audioTrackPublications.forEach((pub) => pub.setSubscribed(!deafened)));
     this.syncPtt();
+  }
+
+  /** Усиление дорожки собеседника: общая громкость × его личная (0…3); «не слышать» — тишина */
+  private gainFor(userId: number) {
+    return this.deafened ? 0 : this.volume * voiceGain(useVoiceVolume.getState().volumes, userId);
+  }
+
+  private applyVolumes() {
+    this.remote.forEach((r) => r.gain.gain.setTargetAtTime(this.gainFor(r.userId), this.ctx.currentTime, 0.02));
   }
 
   setGain(g: number) {
@@ -284,7 +308,7 @@ export class SfuEngine {
 
   setVolume(v: number) {
     this.volume = v;
-    if (!this.deafened) this.room.remoteParticipants.forEach((p) => p.setVolume(v));
+    this.applyVolumes();
   }
 
   setOutput(deviceId: string) {
@@ -298,6 +322,12 @@ export class SfuEngine {
   close() {
     this.closed = true;
     this.wanted = false;
+    this.unsubVolumes?.();
+    this.remote.forEach((r) => {
+      r.src.disconnect();
+      r.gain.disconnect();
+    });
+    this.remote.clear();
     window.clearInterval(this.pttTimer);
     window.clearInterval(this.statsTimer);
     this.source?.disconnect();

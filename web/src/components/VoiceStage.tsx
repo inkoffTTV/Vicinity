@@ -25,7 +25,7 @@ import { useVoice } from '../lib/voice';
 import { MAX_VIEWERS, useVoiceVideo, Watch } from '../lib/voiceVideo';
 import { AudioSettings } from './AudioSettings';
 import { Avatar } from './Avatar';
-import { StreamVideo, useFullscreen, StreamVolume } from './CallOverlay';
+import { StreamVideo, useFullscreen, StreamVolume, VoiceVolume } from './CallOverlay';
 import { Icon } from './Icon';
 import { streamGain, useStreamVolume } from '../lib/media';
 import { ScreenShareControl } from './ScreenShareControl';
@@ -38,7 +38,7 @@ import { useVoiceUsers } from './VoiceRoom';
 type StoreState = ReturnType<typeof useStore.getState>;
 
 /** Аватар участника: из списков участников серверов, личек и друзей */
-function avatarOf(s: StoreState, uid: number): string | undefined {
+export function avatarOf(s: StoreState, uid: number): string | undefined {
   for (const list of Object.values(s.membersByServer) as Member[][]) {
     const m = list.find((x) => x.id === uid);
     if (m) return m.avatar_path;
@@ -229,6 +229,7 @@ function Tile({ user, watching, compact }: { user: VoiceUser; watching: Record<s
         </span>
       )}
       {me && ownScreen && <span className="stage-tile-own-screen">Вы показываете экран</span>}
+      {!me && <VoiceVolume userId={user.user_id} compact />}
       {cam && cam.state === 'connecting' && <span className="stage-tile-wait">Подключение камеры…</span>}
       {!me && user.screen && (
         <button

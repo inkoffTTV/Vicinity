@@ -5188,6 +5188,48 @@ a:focus-visible > .ico {
   display: flex;
   align-items: center;
 }
+/* Громкость собеседника: в меню пользователя строкой, на плитке сцены — по наведению */
+.voice-volume input[type='range'] {
+  width: 120px;
+}
+.voice-volume-pct {
+  min-width: 40px;
+  font-size: var(--fs-micro);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.voice-volume-pct.boost {
+  color: var(--accent);
+  font-weight: 600;
+}
+.menu-row {
+  padding: 6px 10px 4px;
+}
+.stage-tile .voice-volume {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--scrim);
+  color: var(--on-scrim);
+  opacity: 0;
+  transition: opacity var(--dur-fast);
+}
+.stage-tile .voice-volume input[type='range'] {
+  width: 80px;
+}
+.stage-tile:hover .voice-volume,
+.stage-tile:focus-within .voice-volume {
+  opacity: 1;
+}
+@media (hover: none) {
+  .stage-tile .voice-volume {
+    opacity: 1;
+  }
+}
 
 /* ── Слушать вместе (ListenTogether.tsx) ── */
 .listen-panel {

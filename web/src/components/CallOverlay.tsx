@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { CallPhase, NetQuality, useCall } from '../lib/call';
-import { applyOutput, streamGain, useMediaPrefs, useStreamVolume } from '../lib/media';
+import { applyOutput, streamGain, useMediaPrefs, useStreamVolume, useVoiceVolume, voiceGain, VOICE_VOLUME_MAX } from '../lib/media';
 import { useStore } from '../lib/store';
 import { AudioSettings } from './AudioSettings';
 import { Avatar } from './Avatar';
@@ -152,6 +152,32 @@ export function StreamVolume({ userId, compact }: { userId: number; compact?: bo
         aria-valuetext={`${Math.round(v * 100)}%`}
         onChange={(e) => setVolume(userId, Number(e.target.value))}
       />
+    </div>
+  );
+}
+
+/** Громкость голоса этого человека: 0…300%, усиление выше 100% — через WebAudio (lib/sfu.ts) */
+export function VoiceVolume({ userId, compact }: { userId: number; compact?: boolean }) {
+  const volumes = useVoiceVolume((s) => s.volumes);
+  const setVolume = useVoiceVolume((s) => s.set);
+  const v = voiceGain(volumes, userId);
+  const pct = Math.round(v * 100);
+  return (
+    <div className={`stream-volume voice-volume${compact ? ' compact' : ''}`} role="group" aria-label="Громкость этого человека" title="Громкость этого человека" onClick={(e) => e.stopPropagation()}>
+      <button type="button" className="plain" aria-label={v === 0 ? 'Включить звук этого человека' : 'Заглушить этого человека'} onClick={() => setVolume(userId, v === 0 ? 1 : 0)}>
+        <Icon icon={v === 0 ? VolumeX : v < 0.5 ? Volume1 : Volume2} size={16} />
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={VOICE_VOLUME_MAX}
+        step={0.1}
+        value={v}
+        aria-label="Громкость голоса"
+        aria-valuetext={`${pct}%`}
+        onChange={(e) => setVolume(userId, Number(e.target.value))}
+      />
+      <span className={`voice-volume-pct${v > 1 ? ' boost' : ''}`}>{pct}%</span>
     </div>
   );
 }

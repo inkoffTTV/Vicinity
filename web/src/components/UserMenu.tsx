@@ -7,6 +7,8 @@ import { useUserMenu } from '../lib/userMenu';
 import { useUserDirectory } from '../lib/users';
 import { Icon } from './Icon';
 import { Popover } from './Popover';
+import { VoiceVolume } from './CallOverlay';
+import { useVoice } from '../lib/voice';
 
 /** Меню пользователя по правой кнопке / долгому нажатию: профиль, написать, позвонить, в друзья, id */
 export function UserMenu() {
@@ -17,6 +19,9 @@ export function UserMenu() {
   const incoming = useStore((s) => (at ? s.incoming.some((f) => f.id === at.userId) : false));
   const outgoing = useStore((s) => (at ? s.outgoing.some((f) => f.id === at.userId) : false));
   const callIdle = useCall((s) => s.phase === 'idle');
+  // Человек в одном со мной голосовом канале — у него своя громкость
+  const voiceChannel = useVoice((s) => s.channelId);
+  const inMyVoice = useStore((s) => (at && voiceChannel !== null ? (s.voice[voiceChannel] ?? []).some((u) => u.user_id === at.userId) : false));
   const directory = useUserDirectory();
   if (!at) return null;
   const { userId } = at;
@@ -43,6 +48,11 @@ export function UserMenu() {
         <Icon icon={UserRound} size={16} />
         Профиль
       </button>
+      {!self && inMyVoice && (
+        <div className="menu-row" role="none">
+          <VoiceVolume userId={userId} />
+        </div>
+      )}
       {!self && (
         <>
           <button role="menuitem" onClick={run(() => store.openDmWith(userId))}>

@@ -670,5 +670,30 @@ export const useStreamVolume = create<{ volumes: Record<string, number>; set: (u
   },
 }));
 
+/** Громкость голоса каждого собеседника отдельно: 0…3 (до 300% — усиление через WebAudio, lib/sfu.ts); 1 — как есть */
+const VOICE_VOLUME_KEY = 'vicinity.voiceVolumes';
+export const VOICE_VOLUME_MAX = 3;
+function loadVoiceVolumes(): Record<string, number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(VOICE_VOLUME_KEY) ?? '{}');
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    return {};
+  }
+}
+export const useVoiceVolume = create<{ volumes: Record<string, number>; set: (userId: number, v: number) => void }>((set, get) => ({
+  volumes: loadVoiceVolumes(),
+  set: (userId, v) => {
+    const volumes = { ...get().volumes, [String(userId)]: Math.min(VOICE_VOLUME_MAX, Math.max(0, v)) };
+    set({ volumes });
+    try {
+      localStorage.setItem(VOICE_VOLUME_KEY, JSON.stringify(volumes));
+    } catch {
+      /* приватный режим */
+    }
+  },
+}));
+export const voiceGain = (volumes: Record<string, number>, userId: number) => volumes[String(userId)] ?? 1;
+
 /** Множитель громкости трансляции этого человека (1 — не трогали) */
 export const streamGain = (volumes: Record<string, number>, userId: number) => volumes[String(userId)] ?? 1;

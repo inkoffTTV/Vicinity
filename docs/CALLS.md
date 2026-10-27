@@ -191,6 +191,18 @@ WebSocket PCM path) and updates them only when the value moves by ≥ 5 ms. The 
 `components/VoiceBar.tsx`) sits next to «Голос подключён» in the voice bar and next to the member counter in the
 stage header; it is hidden until the first sample. Colours: `ok` / `idle` / `dnd` tokens.
 
+### 2.9 Per-person volume and boost
+
+On the SFU path every remote audio track is routed through the engine's `AudioContext`: the attached `<audio>`
+element stays in the DOM but muted (Chromium only feeds a remote track into WebAudio while an element plays it),
+and the sound goes `MediaStreamSource → GainNode → destination`. The gain is `master volume × personal volume`,
+where the personal volume lives in `useVoiceVolume` (`lib/media.ts`, `localStorage` key `vicinity.voiceVolumes`,
+range 0…3, i.e. up to 300 %). «Не слышать» sets every gain to 0 and unsubscribes. The control (`VoiceVolume` in
+`components/CallOverlay.tsx`) appears on hover over a stage tile and as a row in the user context menu when that
+person is in your voice channel. Published audio uses `AudioPresets.music` (48 kbit/s) instead of `speech`
+(24 kbit/s): the lower preset produced audible ripple on quiet voices with DTX. The WebSocket PCM path has
+only the master volume.
+
 ## 3. 1:1 calls
 
 ### 3.1 Server relay
