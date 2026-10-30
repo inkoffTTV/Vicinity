@@ -86,7 +86,7 @@ Invoke-Ssh "mkdir -p '$Remote/.incoming'" | Out-Null
 $remoteJsons = @((Invoke-Ssh "ls '$Remote' | grep '\.json$' || true") | ForEach-Object { $_.Trim() -replace "\.json$", "" } | Where-Object { $_ })
 # Имена исходных файлов уже загруженных записей (поле source в json): так не зальём то, что заливал старый скрипт
 $remoteSources = @{}
-foreach ($line in @(Invoke-Ssh "cd '$Remote' && grep -H '\"source\"' *.json 2>/dev/null || true")) {
+foreach ($line in @(Invoke-Ssh "cd $Remote && grep -H source *.json 2>/dev/null || true")) {
     if ($line -match '^(.+?)\.json:.*"source"\s*:\s*"(.+?)"') { $remoteSources[$Matches[2]] = $Matches[1] }
 }
 
