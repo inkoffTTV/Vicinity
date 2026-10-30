@@ -1,4 +1,4 @@
-<#
+﻿<#
 Заливка записей турнира с ПК в мини-приложение бота TI:IT TOP (бот лежит на сервере в /opt/ti-it-top, в репозитории его нет —
 поэтому скрипт здесь, в deploy/).
 
@@ -110,7 +110,7 @@ foreach ($f in $files) {
     }
     if ($Tournament -gt 0) { $meta.tournament_id = $Tournament }
 
-    Write-Host ("`n{0} → {1}  ({2:N1} ГБ, {3} с, {4}p)" -f $f.Name, $id, ($f.Length / 1GB), $info.duration, $info.height)
+    Write-Host ("`n{0} -> {1}  ({2:N1} ГБ, {3} с, {4}p)" -f $f.Name, $id, ($f.Length / 1GB), $info.duration, $info.height)
     if ($WhatIf) { continue }
 
     $tmp = Join-Path $env:TEMP "rec-$id"
@@ -126,11 +126,11 @@ foreach ($f in $files) {
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path $jpgPath)) { $jpgPath = $null }
     }
 
-    Write-Host "  заливаю видео…"
+    Write-Host "  заливаю видео..."
     & scp -o BatchMode=yes -q $f.FullName "${Server}:$Remote/.incoming/$id.mp4"
     if ($LASTEXITCODE -ne 0) { throw "scp видео не прошёл: $($f.Name)" }
     $remoteSize = (Invoke-Ssh "stat -c %s '$Remote/.incoming/$id.mp4'").Trim()
-    if ([int64]$remoteSize -ne $f.Length) { throw "размер на сервере $remoteSize ≠ $($f.Length), файл не докачан: $($f.Name)" }
+    if ([int64]$remoteSize -ne $f.Length) { throw "размер на сервере $remoteSize != $($f.Length), файл не докачан: $($f.Name)" }
     if ($jpgPath) { & scp -o BatchMode=yes -q $jpgPath "${Server}:$Remote/.incoming/$id.jpg" }
     & scp -o BatchMode=yes -q $jsonPath "${Server}:$Remote/.incoming/$id.json"
     if ($LASTEXITCODE -ne 0) { throw "scp json не прошёл: $($f.Name)" }
