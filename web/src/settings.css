@@ -1295,3 +1295,90 @@ input.invalid {
 .gift-icon {
   color: var(--accent);
 }
+
+/* ── Приватность: элементы профиля с исключениями (settings/PrivacyScreen.tsx) ── */
+.privacy-element {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.privacy-element:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.privacy-exceptions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.people-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  position: relative;
+}
+.people-list-label {
+  min-width: 140px;
+}
+.people-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 4px;
+}
+.people-chip .plain {
+  display: inline-flex;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.people-chip .plain:hover {
+  color: var(--danger-text);
+}
+.people-chip.add {
+  padding: 3px 10px;
+  border-style: dashed;
+  cursor: pointer;
+  color: var(--accent);
+}
+.people-add {
+  position: relative;
+  display: inline-flex;
+}
+.people-add input {
+  width: 200px;
+  height: 30px;
+  padding: 0 10px;
+  font-size: var(--fs-body-sm);
+}
+.people-add-list {
+  position: absolute;
+  top: 34px;
+  left: 0;
+  z-index: 5;
+  min-width: 260px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-modal);
+  box-shadow: var(--shadow-modal);
+}
+.people-add-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.people-add-list button:hover {
+  background: var(--bg-hover);
+}

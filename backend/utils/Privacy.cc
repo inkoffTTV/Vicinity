@@ -3,10 +3,24 @@
 #include "PresenceUtil.h"
 #include <drogon/drogon.h>
 #include <initializer_list>
+#include <set>
 
 using namespace drogon;
 
 namespace {
+
+// Элементы с правилом {who, hide_from, show_to}: status и stats (их who дублируется в старых строковых полях),
+// элементы профиля и "all" — только hide_from, «скрыть профиль целиком от этих людей»
+const char* const kRuleKeys[] = {"status", "stats", "about", "banner", "wishlist", "games", "music", "connections", "all"};
+constexpr std::size_t kMaxExceptions = 200;
+
+Json::Value emptyRule() {
+    Json::Value r;
+    r["who"] = "everyone";
+    r["hide_from"] = Json::Value(Json::arrayValue);
+    r["show_to"] = Json::Value(Json::arrayValue);
+    return r;
+}
 
 Json::Value defaults() {
     Json::Value v;
@@ -14,7 +28,27 @@ Json::Value defaults() {
     v["stats"]           = "everyone";   // everyone | friends | nobody
     v["dm"]              = "everyone";   // everyone | friends
     v["friend_requests"] = "everyone";   // everyone | friends_of_friends | nobody
+    for (const char* k : kRuleKeys) v["rules"][k] = emptyRule();
     return v;
+}
+
+// Список id без дублей и без самого владельца
+Json::Value cleanIds(const Json::Value& in, int64_t self) {
+    Json::Value out(Json::arrayValue);
+    std::set<int64_t> seen;
+    for (const auto& x : in) {
+        if (!x.isIntegral()) continue;
+        const int64_t id = x.asInt64();
+        if (id <= 0 || id == self || !seen.insert(id).second) continue;
+        out.append(static_cast<Json::Int64>(id));
+        if (out.size() >= kMaxExceptions) break;
+    }
+    return out;
+}
+
+bool inList(const Json::Value& list, int64_t id) {
+    for (const auto& x : list) if (x.isIntegral() && x.asInt64() == id) return true;
+    return false;
 }
 
 bool oneOf(const Json::Value& v, std::initializer_list<const char*> allowed) {
@@ -32,6 +66,17 @@ Json::Value load(int64_t userId) {
         if (!JsonUtils::parse(rows[0]["privacy"].as<std::string>(), saved) || !saved.isObject()) return out;
         for (const auto& key : out.getMemberNames())
             if (saved[key].isString()) out[key] = saved[key];
+        if (saved["rules"].isObject())
+            for (const char* k : kRuleKeys) {
+                const Json::Value& r = saved["rules"][k];
+                if (!r.isObject()) continue;
+                if (r["who"].isString()) out["rules"][k]["who"] = r["who"];
+                if (r["hide_from"].isArray()) out["rules"][k]["hide_from"] = cleanIds(r["hide_from"], userId);
+                if (r["show_to"].isArray()) out["rules"][k]["show_to"] = cleanIds(r["show_to"], userId);
+            }
+        // Старые поля status/stats и who их правил — одно и то же
+        out["rules"]["status"]["who"] = out["status"];
+        out["rules"]["stats"]["who"] = out["stats"];
     } catch (const std::exception& e) {
         LOG_WARN << "privacy: " << e.what();
     }
@@ -54,6 +99,30 @@ bool patch(int64_t userId, const Json::Value& in, Json::Value& out, std::string&
     }
     for (const char* key : {"status", "stats", "dm", "friend_requests"})
         if (in.isMember(key)) out[key] = in[key];
+    if (in.isMember("rules")) {
+        if (!in["rules"].isObject()) { error = "rules"; return false; }
+        for (const char* k : kRuleKeys) {
+            if (!in["rules"].isMember(k)) continue;
+            const Json::Value& r = in["rules"][k];
+            if (!r.isObject()) { error = std::string("rules.") + k; return false; }
+            if (r.isMember("who")) {
+                if (!oneOf(r["who"], {"everyone", "friends", "nobody"}) || (std::string(k) == "all" && r["who"].asString() != "everyone")) {
+                    error = std::string("rules.") + k + ".who"; return false;
+                }
+                out["rules"][k]["who"] = r["who"];
+            }
+            for (const char* list : {"hide_from", "show_to"}) {
+                if (!r.isMember(list)) continue;
+                if (!r[list].isArray()) { error = std::string("rules.") + k + "." + list; return false; }
+                out["rules"][k][list] = cleanIds(r[list], userId);
+            }
+        }
+    }
+    // who у status/stats и старые строковые поля — одно и то же, что бы ни прислали
+    if (in.isMember("rules") && in["rules"]["status"].isObject() && in["rules"]["status"].isMember("who")) out["status"] = out["rules"]["status"]["who"];
+    else out["rules"]["status"]["who"] = out["status"];
+    if (in.isMember("rules") && in["rules"]["stats"].isObject() && in["rules"]["stats"].isMember("who")) out["stats"] = out["rules"]["stats"]["who"];
+    else out["rules"]["stats"]["who"] = out["stats"];
     app().getDbClient()->execSqlSync(
         "INSERT INTO user_settings(user_id, privacy, updated_at) VALUES(?, ?, CURRENT_TIMESTAMP) "
         "ON CONFLICT(user_id) DO UPDATE SET privacy = excluded.privacy, updated_at = CURRENT_TIMESTAMP",
@@ -69,9 +138,16 @@ bool friends(const orm::DbClientPtr& db, int64_t a, int64_t b) {
     return !r.empty();
 }
 
+const char* const kProfileFields[6] = {"about", "banner", "wishlist", "games", "music", "connections"};
+
 bool allows(const orm::DbClientPtr& db, int64_t target, int64_t viewer, const char* field) {
     if (target == viewer) return true;
-    const std::string mode = load(target)[field].asString();
+    const Json::Value p = load(target);
+    if (inList(p["rules"]["all"]["hide_from"], viewer)) return false;
+    const Json::Value& rule = p["rules"][field];
+    if (inList(rule["hide_from"], viewer)) return false;
+    if (inList(rule["show_to"], viewer)) return true;
+    const std::string mode = rule["who"].asString();
     if (mode == "nobody") return false;
     if (mode == "friends") return friends(db, target, viewer);
     return true;

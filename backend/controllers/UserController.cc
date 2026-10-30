@@ -176,6 +176,41 @@ void UserController::profile(const HttpRequestPtr& req,
         else resp["activity"] = Activity::brief(id), resp["activity"]["hidden"] = true;
     } catch (...) {}
     resp["subscription_until"] = u->subscriptionUntil;
+    // Приватность по элементам профиля (§15): скрытое не уходит в ответ вовсе; список скрытого — в hidden
+    Json::Value hidden(Json::arrayValue);
+    if (id != self) {
+        try {
+            auto hide = [&](const char* field) {
+                if (Privacy::allows(db, id, self, field)) return false;
+                hidden.append(field);
+                return true;
+            };
+            if (hide("about")) {
+                resp["bio"] = "";
+                resp["pronouns"] = "";
+                Json::Value pj;
+                if (JsonUtils::parse(u->profileJson, pj) && pj.isObject()) {
+                    pj.removeMember("statusText");
+                    pj.removeMember("links");
+                    resp["profile_json"] = JsonUtils::write(pj);
+                }
+            }
+            if (hide("banner")) resp["banner_path"] = "";
+            Json::Value& ext = resp["profile_ext"];
+            if (ext.isObject()) {
+                if (hide("wishlist")) ext["widgets"]["wishlist"] = Json::Value(Json::arrayValue);
+                if (hide("games")) {
+                    ext["widgets"]["games"] = Json::Value(Json::arrayValue);
+                    ext["widgets"]["favorite_game"] = Json::nullValue;
+                }
+                if (hide("music")) ext["music"] = Json::nullValue;
+                if (hide("connections")) ext["connections"] = Json::Value(Json::arrayValue);
+            } else {
+                for (const char* f : {"wishlist", "games", "music", "connections"}) hide(f);
+            }
+        } catch (...) {}
+    }
+    resp["hidden"] = hidden;
     // Общие серверы
     Json::Value servers(Json::arrayValue);
     try {
@@ -238,8 +273,8 @@ void UserController::profile(const HttpRequestPtr& req,
         } catch (...) {}
     }
 
-    // Рекорды в играх «Активностей» (только сыгранные)
-    try {
+    // Рекорды в играх «Активностей» (только сыгранные); скрыты вместе с играми профиля
+    if (id == self || Privacy::allows(db, id, self, "games")) try {
         auto r = app().getDbClient()->execSqlSync(
             "SELECT game, best_floor, runs, wins FROM game_stats WHERE user_id = ? AND runs > 0", id);
         for (const auto& row : r) {

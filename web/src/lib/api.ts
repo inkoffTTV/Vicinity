@@ -475,6 +475,8 @@ export interface Profile {
   games?: Record<string, { best_floor: number; runs: number; wins: number }>;
   /** Уровень, серия, титул и награды (§16); hidden — владелец скрыл статистику, тогда только level/streak/title/emblem */
   activity?: Partial<ActivitySummary> & { hidden?: boolean };
+  /** Элементы профиля, скрытые владельцем от меня (§15): about, banner, wishlist, games, music, connections */
+  hidden?: string[];
   subscription_until?: string;
 }
 
@@ -550,12 +552,22 @@ export interface LeaderboardRow extends UserSummary {
 }
 
 // ── Приватность (§15) ──
+/** Правило видимости элемента профиля: кому видно + исключения (не показывать этим / всегда показывать этим) */
+export interface PrivacyRule {
+  who: 'everyone' | 'friends' | 'nobody';
+  hide_from: number[];
+  show_to: number[];
+}
+/** Элементы с правилами; all — только hide_from: «скрыть профиль целиком от этих людей» */
+export type PrivacyRuleKey = 'status' | 'stats' | 'about' | 'banner' | 'wishlist' | 'games' | 'music' | 'connections' | 'all';
 export interface PrivacySettings {
   status: 'everyone' | 'friends' | 'nobody';
   stats: 'everyone' | 'friends' | 'nobody';
   dm: 'everyone' | 'friends';
   friend_requests: 'everyone' | 'friends_of_friends' | 'nobody';
+  rules: Record<PrivacyRuleKey, PrivacyRule>;
 }
+export type PrivacyPatch = Partial<Omit<PrivacySettings, 'rules'>> & { rules?: Partial<Record<PrivacyRuleKey, Partial<PrivacyRule>>> };
 
 // ── Подарочные коды (§17) ──
 export interface GiftInfo {
@@ -813,7 +825,7 @@ export const api = {
   activityLeaderboard: () => get<{ users: LeaderboardRow[] }>('/activity/leaderboard').then((r) => r.users),
   activityEquip: (title: string, emblem: string) => post<{ activity: ActivitySummary }>('/activity/equip', { title, emblem }),
   privacy: () => get<PrivacySettings>('/settings/privacy'),
-  patchPrivacy: (p: Partial<PrivacySettings>) => request<PrivacySettings>('PATCH', '/settings/privacy', p),
+  patchPrivacy: (p: PrivacyPatch) => request<PrivacySettings>('PATCH', '/settings/privacy', p),
   giftInfo: (code: string) => get<GiftInfo>(`/gifts/${encodeURIComponent(code)}`),
   giftRedeem: (code: string) => post<{ tier: number; name: string; until: string; days: number }>('/gifts/redeem', { code }),
   adminGifts: () => get<{ gifts: GiftCode[] }>('/admin/gifts').then((r) => r.gifts),

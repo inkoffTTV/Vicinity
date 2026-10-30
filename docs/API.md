@@ -438,6 +438,17 @@ GET/PATCH `/settings/privacy` → `{status, stats, dm, friend_requests}` (хра
 - `friend_requests`: `everyone` | `friends_of_friends` | `nobody` — POST `/friends/request` → 403.
 Некорректное значение — 400.
 
+**Правила по элементам с исключениями (как в Telegram) [new].** В тех же GET/PATCH поле `rules`:
+`{status, stats, about, banner, wishlist, games, music, connections, all}`, каждое — `{who: everyone|friends|nobody,
+hide_from: [id…], show_to: [id…]}` (до 200 id в списке; свой id и мусор отбрасываются). Порядок проверки для
+зрителя: `rules.all.hide_from` («скрыть профиль целиком от этих людей», у `all` только `hide_from`) → `hide_from`
+элемента → `show_to` элемента → `who`. `rules.status.who` и `rules.stats.who` — то же, что старые поля `status` и
+`stats` (меняются вместе). В PATCH можно слать частичные правила: `{rules: {wishlist: {hide_from: [5]}}}`.
+В GET `/users/{id}/profile` скрытое не уходит вовсе: `about` — пустые `bio`, `pronouns`, без `statusText` и `links`
+в `profile_json`; `banner` — пустой `banner_path`; `wishlist` / `games` (вместе с рекордами `games` Активностей и
+любимой игрой) / `music` / `connections` — пустые в `profile_ext`; `stats` — как раньше `activity.hidden`. Список
+скрытых элементов — `hidden: ["about", …]`. Аватар не скрывается: он виден в чатах и списках независимо от профиля.
+
 ## 16. Активность и награды **[new]**
 Опыт: сообщение +2, минута звонка +1 (до 120 за звонок), минута в голосовом канале +1 (до 240 за заход),
 партия в Активностях +10, победа +15. Уровень = ⌊√(xp/40)⌋+1. Серия — дни подряд с хоть одним событием (UTC),

@@ -14,8 +14,12 @@ namespace Privacy {
 
     // Друзья ли (accepted)
     bool friends(const drogon::orm::DbClientPtr& db, int64_t a, int64_t b);
-    // Виден ли viewer-у аспект field ("status" | "stats") пользователя target
+    // Виден ли viewer-у аспект field пользователя target: "status" | "stats" | "about" | "banner" | "wishlist" |
+    // "games" | "music" | "connections". Правило элемента — rules[field] = {who, hide_from, show_to} плюс общий список
+    // rules.all.hide_from («скрыть профиль целиком от…»): сначала исключения, потом who (everyone | friends | nobody)
     bool allows(const drogon::orm::DbClientPtr& db, int64_t target, int64_t viewer, const char* field);
+    // Элементы профиля с правилами (кроме status и stats, у них свои поля)
+    extern const char* const kProfileFields[6];
     // Статус target глазами viewer: effectivePresence или "offline", если статус скрыт
     std::string presenceFor(const drogon::orm::DbClientPtr& db, int64_t target, int64_t viewer);
     // Может ли from написать target в личку (новую); текст отказа в reason
