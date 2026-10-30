@@ -84,9 +84,19 @@ if (-not $files) { Write-Host "В $Source нет .mp4"; exit 0 }
 
 Invoke-Ssh "mkdir -p '$Remote/.incoming'" | Out-Null
 $remoteJsons = @((Invoke-Ssh "ls '$Remote' | grep '\.json$' || true") | ForEach-Object { $_.Trim() -replace "\.json$", "" } | Where-Object { $_ })
+# Имена исходных файлов уже загруженных записей (поле source в json): так не зальём то, что заливал старый скрипт
+$remoteSources = @{}
+foreach ($line in @(Invoke-Ssh "cd '$Remote' && grep -H '\"source\"' *.json 2>/dev/null || true")) {
+    if ($line -match '^(.+?)\.json:.*"source"\s*:\s*"(.+?)"') { $remoteSources[$Matches[2]] = $Matches[1] }
+}
 
 foreach ($f in $files) {
     if ($ledger.ContainsKey($f.Name)) { Write-Host "пропуск (уже загружен): $($f.Name)"; continue }
+    if ($remoteSources.ContainsKey($f.Name)) {
+        Write-Host "пропуск (уже на сервере как $($remoteSources[$f.Name])): $($f.Name)"
+        $ledger[$f.Name] = $remoteSources[$f.Name]; Save-Ledger
+        continue
+    }
     if ((Get-Date) - $f.LastWriteTime -lt [TimeSpan]::FromMinutes($SettleMinutes)) { Write-Host "пропуск (ещё пишется): $($f.Name)"; continue }
 
     $start = Get-StartTime $f
