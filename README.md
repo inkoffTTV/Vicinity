@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/banner.svg" width="100%" alt="Vicinity"/></p>
+
 # Vicinity
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://isocpp.org/)
