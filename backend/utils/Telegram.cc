@@ -8,6 +8,7 @@
 #include "CryptoUtils.h"
 #include "JsonUtils.h"
 #include "Messages.h"
+#include "Notes.h"
 #include "TextUtils.h"
 #include "WebPush.h"
 #include <drogon/HttpClient.h>
@@ -121,7 +122,7 @@ void postFromTelegram(int64_t chatId, int64_t tgMessageId, int64_t userId, int64
     ws["type"] = "new_message";
     Broadcast::toChannel(channelId, ws);
     WebPush::notifyMessage(msg, channelId);
-    Telegram::notifyMessage(msg, channelId);
+    Telegram::notifyMessage(msg, channelId, true);
     Activity::bump(userId, Activity::Kind::Message);
     // Отметка «доставлено» реакцией на свой ответ — без лишнего сообщения в чате
     Json::Value react;
@@ -156,6 +157,7 @@ void link(int64_t chatId, const Json::Value& from, const std::string& code) {
              "Готово: Telegram подключён к аккаунту Vicinity <b>" + escapeHtml(who) + "</b>.\n\n"
              "Сюда будут приходить личные сообщения, беседы и упоминания, пока вас нет в Vicinity. "
              "Чтобы ответить, нажмите «Ответить» на нужном сообщении: ответ уйдёт в тот же чат.\n\n"
+             "Всё, что вы напишете сюда просто так, попадёт в <b>Заметки</b> в Vicinity, а заметки из Vicinity придут сюда.\n\n"
              "Отключить: /stop или в настройках Vicinity.");
     // Открытые вкладки настроек узнают о привязке сразу
     Json::Value ev;
@@ -192,7 +194,12 @@ void handleUpdate(const Json::Value& upd) {
     const int64_t userId = linked[0]["user_id"].as<int64_t>();
     const Json::Value& replyTo = m["reply_to_message"];
     if (!replyTo.isObject()) {
-        sendText(chatId, "Чтобы ответить, нажмите «Ответить» на сообщении из Vicinity: так бот поймёт, в какой чат отправить.");
+        // Просто сообщение боту — в «Заметки»
+        if (text.empty()) {
+            sendText(chatId, "Пока в Заметки можно отправлять только текст.");
+            return;
+        }
+        postFromTelegram(chatId, m["message_id"].asInt64(), userId, Notes::channelOf(db, userId), text);
         return;
     }
     auto map = db->execSqlSync("SELECT channel_id FROM telegram_messages WHERE chat_id = ? AND tg_message_id = ?",
@@ -297,11 +304,32 @@ void unlink(int64_t userId) {
     sendText(rows[0]["chat_id"].as<int64_t>(), "Отключено в настройках Vicinity: сообщения больше не придут.");
 }
 
-void notifyMessage(const Json::Value& msg, int64_t channelId) {
+void notifyMessage(const Json::Value& msg, int64_t channelId, bool fromTelegram) {
     if (!ready()) return;
     try {
         auto db = app().getDbClient();
         const int64_t author = msg["author_id"].asInt64();
+        // «Заметки»: владельцу в его Telegram, всегда (не только вне сети), кроме пришедшего из самого Telegram
+        if (const int64_t owner = Notes::ownerOf(db, channelId)) {
+            if (fromTelegram) return;
+            auto l = db->execSqlSync("SELECT chat_id, enabled FROM telegram_links WHERE user_id = ?", owner);
+            if (l.empty() || !l[0]["enabled"].as<int>()) return;
+            const std::string text = msg["text"].asString();
+            std::string body;
+            if (msg["kind"].asString() == "voice") body = "[голосовое сообщение]";
+            else if (!text.empty()) body = escapeHtml(TextUtils::utf8Truncate(text, 3500));
+            else body = msg["attachment_type"].asString() == "file" ? "[файл] " + escapeHtml(msg["attachment_name"].asString()) : "[изображение]";
+            if (!text.empty() && !msg["attachment_type"].asString().empty()) body += "\n[вложение]";
+            const int64_t chatId = l[0]["chat_id"].as<int64_t>();
+            sendText(chatId, "<b>Заметки</b>\n" + body, [chatId, channelId](int64_t tgMessageId) {
+                try {
+                    app().getDbClient()->execSqlSync(
+                        "INSERT OR REPLACE INTO telegram_messages(chat_id, tg_message_id, channel_id) VALUES(?, ?, ?)",
+                        chatId, tgMessageId, channelId);
+                } catch (...) {}
+            });
+            return;
+        }
         std::set<int64_t> audience = Broadcast::channelAudience(channelId);
         audience.erase(author);
         if (audience.empty()) return;

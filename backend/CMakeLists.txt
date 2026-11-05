@@ -68,6 +68,7 @@ add_executable(VicinityServer
     utils/Uploads.cc
     utils/WebPush.cc
     utils/Telegram.cc
+    utils/Notes.cc
 )
 
 target_include_directories(VicinityServer PRIVATE

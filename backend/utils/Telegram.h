@@ -17,8 +17,9 @@ bool ready();
 // Имя бота без @ ('' — ещё не известно)
 std::string botUsername();
 
-// Новое сообщение в канале: участникам с подключённым Telegram (кроме автора) по их настройкам
-void notifyMessage(const Json::Value& msg, int64_t channelId);
+// Новое сообщение в канале: участникам с подключённым Telegram (кроме автора) по их настройкам.
+// Сообщение в «Заметках» уходит самому владельцу; fromTelegram — пришло из Telegram, обратно не отправлять
+void notifyMessage(const Json::Value& msg, int64_t channelId, bool fromTelegram = false);
 
 // Одноразовый код привязки для ссылки t.me/<бот>?start=<код>, живёт 10 минут
 std::string createLinkCode(int64_t userId);

@@ -185,7 +185,7 @@ export function VoiceVolume({ userId, compact }: { userId: number; compact?: boo
 /** Аватар собеседника из уже загруженных личек и друзей */
 export function usePeerAvatar(peerId: number) {
   return useStore(
-    (s) => s.dms.find((d) => d.user_id === peerId)?.avatar_path ?? s.friends.find((f) => f.id === peerId)?.avatar_path,
+    (s) => s.dms.find((d) => d.user_id === peerId && !d.notes)?.avatar_path ?? s.friends.find((f) => f.id === peerId)?.avatar_path,
   );
 }
 

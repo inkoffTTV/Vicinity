@@ -442,6 +442,12 @@ void initialize() {
          "PRIMARY KEY(theme_id, user_id))");
 
     // Приглашения в беседу и на сервер: человек сам принимает или отклоняет (controllers/InviteController.cc)
+    // «Заметки» (utils/Notes.cc): личка из одного участника, по одной на пользователя
+    exec("CREATE TABLE IF NOT EXISTS notes_channels ("
+         "user_id INTEGER PRIMARY KEY,"
+         "channel_id INTEGER NOT NULL UNIQUE,"
+         "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,"
+         "FOREIGN KEY(channel_id) REFERENCES channels(id) ON DELETE CASCADE)");
     // Мост с Telegram (utils/Telegram.cc, docs/API.md §20): привязка чата, коды привязки,
     // сопоставление сообщений бота с каналами — чтобы ответ в Telegram ушёл в тот же чат
     exec("CREATE TABLE IF NOT EXISTS telegram_links ("

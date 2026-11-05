@@ -4,6 +4,7 @@
 #include "../utils/Access.h"
 #include "../utils/Activity.h"
 #include "../utils/Privacy.h"
+#include "../utils/Notes.h"
 #include "../utils/PresenceUtil.h"
 #include "../utils/JsonUtils.h"
 #include "../utils/Messages.h"
@@ -425,6 +426,25 @@ void UserController::listDms(const HttpRequestPtr& req,
             "ORDER BY lm.id DESC, c.created_at DESC",   // самые свежие беседы — сверху
             selfId, selfId);
         Json::Value arr(Json::arrayValue);
+        // «Заметки» — первыми: чат с самим собой (создаётся при первом запросе списка)
+        {
+            const int64_t notes = Notes::channelOf(db, selfId);
+            auto n = db->execSqlSync(
+                "SELECT c.id AS channel_id, u.username, " + Messages::kLastColumns + " FROM channels c "
+                "JOIN users u ON u.id = ? " + Messages::kLastJoin + " WHERE c.id = ?",
+                selfId, notes);
+            if (!n.empty()) {
+                Json::Value d;
+                d["channel_id"]   = static_cast<Json::Int64>(notes);
+                d["user_id"]      = static_cast<Json::Int64>(selfId);
+                d["username"]     = n[0]["username"].as<std::string>();
+                d["display_name"] = "Заметки";
+                d["avatar_path"]  = "";
+                d["notes"]        = true;
+                d["last_message"] = Messages::lastFromRow(n[0]);
+                arr.append(d);
+            }
+        }
         for (const auto& row : result) {
             Json::Value d;
             d["channel_id"]   = row["channel_id"].as<int64_t>();

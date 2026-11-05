@@ -137,9 +137,23 @@ test('telegram bridge: link by deep link, forward DMs and mentions, reply goes b
     // Своё же сообщение Алисе в Telegram не возвращается
     expect(tg.toChat().some((s) => s.body.text.includes('ответ из телеграма'))).toBe(false);
 
-    // Без «Ответить» — подсказка, сообщение никуда не уходит
-    tg.say('просто текст');
-    await expect.poll(() => tg.toChat().at(-1)?.body.text ?? '').toContain('нажмите «Ответить»');
+    // «Заметки»: просто сообщение боту попадает в Заметки, заметка из Vicinity — в Telegram (даже когда в сети)
+    const dms = (await call(request, alice, 'GET', '/dms')).body.dms;
+    expect(dms[0]).toMatchObject({ notes: true, display_name: 'Заметки', user_id: alice.id });
+    const notes = dms[0].channel_id as number;
+    const fromTg = tg.say('купить хлеб');
+    await expect
+      .poll(async () => (await call(request, alice, 'GET', `/channels/${notes}/messages`)).body.messages.map((m: any) => m.text))
+      .toContain('купить хлеб');
+    await expect.poll(() => tg.sent.some((s) => s.method === 'setMessageReaction' && s.body.message_id === fromTg)).toBe(true);
+    // Заметка из Telegram обратно в Telegram не дублируется
+    expect(tg.toChat().some((s) => s.body.text.includes('купить хлеб'))).toBe(false);
+    await call(request, alice, 'PATCH', '/telegram', { offline_only: true });
+    await post(request, alice, notes, 'идея для турнира');
+    await expect.poll(() => tg.toChat().at(-1)?.body.text ?? '').toBe('<b>Заметки</b>\nидея для турнира');
+    // Чужим заметки недоступны
+    expect((await call(request, boris, 'GET', `/channels/${notes}/messages`)).status).toBe(403);
+    await call(request, alice, 'PATCH', '/telegram', { offline_only: false });
 
     // Сервер: без упоминания не приходит, с упоминанием — приходит
     const vera = await apiRegister(request, 'Вера');
@@ -157,6 +171,13 @@ test('telegram bridge: link by deep link, forward DMs and mentions, reply goes b
 
     // Проверка значений
     expect((await call(request, alice, 'PATCH', '/telegram', { servers: 'some' })).status).toBe(400);
+
+    // Заметки в боковой панели: без звонка, с заметкой из Telegram
+    await a.page.locator('.rail-item.home').click();
+    await a.page.locator('.side-item.notes-item').click();
+    await expect(a.page.locator('.chat-head')).toContainText('Заметки');
+    await expect(a.page.locator('.chat-head').getByRole('button', { name: 'Позвонить' })).toHaveCount(0);
+    await expect(a.page.locator('.msg-text', { hasText: 'купить хлеб' })).toBeVisible();
 
     // Экран настроек: подключённый Telegram и кнопка «Отключить»
     await a.page.getByTitle('Настройки').click();

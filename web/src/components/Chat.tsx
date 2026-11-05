@@ -1,4 +1,4 @@
-import { AudioLines, Bell, BellOff, Hash, Menu, Phone, PhoneOff, Pin, UserPlus, Users, Wallpaper } from 'lucide-react';
+import { AudioLines, Bell, BellOff, Hash, Menu, NotebookPen, Phone, PhoneOff, Pin, UserPlus, Users, Wallpaper } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useCall } from '../lib/call';
 import { useChannelMembers } from '../lib/channelMembers';
@@ -58,7 +58,10 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
 
   let title = '';
   let placeholder = '';
-  if (dm) {
+  if (dm?.notes) {
+    title = 'Заметки';
+    placeholder = 'Заметка для себя';
+  } else if (dm) {
     title = dm.display_name;
     placeholder = `Написать @${dm.display_name}`;
   } else if (group) {
@@ -75,7 +78,12 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
         <button className="icon-btn menu-btn" onClick={onMenu} aria-label="Меню" title="Меню">
           <Icon icon={Menu} size={24} />
         </button>
-        {dm ? (
+        {dm?.notes ? (
+          <div className="chat-title">
+            <Icon icon={NotebookPen} size={20} className="chat-title-icon" />
+            <strong className="ellipsis">Заметки</strong>
+          </div>
+        ) : dm ? (
           <button className="chat-title clickable" onClick={() => showProfile(dm.user_id)} {...userMenuProps(dm.user_id)}>
             <Avatar name={dm.display_name} src={dm.avatar_path} id={dm.user_id} size={26} presence={presence ?? 'offline'} />
             <strong className="ellipsis">{dm.display_name}</strong>
@@ -87,7 +95,7 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
           </div>
         )}
         <div className="grow" />
-        {dm && (
+        {dm && !dm.notes && (
           <button
             className="icon-btn"
             title="Позвонить"

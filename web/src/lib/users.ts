@@ -42,7 +42,7 @@ function build(sources: Sources): Directory {
   Object.values(servers).forEach((list) => list.forEach(add));
   Object.values(channels).forEach((list) => list.forEach(add));
   [...outgoing, ...incoming, ...friends].forEach(add);
-  dms.forEach((d) => add({ id: d.user_id, username: d.username, display_name: d.display_name, avatar_path: d.avatar_path }));
+  dms.forEach((d) => !d.notes && add({ id: d.user_id, username: d.username, display_name: d.display_name, avatar_path: d.avatar_path }));
   if (me) add({ id: me.user_id, username: me.username, display_name: me.display_name, avatar_path: me.avatar_path });
   const dir = { byLogin, byId };
   cached = { sources, dir };

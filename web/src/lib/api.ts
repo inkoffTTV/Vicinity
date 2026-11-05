@@ -368,6 +368,8 @@ export interface Dm {
   display_name: string;
   avatar_path: string;
   last_message?: LastMessage | null;
+  /** «Заметки» — чат с самим собой (user_id — я); при подключённом Telegram зеркалится с ботом */
+  notes?: boolean;
 }
 
 export interface Group {

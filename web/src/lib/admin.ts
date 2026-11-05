@@ -15,7 +15,7 @@ let pending = false;
 /** Открыть личку с администратором: уже открытая — сразу, иначе поиск по точному логину и обычное открытие лички */
 export async function openAdminDm(): Promise<boolean> {
   const st = useStore.getState();
-  const existing = st.dms.find((d) => same(d.username, ADMIN_USERNAME));
+  const existing = st.dms.find((d) => !d.notes && same(d.username, ADMIN_USERNAME));
   if (existing) {
     st.open({ kind: 'dm', channelId: existing.channel_id });
     return true;

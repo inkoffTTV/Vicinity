@@ -547,7 +547,7 @@ export const useStore = create<State>((set, get) => {
     for (const [ch, list] of Object.entries(s.voice))
       voice[Number(ch)] = list.map((u) => (u.user_id === uid && name ? { ...u, name } : u));
     set({
-      dms: s.dms.map((d) => (d.user_id === uid ? patchUser(d) : d)),
+      dms: s.dms.map((d) => (d.user_id === uid && !d.notes ? patchUser(d) : d)),
       friends: s.friends.map((f) => (f.id === uid ? patchUser(f) : f)),
       incoming: s.incoming.map((f) => (f.id === uid ? patchUser(f) : f)),
       outgoing: s.outgoing.map((f) => (f.id === uid ? patchUser(f) : f)),
@@ -1682,7 +1682,7 @@ function withExt(f: File): File {
 export function userName(id: number): string {
   const s = useStore.getState();
   return (
-    s.dms.find((d) => d.user_id === id)?.display_name ??
+    s.dms.find((d) => d.user_id === id && !d.notes)?.display_name ??
     s.friends.find((f) => f.id === id)?.display_name ??
     Object.values(s.membersByServer)
       .flat()

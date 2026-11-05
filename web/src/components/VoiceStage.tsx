@@ -43,7 +43,7 @@ export function avatarOf(s: StoreState, uid: number): string | undefined {
     const m = list.find((x) => x.id === uid);
     if (m) return m.avatar_path;
   }
-  return s.dms.find((d) => d.user_id === uid)?.avatar_path ?? s.friends.find((f) => f.id === uid)?.avatar_path;
+  return s.dms.find((d) => d.user_id === uid && !d.notes)?.avatar_path ?? s.friends.find((f) => f.id === uid)?.avatar_path;
 }
 
 /** Экран голосового канала: участники плитками, трансляции, свои кнопки */

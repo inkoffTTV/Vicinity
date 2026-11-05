@@ -1,4 +1,4 @@
-import { ChevronDown, Hash, Home, Image, Link, LogOut, MessagesSquare, Paperclip, Pencil, Plus, Settings, ShieldQuestion, Trash2, UserRound, Users, Volume2 } from 'lucide-react';
+import { ChevronDown, Hash, Home, Image, Link, LogOut, MessagesSquare, NotebookPen, Paperclip, Pencil, Plus, Settings, ShieldQuestion, Trash2, UserRound, Users, Volume2 } from 'lucide-react';
 import { FormEvent, MouseEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { ADMIN_USERNAME, isAdminUsername, openAdminDm } from '../lib/admin';
 import { api, ApiError, LastMessage, normalizeExt, parseTs, Presence, ServerChannel } from '../lib/api';
@@ -112,9 +112,23 @@ function HomeSide() {
           </button>
         )}
 
+        {dms
+          .filter((d) => d.notes)
+          .map((d) => (
+            <button
+              key={d.channel_id}
+              className={`side-item notes-item${d.last_message ? ' two-line' : ''}${view.kind === 'dm' && view.channelId === d.channel_id ? ' active' : ''}${itemState(d.channel_id, unread, muted)}`}
+              onClick={() => open({ kind: 'dm', channelId: d.channel_id })}
+            >
+              <span className="side-icon" aria-hidden="true">
+                <Icon icon={NotebookPen} />
+              </span>
+              <ItemText name="Заметки" last={d.last_message} group={false} now={now} />
+            </button>
+          ))}
         <div className="side-section">Личные сообщения</div>
-        {dms.length === 0 && <div className="side-empty">Найдите друга и напишите ему</div>}
-        {sortRecent(dms).map((d) => (
+        {dms.every((d) => d.notes) && <div className="side-empty">Найдите друга и напишите ему</div>}
+        {sortRecent(dms.filter((d) => !d.notes)).map((d) => (
           <div key={d.channel_id}>
             <button
               className={`side-item${d.last_message ? ' two-line' : ''}${view.kind === 'dm' && view.channelId === d.channel_id ? ' active' : ''}${itemState(d.channel_id, unread, muted)}`}
