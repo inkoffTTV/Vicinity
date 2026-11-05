@@ -11,6 +11,7 @@
 #include "../utils/Tiers.h"
 #include "../utils/Uploads.h"
 #include "../utils/WebPush.h"
+#include "../utils/Telegram.h"
 #include "../utils/Activity.h"
 #include "../models/User.h"
 #include "../../shared/crypto/common_consts.h"
@@ -236,6 +237,7 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
         Broadcast::toChannel(channelId, ws);
         // Тем, кого нет в сети, — на телефон
         WebPush::notifyMessage(msg, channelId);
+        Telegram::notifyMessage(msg, channelId);
         Activity::bump(userId, Activity::Kind::Message);
 
         Json::Value resp;

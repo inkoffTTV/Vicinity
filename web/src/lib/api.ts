@@ -552,6 +552,21 @@ export interface LeaderboardRow extends UserSummary {
 }
 
 // ── Приватность (§15) ──
+/** Мост с Telegram (§20) */
+export interface TelegramStatus {
+  /** На сервере задан токен бота и бот подключился к Telegram */
+  available: boolean;
+  bot_username: string;
+  linked: boolean;
+  tg_username?: string;
+  tg_name?: string;
+  enabled?: boolean;
+  /** Пересылать, только пока я не в сети Vicinity */
+  offline_only?: boolean;
+  /** Сообщения серверов: все, только упоминания или никакие */
+  servers?: 'all' | 'mentions' | 'none';
+}
+
 /** Правило видимости элемента профиля: кому видно + исключения (не показывать этим / всегда показывать этим) */
 export interface PrivacyRule {
   who: 'everyone' | 'friends' | 'nobody';
@@ -824,6 +839,10 @@ export const api = {
   activityMe: () => get<{ activity: ActivitySummary; catalog: Award[] }>('/activity/me'),
   activityLeaderboard: () => get<{ users: LeaderboardRow[] }>('/activity/leaderboard').then((r) => r.users),
   activityEquip: (title: string, emblem: string) => post<{ activity: ActivitySummary }>('/activity/equip', { title, emblem }),
+  telegram: () => get<TelegramStatus>('/telegram'),
+  telegramLink: () => post<{ code: string; url: string; expires_in: number }>('/telegram/link'),
+  telegramPatch: (p: Partial<Pick<TelegramStatus, 'enabled' | 'offline_only' | 'servers'>>) => request<TelegramStatus>('PATCH', '/telegram', p),
+  telegramUnlink: () => del<TelegramStatus>('/telegram'),
   privacy: () => get<PrivacySettings>('/settings/privacy'),
   patchPrivacy: (p: PrivacyPatch) => request<PrivacySettings>('PATCH', '/settings/privacy', p),
   giftInfo: (code: string) => get<GiftInfo>(`/gifts/${encodeURIComponent(code)}`),

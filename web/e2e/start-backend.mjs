@@ -32,6 +32,10 @@ const env = {
   VICINITY_SFU_URL: 'ws://127.0.0.1:1',
   LIVEKIT_API_KEY: 'e2ekey',
   LIVEKIT_API_SECRET: 'e2e-secret-e2e-secret-e2e-secret-0123456789',
+  // Мост с Telegram ходит в мок Bot API, который поднимает w4-telegram.spec.ts на порту backend + 9;
+  // пока мока нет, сервер тихо повторяет попытки
+  VICINITY_TG_BOT_TOKEN: 'e2e-token',
+  VICINITY_TG_API: `http://127.0.0.1:${port + 9}`,
 };
 const child = spawn(bin, [], { cwd: dir, stdio: 'inherit', env });
 child.on('exit', (code) => process.exit(code ?? 0));

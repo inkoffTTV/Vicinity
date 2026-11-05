@@ -18,6 +18,7 @@ import { Toggle } from './SettingControls';
 import { ProfileStudioPanel } from './profile/ProfileStudio';
 import { AccessibilityTab, SubscriptionTab, ThemeTab } from './ThemeSettings';
 import { AccountScreen } from './settings/AccountScreen';
+import { TelegramCard } from './settings/TelegramCard';
 
 type Tab = 'account' | 'profile' | 'activity' | 'privacy' | 'theme' | 'appicon' | 'voice' | 'notifications' | 'overlay' | 'hotkeys' | 'accessibility' | 'subscription' | 'admin';
 
@@ -45,7 +46,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { id: 'theme', label: 'Внешний вид', keywords: 'тема светлая тёмная графит чёрная цвет оформление' },
       { id: 'appicon', label: 'Значок приложения', keywords: 'иконка значок вкладка favicon лого' },
       { id: 'voice', label: 'Голос и видео', keywords: 'микрофон динамик звук камера громкость' },
-      { id: 'notifications', label: 'Уведомления', keywords: 'звук оповещения упоминания' },
+      { id: 'notifications', label: 'Уведомления', keywords: 'звук оповещения упоминания telegram телеграм бот' },
       { id: 'overlay', label: 'Оверлей в играх', keywords: 'оверлей игра поверх голос кто говорит' },
       { id: 'hotkeys', label: 'Горячие клавиши', keywords: 'клавиатура сочетания ctrl alt' },
       { id: 'accessibility', label: 'Доступность', keywords: 'контраст насыщенность шрифт анимация компактный' },
@@ -359,6 +360,7 @@ function NotificationsTab() {
         />
       )}
       <Toggle label="Звук новых сообщений" checked={notify.sound} onChange={notify.setSound} />
+      <TelegramCard />
       {servers.length > 0 && (
         <section className="stack">
           <h3>Серверы</h3>

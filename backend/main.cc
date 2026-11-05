@@ -8,6 +8,7 @@
 #include "utils/Gifts.h"
 #include "managers/SessionManager.h"
 #include "utils/Uploads.h"
+#include "utils/Telegram.h"
 #ifdef VICINITY_HAVE_CURL
 #include <curl/curl.h>
 #endif
@@ -39,6 +40,9 @@ static void applyEnvOverrides(Json::Value& config) {
     if (const auto v = env("VICINITY_SFU_URL"); !v.empty())         custom["sfu"]["url"] = v;
     if (const auto v = env("LIVEKIT_API_KEY"); !v.empty())          custom["sfu"]["key"] = v;
     if (const auto v = env("LIVEKIT_API_SECRET"); !v.empty())       custom["sfu"]["secret"] = v;
+    // Мост с Telegram (utils/Telegram.cc): токен бота от @BotFather; без него мост выключен
+    if (const auto v = env("VICINITY_TG_BOT_TOKEN"); !v.empty())       custom["telegram"]["token"] = v;
+    if (const auto v = env("VICINITY_TG_API"); !v.empty())             custom["telegram"]["api"] = v;
     // Сводка на главной через Claude API (controllers/HomeController.cc); без ключа — шаблонный текст
     if (const auto v = env("ANTHROPIC_API_KEY"); !v.empty())           custom["ai"]["key"] = v;
     if (const auto v = env("VICINITY_AI_MODEL"); !v.empty())           custom["ai"]["model"] = v;
@@ -113,6 +117,7 @@ int main() {
         .registerBeginningAdvice([]() {
             Database::initialize();
             WebPush::init();
+            Telegram::init();
             // Токен проверяется только при подключении к /ws: раз в 5 минут закрываем
             // сокеты истёкших сессий
             drogon::app().getLoop()->runEvery(300.0, [] {

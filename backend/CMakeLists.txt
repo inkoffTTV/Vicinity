@@ -13,6 +13,7 @@ add_executable(VicinityServer
     controllers/ActivityController.cc
     controllers/HealthController.cc
     controllers/HomeController.cc
+    controllers/TelegramController.cc
     controllers/AdminController.cc
     controllers/AuthController.cc
     controllers/ChannelController.cc
@@ -66,6 +67,7 @@ add_executable(VicinityServer
     utils/TwoFactor.cc
     utils/Uploads.cc
     utils/WebPush.cc
+    utils/Telegram.cc
 )
 
 target_include_directories(VicinityServer PRIVATE

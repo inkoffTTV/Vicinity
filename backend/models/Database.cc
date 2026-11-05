@@ -442,6 +442,31 @@ void initialize() {
          "PRIMARY KEY(theme_id, user_id))");
 
     // Приглашения в беседу и на сервер: человек сам принимает или отклоняет (controllers/InviteController.cc)
+    // Мост с Telegram (utils/Telegram.cc, docs/API.md §20): привязка чата, коды привязки,
+    // сопоставление сообщений бота с каналами — чтобы ответ в Telegram ушёл в тот же чат
+    exec("CREATE TABLE IF NOT EXISTS telegram_links ("
+         "user_id INTEGER PRIMARY KEY,"
+         "chat_id INTEGER NOT NULL UNIQUE,"
+         "tg_username TEXT NOT NULL DEFAULT '',"
+         "tg_name TEXT NOT NULL DEFAULT '',"
+         "enabled INTEGER NOT NULL DEFAULT 1,"
+         "offline_only INTEGER NOT NULL DEFAULT 1,"
+         "servers TEXT NOT NULL DEFAULT 'mentions',"
+         "linked_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
+    exec("CREATE TABLE IF NOT EXISTS telegram_link_codes ("
+         "code TEXT PRIMARY KEY,"
+         "user_id INTEGER NOT NULL,"
+         "expires_at DATETIME NOT NULL,"
+         "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE)");
+    exec("CREATE TABLE IF NOT EXISTS telegram_messages ("
+         "chat_id INTEGER NOT NULL,"
+         "tg_message_id INTEGER NOT NULL,"
+         "channel_id INTEGER NOT NULL,"
+         "created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+         "PRIMARY KEY(chat_id, tg_message_id),"
+         "FOREIGN KEY(channel_id) REFERENCES channels(id) ON DELETE CASCADE)");
+
     exec("CREATE TABLE IF NOT EXISTS invites ("
          "id INTEGER PRIMARY KEY AUTOINCREMENT,"
          "kind TEXT NOT NULL CHECK(kind IN ('group','server')),"
