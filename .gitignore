@@ -67,3 +67,4 @@ deploy/autoupdate.log
 deploy/.autoupdate.lock
 deploy/.autoupdate.lock.d
 deploy/.autoupdate-failed
+/test-results/
