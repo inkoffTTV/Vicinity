@@ -25,6 +25,7 @@ static User rowToUser(const drogon::orm::Row& row) {
     if (!row["signup_ip"].isNull()) u.signupIp = row["signup_ip"].as<std::string>();
     if (!row["profile_ext"].isNull()) u.profileExt = row["profile_ext"].as<std::string>();
     u.banned           = row["banned"].as<int>();
+    u.isBot            = row["is_bot"].isNull() ? 0 : row["is_bot"].as<int>();
     return u;
 }
 

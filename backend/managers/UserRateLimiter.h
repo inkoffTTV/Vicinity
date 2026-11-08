@@ -29,6 +29,11 @@ public:
         VoiceBytes,     // байты голоса: 48 КБ/с (полтора реального потока 32 КБ/с), запас 64 КБ
         ActivityJoin,   // activity_join — 30 в минуту
         ActivityMsg,    // сообщения игры — 60 в секунду, до 240 подряд
+        // Боты и вебхуки (docs/API.md §21–22); ключ — id бота, человека или вебхука
+        BotApi,         // запросы к Bot API — 30 в секунду на бота
+        BotSend,        // сообщения бота (send/edit/ephemeral) — 20 в секунду на бота
+        Callback,       // нажатия inline-кнопок — 10 за 5 с на человека
+        Webhook,        // входящие вебхуки — 30 в минуту на вебхук
     };
 
     static UserRateLimiter& instance();

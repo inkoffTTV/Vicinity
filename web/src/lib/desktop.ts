@@ -13,6 +13,13 @@ interface DesktopBridge {
     set: (patch: Partial<OverlayPrefs>) => void;
     onChange: (fn: (prefs: OverlayPrefs) => void) => () => void;
   };
+  /** С версии 1.3.0: сохранить картинку через диалог «Сохранить как» (адрес абсолютный, только свой сервер;
+   *  расширение файла — из адреса). true — сохранено, null — отмена в диалоге, false — скачать не удалось */
+  saveImage?: (url: string, name: string) => Promise<boolean | null>;
+  /** С версии 1.3.0: скопировать картинку в буфер обмена системы (false — не вышло, пробуем через веб) */
+  copyImage?: (url: string) => Promise<boolean>;
+  /** С версии 1.3.0: сохранить несколько картинок в выбранную один раз папку; ответ — сколько сохранено (-1 — отмена) */
+  saveImages?: (items: { url: string; name: string }[]) => Promise<number>;
 }
 
 export type OverlayCorner = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';

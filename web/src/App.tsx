@@ -22,6 +22,8 @@ import { ProfileModal } from './components/ProfileModal';
 import { Settings } from './components/Settings';
 import { Toasts } from './components/Toasts';
 import { UserMenu } from './components/UserMenu';
+import { ImageMenu } from './components/ImageMenu';
+import { BotAlert } from './components/BotAlert';
 import { IncomingCall } from './components/IncomingCall';
 import { InviteCard } from './components/InviteCard';
 import { GiftCard } from './components/GiftCard';
@@ -133,6 +135,8 @@ export default function App() {
       {giftCode && <GiftCard code={giftCode} />}
       {switcher && <QuickSwitcher onClose={closeSwitcher} />}
       <UserMenu />
+      <ImageMenu />
+      <BotAlert />
       <CallOverlay />
       <IncomingCall />
       <Toasts />

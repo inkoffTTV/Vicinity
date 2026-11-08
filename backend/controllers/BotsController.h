@@ -1,0 +1,32 @@
+#pragma once
+#include <drogon/HttpController.h>
+
+using namespace drogon;
+
+// Боты для людей (docs/API.md §21): свои боты, боты на сервере, команды ботов канала и нажатие кнопок
+class BotsController : public HttpController<BotsController> {
+public:
+    METHOD_LIST_BEGIN
+    ADD_METHOD_TO(BotsController::list,        "/api/v1/bots",                  Get,    Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::create,      "/api/v1/bots",                  Post,   Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::update,      "/api/v1/bots/{id}",             Patch,  Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::remove,      "/api/v1/bots/{id}",             Delete, Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::regenerate,  "/api/v1/bots/{id}/token",       Post,   Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::serverBots,  "/api/v1/servers/{id}/bots",     Get,    Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::addToServer, "/api/v1/servers/{id}/bots",     Post,   Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::removeFromServer, "/api/v1/servers/{id}/bots/{bid}", Delete, Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::commands,    "/api/v1/channels/{id}/commands", Get,   Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::press,       "/api/v1/channels/{id}/messages/{mid}/callback", Post, Options, "AuthFilter");
+    METHOD_LIST_END
+
+    void list       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void create     (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void update     (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void remove     (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void regenerate (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void serverBots (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void addToServer(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void removeFromServer(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id, int64_t bid);
+    void commands   (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void press      (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id, int64_t mid);
+};

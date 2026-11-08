@@ -82,7 +82,8 @@ Json::Value collectFacts(int64_t userId) {
     auto chans = db->execSqlSync(
         "SELECT m.channel_id, c.type, c.name, c.server_id, s.name AS server_name, COUNT(*) AS n "
         "FROM messages m JOIN channels c ON c.id = m.channel_id LEFT JOIN servers s ON s.id = c.server_id "
-        "WHERE m.channel_id IN " + access + " AND m.created_at >= datetime('now', '-1 day') AND m.author_id != ? "
+        "WHERE m.channel_id IN " + access + " AND m.created_at >= datetime('now', '-1 day') "
+        "AND (m.author_id != ? OR m.webhook_id IS NOT NULL) "   // сообщения своего вебхука — не свои
         "GROUP BY m.channel_id ORDER BY n DESC LIMIT 6",
         userId, userId, userId);
     Json::Value channels(Json::arrayValue);
@@ -107,9 +108,11 @@ Json::Value collectFacts(int64_t userId) {
         } else {
             c["name"] = r["name"].isNull() ? "" : r["name"].as<std::string>();
             auto top = db->execSqlSync(
-                "SELECT u.display_name, COUNT(*) AS n FROM messages m JOIN users u ON u.id = m.author_id "
-                "WHERE m.channel_id = ? AND m.created_at >= datetime('now', '-1 day') AND m.author_id != ? "
-                "GROUP BY m.author_id ORDER BY n DESC LIMIT 1",
+                "SELECT COALESCE(m.webhook_name, u.display_name) AS display_name, COUNT(*) AS n FROM messages m "
+                "JOIN users u ON u.id = m.author_id "
+                "WHERE m.channel_id = ? AND m.created_at >= datetime('now', '-1 day') "
+                "AND (m.author_id != ? OR m.webhook_id IS NOT NULL) "
+                "GROUP BY m.author_id, m.webhook_id ORDER BY n DESC LIMIT 1",
                 id, userId);
             if (!top.empty()) c["top_author"] = top[0]["display_name"].as<std::string>();
         }
@@ -118,8 +121,9 @@ Json::Value collectFacts(int64_t userId) {
     f["channels"] = channels;
     f["messages"] = static_cast<Json::Int64>(total);
     auto people = db->execSqlSync(
-        "SELECT COUNT(DISTINCT author_id) AS n FROM messages WHERE channel_id IN " + access +
-        " AND created_at >= datetime('now', '-1 day') AND author_id != ?",
+        "SELECT COUNT(DISTINCT CASE WHEN webhook_id IS NULL THEN author_id ELSE -webhook_id END) AS n "
+        "FROM messages WHERE channel_id IN " + access +
+        " AND created_at >= datetime('now', '-1 day') AND (author_id != ? OR webhook_id IS NOT NULL)",
         userId, userId, userId);
     f["people"] = static_cast<Json::Int64>(people.empty() ? 0 : people[0]["n"].as<int64_t>());
 
@@ -187,7 +191,7 @@ Json::Value collectFacts(int64_t userId) {
         "SELECT u.id, u.display_name, u.avatar_path, COUNT(DISTINCT sm.server_id) AS shared "
         "FROM server_members sm JOIN server_members mine ON mine.server_id = sm.server_id AND mine.user_id = ? "
         "JOIN users u ON u.id = sm.user_id "
-        "WHERE sm.user_id != ? "
+        "WHERE sm.user_id != ? AND u.is_bot = 0 "   // ботов в друзья не добавить
         "  AND sm.user_id NOT IN (SELECT CASE WHEN requester_id = ? THEN addressee_id ELSE requester_id END FROM friendships WHERE requester_id = ? OR addressee_id = ?) "
         "  AND sm.user_id NOT IN (SELECT blocked_id FROM user_blocks WHERE blocker_id = ?) "
         "  AND sm.user_id NOT IN (SELECT blocker_id FROM user_blocks WHERE blocked_id = ?) "

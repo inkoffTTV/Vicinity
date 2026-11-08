@@ -26,6 +26,8 @@ export function UserMenu() {
   if (!at) return null;
   const { userId } = at;
   const self = userId === meId;
+  // Боту не позвонить и в друзья его не добавить (сервер такое отклонит)
+  const bot = !!at.bot || !!directory.byId.get(userId)?.is_bot;
 
   const run = (fn: () => unknown) => () => {
     close();
@@ -59,15 +61,17 @@ export function UserMenu() {
             <Icon icon={MessageCircle} size={16} />
             Написать
           </button>
-          <button
-            role="menuitem"
-            disabled={!callIdle}
-            onClick={run(() => useCall.getState().start(userId, directory.byId.get(userId)?.display_name ?? userName(userId)))}
-          >
-            <Icon icon={Phone} size={16} anim="ring" />
-            Позвонить
-          </button>
-          {!friend && !outgoing && (
+          {!bot && (
+            <button
+              role="menuitem"
+              disabled={!callIdle}
+              onClick={run(() => useCall.getState().start(userId, directory.byId.get(userId)?.display_name ?? userName(userId)))}
+            >
+              <Icon icon={Phone} size={16} anim="ring" />
+              Позвонить
+            </button>
+          )}
+          {!bot && !friend && !outgoing && (
             <button
               role="menuitem"
               onClick={run(() =>

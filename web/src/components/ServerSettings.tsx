@@ -1,6 +1,6 @@
-import { Ban, Copy, LayoutDashboard, Link, LogOut, type LucideIcon, RefreshCw, Trash2, Users } from 'lucide-react';
+import { Ban, Bot, Copy, LayoutDashboard, Link, LogOut, type LucideIcon, Plus, RefreshCw, Trash2, TriangleAlert, Users, Webhook } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { api, ApiError, BannedUser, Member } from '../lib/api';
+import { api, ApiError, BannedUser, Member, ServerBot, ServerWebhook } from '../lib/api';
 import { copyText } from '../lib/clipboard';
 import { inviteLink } from '../lib/routes';
 import { useStore } from '../lib/store';
@@ -12,7 +12,7 @@ import { OwnerCrown, RoleChips } from './RoleChips';
 import { ServerTag, TAG_ICONS } from './ServerTag';
 import { ServerIcon } from './ServerRail';
 
-export type ServerTab = 'overview' | 'invites' | 'members' | 'bans' | 'danger';
+export type ServerTab = 'overview' | 'invites' | 'members' | 'bans' | 'bots' | 'webhooks' | 'danger';
 
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : 'Ошибка');
 
@@ -34,6 +34,8 @@ export function ServerSettings({ serverId, tab: initial, onClose }: { serverId: 
         ['invites', 'Приглашения', Link],
         ['members', 'Участники', Users],
         ['bans', 'Баны', Ban],
+        ['bots', 'Боты', Bot],
+        ['webhooks', 'Вебхуки', Webhook],
         ['danger', 'Удаление сервера', Trash2],
       ]
     : [
@@ -69,6 +71,8 @@ export function ServerSettings({ serverId, tab: initial, onClose }: { serverId: 
           {current === 'invites' && <Invites serverId={serverId} owner={amOwner} />}
           {current === 'members' && <Members serverId={serverId} />}
           {current === 'bans' && <Bans serverId={serverId} />}
+          {current === 'bots' && <ServerBots serverId={serverId} />}
+          {current === 'webhooks' && <Webhooks serverId={serverId} />}
           {current === 'danger' && <Danger serverId={serverId} owner={amOwner} onDone={onClose} />}
         </div>
       </div>
@@ -307,6 +311,7 @@ function Members({ serverId }: { serverId: number }) {
             <div className="grow">
               <div className="ellipsis">
                 {m.display_name} {m.is_owner && <OwnerCrown />}
+                {m.is_bot && <span className="bot-tag">Бот</span>}
               </div>
               <div className="muted small ellipsis">@{m.username}</div>
               <RoleChips roles={m.roles} />
@@ -390,6 +395,251 @@ function Bans({ serverId }: { serverId: number }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// ── Боты сервера (владелец, docs/API.md §21.1): добавить по @username, убрать ──
+
+function ServerBots({ serverId }: { serverId: number }) {
+  const toast = useStore((s) => s.toast);
+  const [bots, setBots] = useState<ServerBot[] | null>(null);
+  const [error, setError] = useState('');
+  const [username, setUsername] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<ServerBot | null>(null);
+
+  const load = useCallback(
+    () =>
+      api.serverBots(serverId).then(
+        (b) => (setBots(b), setError('')),
+        (e) => setError(errText(e)),
+      ),
+    [serverId],
+  );
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const add = async (e: FormEvent) => {
+    e.preventDefault();
+    const u = username.trim().replace(/^@/, '');
+    if (!u || busy) return;
+    setBusy(true);
+    try {
+      const r = await api.addServerBot(serverId, u);
+      toast(r.status === 'already_member' ? `@${u} уже на сервере` : `Бот @${r.bot?.username ?? u} добавлен`);
+      setUsername('');
+      await load();
+    } catch (err) {
+      toast(errText(err), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!removing) return;
+    try {
+      await api.removeServerBot(serverId, removing.id);
+      toast(`Бот @${removing.username} убран с сервера`);
+      setBots((list) => (list ?? []).filter((b) => b.id !== removing.id));
+    } catch (err) {
+      toast(errText(err), 'error');
+    }
+    setRemoving(null);
+  };
+
+  return (
+    <div className="settings">
+      <p className="muted small no-margin">
+        Бот вступает сразу, без приглашения. Он видит команды («/»), упоминания и ответы на свои сообщения во всех текстовых
+        каналах. Создать своего бота можно в Настройках → Боты.
+      </p>
+      <form className="invite-link" onSubmit={add}>
+        <input
+          value={username}
+          placeholder="@имя_бота"
+          aria-label="Имя пользователя бота"
+          autoCapitalize="off"
+          spellCheck={false}
+          onChange={(e) => setUsername(e.target.value)}
+        />
+        <button className="btn primary" disabled={busy || !username.trim()}>
+          <Icon icon={Plus} size={16} />
+          Добавить бота
+        </button>
+      </form>
+      {error && <div className="form-error">{error}</div>}
+      {bots === null && !error && <div className="muted small">Загрузка…</div>}
+      {bots?.length === 0 && <div className="muted">На сервере пока нет ботов</div>}
+      <ul className="manage-list">
+        {(bots ?? []).map((b) => (
+          <li key={b.id} className="manage-row">
+            <Avatar name={b.display_name} src={b.avatar_path} id={b.id} size={32} />
+            <div className="grow">
+              <div className="ellipsis">
+                {b.display_name} <span className="bot-tag">Бот</span>
+              </div>
+              <div className="muted small ellipsis">@{b.username}</div>
+            </div>
+            <button type="button" className="btn small" onClick={() => setRemoving(b)}>
+              Убрать
+            </button>
+          </li>
+        ))}
+      </ul>
+      {removing && (
+        <ConfirmDialog title="Убрать бота" action="Убрать" danger onConfirm={remove} onClose={() => setRemoving(null)}>
+          Бот @{removing.username} перестанет видеть каналы сервера. Его сообщения останутся.
+        </ConfirmDialog>
+      )}
+    </div>
+  );
+}
+
+// ── Входящие вебхуки каналов (владелец, docs/API.md §22): адрес показывается один раз ──
+
+function Webhooks({ serverId }: { serverId: number }) {
+  const toast = useStore((s) => s.toast);
+  const channels = useStore((s) => s.channelsByServer[serverId]);
+  const text = (channels ?? []).filter((c) => !c.is_voice);
+  const [hooks, setHooks] = useState<ServerWebhook[] | null>(null);
+  const [error, setError] = useState('');
+  const [name, setName] = useState('');
+  const [channelId, setChannelId] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState<{ hook: ServerWebhook; url: string } | null>(null);
+  const [removing, setRemoving] = useState<ServerWebhook | null>(null);
+  const target = channelId || text[0]?.id || 0;
+
+  const load = useCallback(
+    () =>
+      api.serverWebhooks(serverId).then(
+        (w) => (setHooks(w), setError('')),
+        (e) => setError(errText(e)),
+      ),
+    [serverId],
+  );
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const channelName = (h: ServerWebhook) => h.channel_name ?? text.find((c) => c.id === h.channel_id)?.name ?? '';
+
+  const create = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !target || busy) return;
+    setBusy(true);
+    try {
+      const r = await api.createWebhook(serverId, target, name.trim());
+      setCreated({ hook: r.webhook, url: new URL(r.url, location.origin).href });
+      setName('');
+      await load();
+    } catch (err) {
+      toast(errText(err), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!removing) return;
+    try {
+      await api.deleteWebhook(serverId, removing.id);
+      toast(`Вебхук «${removing.name}» удалён`);
+      setHooks((list) => (list ?? []).filter((h) => h.id !== removing.id));
+      if (created?.hook.id === removing.id) setCreated(null);
+    } catch (err) {
+      toast(errText(err), 'error');
+    }
+    setRemoving(null);
+  };
+
+  const copy = async (value: string) => {
+    if (await copyText(value)) toast('Адрес вебхука скопирован');
+    else toast('Не удалось скопировать — выделите адрес вручную', 'error');
+  };
+
+  return (
+    <div className="settings">
+      <p className="muted small no-margin">
+        Вебхук — адрес, по которому внешний сервис (GitHub, мониторинг, свой скрипт) публикует сообщения в канал. Формат как у
+        Discord: POST с JSON {'{"content": "текст"}'}.
+      </p>
+      {created && (
+        <section className="settings-card stack" aria-label="Адрес нового вебхука">
+          <strong>Адрес вебхука «{created.hook.name}»</strong>
+          <div className="invite-link">
+            <input readOnly value={created.url} aria-label="Адрес вебхука" className="mono" onFocus={(e) => e.target.select()} />
+            <button type="button" className="btn primary" onClick={() => void copy(created.url)}>
+              <Icon icon={Copy} size={16} />
+              Копировать
+            </button>
+          </div>
+          <p className="bot-token-warn small no-margin">
+            <Icon icon={TriangleAlert} size={16} />
+            <span>Сохраните адрес сейчас: больше он не покажется. Кто его знает, может писать в канал.</span>
+          </p>
+          <div className="row end">
+            <button type="button" className="btn small" onClick={() => setCreated(null)}>
+              Готово
+            </button>
+          </div>
+        </section>
+      )}
+      {text.length === 0 ? (
+        <div className="muted">Сначала создайте текстовый канал.</div>
+      ) : (
+        <form className="stack" onSubmit={create}>
+          <div className="webhook-fields">
+            <label>
+              Название
+              <input value={name} maxLength={32} placeholder="GitHub" onChange={(e) => setName(e.target.value)} />
+            </label>
+            <label>
+              Канал
+              <select value={target} onChange={(e) => setChannelId(Number(e.target.value))}>
+                {text.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    #{c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="row end">
+            <button className="btn primary" disabled={busy || !name.trim()}>
+              <Icon icon={Plus} size={16} />
+              Создать вебхук
+            </button>
+          </div>
+        </form>
+      )}
+      {error && <div className="form-error">{error}</div>}
+      {hooks === null && !error && <div className="muted small">Загрузка…</div>}
+      {hooks?.length === 0 && <div className="muted">Вебхуков пока нет</div>}
+      <ul className="manage-list">
+        {(hooks ?? []).map((h) => (
+          <li key={h.id} className="manage-row">
+            <span className="webhook-icon" aria-hidden="true">
+              <Icon icon={Webhook} size={18} />
+            </span>
+            <div className="grow">
+              <div className="ellipsis">{h.name}</div>
+              <div className="muted small ellipsis">#{channelName(h)}</div>
+            </div>
+            <button type="button" className="btn small danger" onClick={() => setRemoving(h)}>
+              Удалить
+            </button>
+          </li>
+        ))}
+      </ul>
+      {removing && (
+        <ConfirmDialog title="Удалить вебхук" action="Удалить" danger onConfirm={remove} onClose={() => setRemoving(null)}>
+          Адрес вебхука «{removing.name}» перестанет работать. Уже отправленные сообщения останутся.
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

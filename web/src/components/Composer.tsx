@@ -9,9 +9,11 @@ import {
   useState,
 } from 'react';
 import { Mic, Plus, SendHorizontal, Smile, X } from 'lucide-react';
+import { ChannelCommand } from '../lib/api';
+import { useBots } from '../lib/bots';
 import { useChannelMembers } from '../lib/channelMembers';
 import { formatSize, uploadProblem } from '../lib/files';
-import { drafts, isImageFile, useStore } from '../lib/store';
+import { drafts, isImageFile, ownMessage, useStore } from '../lib/store';
 import { resetTyping, sendTyping, typingText, useTyping } from '../lib/typing';
 import { FileTypeIcon } from './Attachment';
 import { Avatar } from './Avatar';
@@ -24,6 +26,7 @@ import { canRecordVoice } from '../lib/voiceNote';
 // Файлов в очереди на отправку за раз — каждый уходит отдельным сообщением
 const MAX_QUEUE = 10;
 const MAX_SUGGEST = 8;
+const NO_COMMANDS: ChannelCommand[] = [];
 
 interface Staged {
   key: number;
@@ -59,6 +62,9 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
   // @упоминание, которое сейчас набирается: где начинается и что набрано после @
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [selected, setSelected] = useState(0);
+  // Команда бота, которая набирается в самом начале сообщения: что набрано после «/»
+  const [slash, setSlash] = useState<string | null>(null);
+  const commands = useBots((s) => s.commands[channelId]?.list ?? NO_COMMANDS);
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const emojiBtn = useRef<HTMLButtonElement>(null);
@@ -110,14 +116,45 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
       )
       .slice(0, MAX_SUGGEST);
   }, [mention, candidates]);
-  const suggesting = suggestions.length > 0;
+  const cmdSuggestions = useMemo(() => {
+    if (slash === null) return [];
+    const q = slash.toLowerCase();
+    return commands.filter((c) => c.command.toLowerCase().startsWith(q)).slice(0, MAX_SUGGEST);
+  }, [slash, commands]);
+  // Подсказки команд и упоминаний не пересекаются: «/» — только в начале, без пробелов
+  const cmdMode = cmdSuggestions.length > 0;
+  const count = cmdMode ? cmdSuggestions.length : suggestions.length;
+  const suggesting = count > 0;
+  // Несколько ботов в канале — команда с адресатом, как в Telegram: /start@somebot
+  const manyBots = useMemo(() => new Set(commands.map((c) => c.bot_id)).size > 1, [commands]);
 
-  useEffect(() => setSelected(0), [mention?.start, mention?.query]);
+  useEffect(() => setSelected(0), [mention?.start, mention?.query, slash]);
 
   // Набирается ли @упоминание прямо перед курсором
   const detectMention = (value: string, pos: number) => {
     const m = /(?:^|\s)@([\p{L}\p{N}_.-]{0,32})$/u.exec(value.slice(0, pos));
     setMention(m ? { start: pos - m[1].length - 1, query: m[1] } : null);
+    const c = /^\/([A-Za-z0-9_]{0,32})$/.exec(value.slice(0, pos));
+    setSlash(c ? c[1] : null);
+    if (c) useBots.getState().loadCommands(channelId);
+  };
+
+  const insertCommand = (c: ChannelCommand) => {
+    const el = ref.current;
+    if (!el) return;
+    const ins = `/${c.command}${manyBots ? `@${c.bot_username}` : ''} `;
+    // Хвост после курсора (если он был) сохраняется, но без набранного остатка команды
+    const rest = text.slice(el.selectionStart).replace(/^[A-Za-z0-9_@]*\s?/, '');
+    caret.current = ins.length;
+    setText(ins + rest);
+    setSlash(null);
+    el.focus();
+  };
+
+  const choose = (i: number) => {
+    const at = Math.min(i, count - 1);
+    if (cmdMode) insertCommand(cmdSuggestions[at]);
+    else insertMention(suggestions[at]);
   };
 
   const insertMention = (u: Candidate) => {
@@ -173,6 +210,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
     setFiles([]);
     setText('');
     setMention(null);
+    setSlash(null);
     if (reply) setReplyingTo(channelId, null);
     resetTyping(channelId);
     ref.current?.focus();
@@ -184,17 +222,24 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
       const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
       if (step) {
         e.preventDefault();
-        setSelected((i) => (i + step + suggestions.length) % suggestions.length);
+        setSelected((i) => (i + step + count) % count);
         return;
       }
-      if (e.key === 'Enter' || e.key === 'Tab') {
+      // Команда уже набрана целиком («/start») — Enter отправляет её, как в Telegram, а не вставляет ещё раз
+      const typedCommand =
+        cmdMode &&
+        !manyBots &&
+        slash !== null &&
+        cmdSuggestions[selected]?.command.toLowerCase() === slash.toLowerCase();
+      if ((e.key === 'Enter' && !(typedCommand && !e.shiftKey)) || e.key === 'Tab') {
         e.preventDefault();
-        insertMention(suggestions[Math.min(selected, suggestions.length - 1)]);
+        choose(selected);
         return;
       }
       if (e.key === 'Escape') {
         e.preventDefault();
         setMention(null);
+        setSlash(null);
         return;
       }
     }
@@ -205,7 +250,8 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
       e.preventDefault();
       setReplyingTo(channelId, null);
     } else if (e.key === 'ArrowUp' && !text && messages) {
-      const last = [...messages].reverse().find((m) => m.author_id === me.user_id && m.text && !m.local);
+      // Только свои: сообщения своего вебхука и эфемерные бота не правятся
+      const last = [...messages].reverse().find((m) => ownMessage(m, me.user_id) && !m.ephemeral && m.text && !m.local);
       if (last) {
         e.preventDefault();
         setEditing(last.id);
@@ -216,7 +262,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
   // Курсор ушёл стрелками или мышью — подсказка относится уже не к тому слову
   const onCaretMove = () => {
     const el = ref.current;
-    if (el && (mention || el.value.includes('@'))) detectMention(el.value, el.selectionStart);
+    if (el && (mention || slash !== null || el.value.includes('@') || el.value.startsWith('/'))) detectMention(el.value, el.selectionStart);
   };
 
   // Office, PDF-просмотрщики и т.п. кладут рядом с текстом картинку-снимок — тогда вставляем текст
@@ -250,7 +296,30 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
       onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDragging(false)}
       onDrop={onDrop}
     >
-      {suggesting && (
+      {cmdMode && (
+        <div className="mention-popup" role="listbox" id={listId} aria-label="Команды ботов">
+          <div className="mention-popup-head">Команды ботов</div>
+          {cmdSuggestions.map((c, i) => (
+            <div
+              key={`${c.bot_id}:${c.command}`}
+              id={`${listId}-c${i}`}
+              role="option"
+              aria-selected={i === selected}
+              className={`mention-option command-option${i === selected ? ' selected' : ''}`}
+              onMouseEnter={() => setSelected(i)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                insertCommand(c);
+              }}
+            >
+              <span className="command-name">/{c.command}</span>
+              <span className="grow muted small ellipsis">{c.description}</span>
+              <span className="muted small ellipsis command-bot">@{c.bot_username}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {suggesting && !cmdMode && (
         <div className="mention-popup" role="listbox" id={listId} aria-label="Участники">
           <div className="mention-popup-head">Участники</div>
           {suggestions.map((u, i) => (
@@ -341,7 +410,9 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
           aria-label={placeholder}
           aria-autocomplete="list"
           aria-controls={suggesting ? listId : undefined}
-          aria-activedescendant={suggesting ? `${listId}-${suggestions[selected]?.id}` : undefined}
+          aria-activedescendant={
+            !suggesting ? undefined : cmdMode ? `${listId}-c${Math.min(selected, count - 1)}` : `${listId}-${suggestions[selected]?.id}`
+          }
           onChange={(e) => {
             const v = e.target.value;
             setText(v);
@@ -351,7 +422,10 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
           onKeyDown={onKey}
           onKeyUp={(e) => ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) && onCaretMove()}
           onClick={onCaretMove}
-          onBlur={() => setMention(null)}
+          onBlur={() => {
+            setMention(null);
+            setSlash(null);
+          }}
           onPaste={onPaste}
           maxLength={4096}
         />

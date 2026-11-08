@@ -19,8 +19,9 @@ import { ProfileStudioPanel } from './profile/ProfileStudio';
 import { AccessibilityTab, SubscriptionTab, ThemeTab } from './ThemeSettings';
 import { AccountScreen } from './settings/AccountScreen';
 import { TelegramCard } from './settings/TelegramCard';
+import { BotsScreen } from './settings/BotsScreen';
 
-type Tab = 'account' | 'profile' | 'activity' | 'privacy' | 'theme' | 'appicon' | 'voice' | 'notifications' | 'overlay' | 'hotkeys' | 'accessibility' | 'subscription' | 'admin';
+type Tab = 'account' | 'profile' | 'activity' | 'privacy' | 'theme' | 'appicon' | 'voice' | 'notifications' | 'overlay' | 'hotkeys' | 'accessibility' | 'subscription' | 'bots' | 'admin';
 
 interface NavItem {
   id: Tab;
@@ -52,6 +53,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { id: 'accessibility', label: 'Доступность', keywords: 'контраст насыщенность шрифт анимация компактный' },
     ],
   },
+  { title: 'Разработчикам', items: [{ id: 'bots', label: 'Боты', keywords: 'бот боты api токен вебхук разработчик telegram aiogram команды кнопки' }] },
   { title: 'Подписка', items: [{ id: 'subscription', label: 'О подписке', keywords: 'basic standard ultra тариф' }] },
 ];
 
@@ -163,6 +165,7 @@ export function Settings() {
             {tab === 'hotkeys' && <HotkeysScreen />}
             {tab === 'accessibility' && <AccessibilityTab />}
             {tab === 'subscription' && <SubscriptionTab />}
+            {tab === 'bots' && <BotsScreen />}
             {tab === 'admin' && isAdmin && <AdminPanel />}
           </div>
         </main>

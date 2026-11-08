@@ -55,7 +55,7 @@ void UserController::search(const HttpRequestPtr& req,
     auto db = app().getDbClient();
     try {
         auto result = db->execSqlSync(
-            "SELECT id, username, display_name, avatar_path FROM users "
+            "SELECT id, username, display_name, avatar_path, is_bot FROM users "
             "WHERE username = ? COLLATE NOCASE AND id != ? LIMIT 1",
             q, selfId);
         Json::Value arr(Json::arrayValue);
@@ -65,6 +65,7 @@ void UserController::search(const HttpRequestPtr& req,
             u["username"]     = row["username"].as<std::string>();
             u["display_name"] = row["display_name"].as<std::string>();
             u["avatar_path"]  = row["avatar_path"].isNull() ? "" : row["avatar_path"].as<std::string>();
+            u["is_bot"]       = row["is_bot"].as<int>() != 0;
             arr.append(u);
         }
         Json::Value resp; resp["users"] = arr;
@@ -145,7 +146,9 @@ void UserController::profile(const HttpRequestPtr& req,
     // Остальным — тот же ответ, что для несуществующего: перебором номеров людей не найти.
     try {
         auto adb = app().getDbClient();
-        if (!Access::canSeeProfile(adb, self, id) && Access::profileLinkOwner(adb, req->getParameter("link")) != id) {
+        // Профиль бота открыт всем: его ищут и добавляют по @имени
+        if (!u->isBot && !Access::canSeeProfile(adb, self, id) &&
+            Access::profileLinkOwner(adb, req->getParameter("link")) != id) {
             cb(errResp("Пользователь не найден", k404NotFound)); return;
         }
     } catch (const std::exception& e) {
@@ -165,6 +168,13 @@ void UserController::profile(const HttpRequestPtr& req,
     resp["created_at"]        = u->createdAt;
     resp["subscription_tier"] = u->subscriptionTier;
     resp["developer"]         = u->developer;
+    resp["is_bot"]            = u->isBot != 0;
+    if (u->isBot) {
+        try {
+            auto b = app().getDbClient()->execSqlSync("SELECT description FROM bots WHERE user_id = ?", id);
+            resp["bot_description"] = b.empty() ? std::string() : b[0]["description"].as<std::string>();
+        } catch (...) {}
+    }
     resp["badges"]            = computeBadges(*u);
     // Расширенный профиль сайта: украшения без подписки не показываются (utils/ProfileExt.h)
     resp["profile_ext"]       = ProfileExt::forDisplay(u->profileExt, u->subscriptionTier);
@@ -370,7 +380,10 @@ void UserController::startDm(const HttpRequestPtr& req,
             cb(errResp("Нельзя написать: один из вас заблокировал другого", k403Forbidden)); return;
         }
         // Приватность адресата: «только от друзей» — незнакомым новую личку не открыть
-        if (std::string why; !Privacy::canDm(db, selfId, targetId, why)) { cb(errResp(why, k403Forbidden)); return; }
+        // Боту написать может любой — настроек приватности у него нет
+        if (std::string why; !target->isBot && !Privacy::canDm(db, selfId, targetId, why)) {
+            cb(errResp(why, k403Forbidden)); return;
+        }
 
         // Существующая личка ровно этих двоих: канал с третьим участником (подсунутый
         // кем-то «dm») не подходит — иначе переписка шла бы через чужой канал
@@ -414,7 +427,7 @@ void UserController::listDms(const HttpRequestPtr& req,
     auto db = app().getDbClient();
     try {
         auto result = db->execSqlSync(
-            "SELECT c.id AS channel_id, u.id AS user_id, u.username, u.display_name, u.avatar_path, " +
+            "SELECT c.id AS channel_id, u.id AS user_id, u.username, u.display_name, u.avatar_path, u.is_bot, " +
             Messages::kLastColumns + " "
             "FROM channels c "
             "JOIN channel_members me    ON c.id = me.channel_id    AND me.user_id = ? "
@@ -452,6 +465,7 @@ void UserController::listDms(const HttpRequestPtr& req,
             d["username"]     = row["username"].as<std::string>();
             d["display_name"] = row["display_name"].as<std::string>();
             d["avatar_path"]  = row["avatar_path"].isNull() ? "" : row["avatar_path"].as<std::string>();
+            d["is_bot"]       = row["is_bot"].as<int>() != 0;
             d["last_message"] = Messages::lastFromRow(row);
             arr.append(d);
         }

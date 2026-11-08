@@ -1,7 +1,7 @@
 import { Check, Copy } from 'lucide-react';
-import { KeyboardEvent, MouseEvent, ReactNode, useMemo, useState } from 'react';
+import { Fragment, KeyboardEvent, MouseEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { copyText } from '../lib/clipboard';
-import { MdNode, parseMarkdown } from '../lib/markdown';
+import { formatTime, MdNode, parseMarkdown, TimeStyle } from '../lib/markdown';
 import { useStore } from '../lib/store';
 import { Directory, resolveLogin, useUserDirectory } from '../lib/users';
 import { Icon } from './Icon';
@@ -56,6 +56,42 @@ function render(nodes: MdNode[], ctx: Ctx): ReactNode[] {
             <Highlighted text={n.href} query={ctx.highlight} />
           </a>
         );
+      case 'mlink':
+        // Подсказка — настоящий адрес; подпись, выдающая себя за другой сайт, получает домен рядом
+        return (
+          <Fragment key={i}>
+            <a href={n.href} target="_blank" rel="noopener noreferrer" title={n.href}>
+              {render(n.c, ctx)}
+            </a>
+            {n.host && (
+              <span className="md-link-host" title={n.href}>
+                {' '}({n.host})
+              </span>
+            )}
+          </Fragment>
+        );
+      case 'time':
+        return <Timestamp key={i} unix={n.unix} style={n.style} />;
+      case 'h': {
+        const Tag = (['h3', 'h4', 'h5'] as const)[n.level - 1];
+        return (
+          <Tag key={i} className={`md-h md-h${n.level}`}>
+            {render(n.c, ctx)}
+          </Tag>
+        );
+      }
+      case 'list': {
+        const items = n.items.map((it, k) => <li key={k}>{render(it, ctx)}</li>);
+        return n.ordered ? (
+          <ol key={i} className="md-list" start={n.start}>
+            {items}
+          </ol>
+        ) : (
+          <ul key={i} className="md-list">
+            {items}
+          </ul>
+        );
+      }
       case 'mention': {
         const hit = resolveLogin(ctx.users, n.name);
         if (!hit) return <Highlighted key={i} text={`@${n.name}`} query={ctx.highlight} />;
@@ -105,6 +141,23 @@ function Highlighted({ text, query }: { text: string; query: string }) {
   }
   if (pos < text.length) parts.push(text.slice(pos));
   return <>{parts}</>;
+}
+
+// <t:…:R> пересчитывается, пока открыт: раз в секунду в первую минуту, потом раз в полминуты
+function Timestamp({ unix, style }: { unix: number; style: TimeStyle }) {
+  const [now, setNow] = useState(() => Date.now());
+  const near = Math.abs(unix * 1000 - now) < 60_000;
+  useEffect(() => {
+    if (style !== 'R') return;
+    const t = window.setInterval(() => setNow(Date.now()), near ? 1000 : 30_000);
+    return () => window.clearInterval(t);
+  }, [style, near]);
+  const d = new Date(unix * 1000);
+  return (
+    <time className="md-time" dateTime={d.toISOString()} title={formatTime(unix, 'F')}>
+      {formatTime(unix, style, now)}
+    </time>
+  );
 }
 
 function Spoiler({ children }: { children: ReactNode }) {

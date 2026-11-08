@@ -460,7 +460,7 @@ void ServerController::listMembers(const HttpRequestPtr& req,
             cb(errResp("Вы не участник этого сервера", k403Forbidden)); return;
         }
         auto rows = db->execSqlSync(
-            "SELECT u.id, u.username, u.display_name, u.avatar_path, u.presence, "
+            "SELECT u.id, u.username, u.display_name, u.avatar_path, u.presence, u.is_bot, "
             "       u.developer, u.subscription_tier, s.owner_id, json_extract(u.profile_ext, '$.name_style') AS name_style, "
             "(SELECT bs.id || '|' || bs.tag || '|' || IFNULL(bs.tag_icon, '') FROM servers bs "
             " JOIN server_members bm ON bm.server_id = bs.id AND bm.user_id = u.id "
@@ -497,6 +497,7 @@ void ServerController::listMembers(const HttpRequestPtr& req,
             m["username"]     = r["username"].as<std::string>();
             m["display_name"] = r["display_name"].as<std::string>();
             m["avatar_path"]  = r["avatar_path"].isNull() ? "" : r["avatar_path"].as<std::string>();
+            m["is_bot"]       = r["is_bot"].as<int>() != 0;
             // Эффективное присутствие с учётом приватности зрителя (utils/Privacy.h)
             m["presence"]     = Privacy::presenceFor(db, uid, self);
             m["is_owner"]     = (r["owner_id"].as<int64_t>() == uid);

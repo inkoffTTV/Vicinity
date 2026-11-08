@@ -85,8 +85,9 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
           </div>
         ) : dm ? (
           <button className="chat-title clickable" onClick={() => showProfile(dm.user_id)} {...userMenuProps(dm.user_id)}>
-            <Avatar name={dm.display_name} src={dm.avatar_path} id={dm.user_id} size={26} presence={presence ?? 'offline'} />
+            <Avatar name={dm.display_name} src={dm.avatar_path} id={dm.user_id} size={26} presence={dm.is_bot ? undefined : presence ?? 'offline'} />
             <strong className="ellipsis">{dm.display_name}</strong>
+            {dm.is_bot && <span className="bot-tag">Бот</span>}
           </button>
         ) : (
           <div className="chat-title">
@@ -95,7 +96,8 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
           </div>
         )}
         <div className="grow" />
-        {dm && !dm.notes && (
+        {/* Боту не позвонить: голоса у него нет */}
+        {dm && !dm.notes && !dm.is_bot && (
           <button
             className="icon-btn"
             title="Позвонить"

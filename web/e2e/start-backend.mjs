@@ -36,6 +36,8 @@ const env = {
   // пока мока нет, сервер тихо повторяет попытки
   VICINITY_TG_BOT_TOKEN: 'e2e-token',
   VICINITY_TG_API: `http://127.0.0.1:${port + 9}`,
+  // Вебхуки ботов на http://127.0.0.1 (мок в w5-bot-api.spec.ts на порту backend + 10)
+  VICINITY_BOTS_ALLOW_PRIVATE_WEBHOOKS: '1',
 };
 const child = spawn(bin, [], { cwd: dir, stdio: 'inherit', env });
 child.on('exit', (code) => process.exit(code ?? 0));

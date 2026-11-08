@@ -135,20 +135,24 @@ PATCH `/settings/appearance` `{любые поля settings}` → то же. `se
 | `id` | int | монотонно растёт; порядок сообщений — по `id` |
 | `channel_id` | int | **[new]** в REST тоже |
 | `author_id`, `author_name`, `author_avatar` | | как раньше |
-| `text` | string | |
+| `text` | string | разметка Vicinity (§23) |
 | `created_at` | string | `YYYY-MM-DD HH:MM:SS` UTC |
 | `edited` | bool | |
 | `attachment` | string | URL вложения-**картинки** или `""`. Старые десктопы показывают это поле как картинку, поэтому у файла (`attachment_type` = `"file"`) здесь `""` |
 | `attachment_url` | string | **[new]** URL вложения любого типа (картинки или файла) или `""` — новые клиенты берут URL отсюда |
-| `attachment_name` | string | **[new]** исходное имя файла (`""` если нет) |
+| `attachment_name` | string | **[new]** исходное имя файла (`""` если нет); у картинки расширение имени заменяется настоящим (`.png`/`.jpg`/`.gif`/`.webp` — по содержимому файла) |
 | `attachment_size` | int | **[new]** размер в байтах (0 если нет) |
 | `attachment_type` | string | **[new]** `"image"` \| `"file"` \| `""`; у сообщений до обновления с вложением — `"image"` |
 | `reactions` | array | `[{emoji, count, users:[ids]}]` |
 | `reply_to` | int | **[new]** id сообщения, на которое ответ, или 0 |
-| `reply` | object\|null | **[new]** `{id, author_id, author_name, text (≤200 симв.), attachment}`; `null` если ответа нет или исходное удалено. Здесь (как и в `last_message`, §7) `attachment` — URL вложения любого типа: эти объекты старые десктопы не читают |
+| `reply` | object\|null | **[new]** `{id, author_id, author_name, text (≤200 симв.), attachment, webhook}`; `null` если ответа нет или исходное удалено. `webhook` — `{id, name}` у цитаты сообщения вебхука (§22: `author_name` — имя вебхука, `author_id` — его создатель; клиент ставит пометку «ВЕБХУК» и не берёт аватар создателя), иначе `null`. Здесь (как и в `last_message`, §7) `attachment` — URL вложения любого типа: эти объекты старые десктопы не читают |
 | `nonce` | string | **[new]** только в WS `new_message` и в ответе POST: эхо клиентского `nonce` |
 | `kind` | string | **[new]** `"voice"` — голосовое сообщение, `"call"` — запись о звонке в личке (§12), `""` — обычное |
 | `meta` | object\|null | **[new]** у `voice`: `{duration: сек, peaks: [0..1, до 128]}`; у `call`: `{result: "ok"\|"missed"\|"declined", duration: сек}` |
+| `author_bot` | bool | **[new]** автор — бот (§21): пометка «БОТ» у имени |
+| `reply_markup` | object\|null | **[new]** кнопки под сообщением `{"inline_keyboard": [[кнопка, …], …]}` (бот §21, вебхук §22); кнопка — `{text}` и ровно одно из `callback_data`, `url`, `copy_text: {text}`, `web_app: {url}` |
+| `webhook` | object\|null | **[new]** сообщение входящего вебхука канала (§22): `{id, name}`; у такого сообщения `author_name` = имя вебхука, `author_avatar` пустой, оформление профиля создателя не показывается |
+| `ephemeral`, `ephemeral_id` | bool, string | **[new]** только в WS `ephemeral_message` (§21): сообщение видит один человек, в истории его нет, `id` = 0 |
 
 ### GET `/channels/{id}/messages`
 Параметры (все необязательны):
@@ -188,6 +192,10 @@ exe/bat/cmd/com/scr/pif/cpl/msi/msp/dll/jar/app/lnk/reg/sh/bash/ps1/psm1/vbs/vbe
 ### Редактирование / удаление / реакции
 Без изменений по форме. **[new]** Владелец сервера может удалять чужие сообщения в каналах своего сервера.
 Удаление закреплённого сообщения снимает закреп (`pins_updated`, §6).
+**[new]** WS `message_edited` после правки ботом (§21) несёт ещё `reply_markup` (текущие кнопки или `null` — кнопки
+убраны) и `edited` (bool): `{"type":"message_edited","channel_id":N,"id":M,"text":"…","reply_markup":…,"edited":true}`.
+`text` есть всегда — текущий текст; правка только кнопок (`editMessageReplyMarkup`) приходит с прежним `text`
+и не ставит `edited`. Сообщения вебхука (§22) через POST `/edit` не правятся (403).
 
 ## 3. Набор текста **[new]**
 WS клиент → сервер: `{"type":"typing","channel_id":N}` (не чаще раза в 3 с; сервер игнорирует чаще 1 раза в 2 с
@@ -224,7 +232,7 @@ GET `/search?q=<строка ≥2 символов>&channel_id=N` или `&serve
 - WS получателям канала, если закрепы изменились: `{"type":"pins_updated","channel_id":N}`.
 
 ## 7. Лички и беседы
-- GET `/dms` — как раньше + **[new]** `last_message` (`{id, author_id, author_name, text (≤200 симв.), attachment, created_at}` или `null`).
+- GET `/dms` — как раньше + **[new]** `last_message` (`{id, author_id, author_name, text (≤200 симв.), attachment, created_at, kind, webhook}` или `null`; `webhook` — `{id, name}`, если последнее от вебхука §22).
 - GET `/channels` (беседы) — как раньше + **[new]** `owner_id`, `last_message`.
 - **[new]** GET `/channels/{id}/members` → `{"members":[{id, username, display_name, avatar_path, presence, is_owner}]}`
   (у беседы — в порядке вступления; у канала сервера — участники сервера по имени, `is_owner` — владелец сервера).
@@ -480,7 +488,8 @@ hide_from: [id…], show_to: [id…]}` (до 200 id в списке; свой id
 `set_presence` — 10/мин, `voice_join` — 20/мин, `voice_query` — 30/мин, `voice_speaking` — 50 подряд, затем 5/с,
 `call_invite` — 10/мин, остальной сигналинг звонков (`call_accept/reject/end/busy`, `rtc_*`) **и `voice_rtc`** — 100 подряд,
 затем 5/с (общее ведро), **[new]** `voice_media` — 20/мин;
-голос — §11.
+голос — §11. **[new]** Боты: Bot API 30/с и отправка 20/с на бота, нажатия кнопок 10 за 5 с на человека (§21.6);
+входящие вебхуки — 30/мин на вебхук (§22).
 
 ## 18. Мастерская: темы и фоны сообщества **[new]**
 
@@ -550,3 +559,218 @@ user_id: <я>}`, остальным недоступен — 403). Сообще�
 сообщение от имени пользователя, рассылка по WS, Web Push и Telegram остальным; боту — реакция 👌 на ответ.
 Без «Ответить» текст уходит в Заметки; не текст — «Пока можно отвечать только текстом».
 
+
+## 21. Боты и Bot API **[new]**
+
+Бот — пользователь с пометкой `is_bot` (`backend/utils/Bots.cc`). Его создаёт обычный пользователь, а программа бота
+работает через **Bot API в стиле Telegram** (подмножество): библиотеки для Telegram (aiogram, python-telegram-bot,
+grammY, Telegraf) подключаются сменой адреса сервера. Боту можно написать в личку, добавить его на сервер; он видит
+команды, упоминания и ответы на свои сообщения, отправляет сообщения с кнопками, получает нажатия.
+
+### 21.1 Управление ботами (для людей, с токеном сессии)
+
+| Метод | Путь | |
+|---|---|---|
+| GET | `/bots` | `{bots: [бот]}` — мои боты |
+| POST | `/bots` | `{username, display_name?}` → **201** `{bot, token}`; токен показывается **один раз** |
+| PATCH | `/bots/{id}` | `{display_name?, description? (≤512), read_all?: bool}` → `{bot}` |
+| POST | `/bots/{id}/token` | новый токен → `{bot, token}`; старый сразу перестаёт работать (ждущий `getUpdates` получает 401) |
+| DELETE | `/bots/{id}` | удалить бота с его сообщениями и очередью → `{status:"deleted"}`; открытым клиентам — WS `message_deleted` (до 1000 последних его сообщений), `server_member_left` и `channel_member_left` (беседы и лички) |
+| GET | `/servers/{id}/bots` | только владелец сервера → `{bots: [{id, username, display_name, avatar_path, description}]}` |
+| POST | `/servers/{id}/bots` | только владелец: `{username}` (можно с `@`) или `{bot_id}` → **201** `{bot, status:"added"}` (уже на сервере — 200 `already_member`); бот вступает сразу, без приглашения; участникам WS `server_member_joined` |
+| DELETE | `/servers/{id}/bots/{bot_id}` | только владелец → `{status:"removed"}`; WS `server_member_left` |
+| POST | `/channels/{id}/members` | `{user_id: <бот>}` — бот входит в беседу **сразу** (приглашения он не принимает) → `{status:"added", channel_id}`; уже в беседе — 409; остальным WS `channel_member_joined` |
+| GET | `/channels/{id}/commands` | команды ботов-участников канала для подсказок в композере: `{commands: [{bot_id, bot_username, command, description}]}` (кэшировать ~60 с) |
+| POST | `/channels/{id}/messages/{mid}/callback` | нажатие кнопки `{data}` → `{ok:true, query_id}`; у эфемерного сообщения `mid` = 0 и `{data, ephemeral_id}` |
+
+Объект бота: `{id, username, display_name, avatar_path, description, token_hint, read_all, webhook_url, webhook_error,
+commands: [{command, description}], servers: [{id, name}], owner_id, created_at}`. `token_hint` — последние 4 символа
+токена, сам токен нигде больше не возвращается (в базе — только sha256).
+
+Правила: `username` — 5–32 символа `[a-z0-9_]` (приводится к нижнему регистру, ведущий `@` убирается), оканчивается
+на `bot`, свободен среди всех пользователей (занят — 409); не больше **10 ботов** на владельца (400); имя — 1–32 символа.
+Бот не входит паролем (вход — 401), у него нет сессий, WS, присутствия, опыта активности и Web Push; заявка в друзья
+боту — 400 «Это бот…». Написать боту в личку может любой (POST `/dms` к боту не смотрит настройки приватности),
+бот сам лички не создаёт — пишет только в чаты, где он участник. Пометки: `is_bot` в GET `/users/search`,
+`/users/{id}/profile` (+ `bot_description`; профиль бота открыт всем), в списке GET `/dms`, в участниках сервера;
+`author_bot` в сообщениях (§2).
+
+Нажатие кнопки: доступ к каналу, сообщение этого канала от бота, в его кнопках есть такой `callback_data`
+(иначе 400/404), бот всё ещё участник чата (убрали с сервера или из беседы — 400, боту ничего не уходит),
+не чаще 10 нажатий за 5 с (429). Бот получает `callback_query`; его `answerCallbackQuery` приходит
+**только нажавшему** WS-событием `{"type":"callback_answer","query_id","channel_id","message_id","text"?,"show_alert":bool,"url"?}`.
+Клиент показывает `text` (при `show_alert` — заметно, окном), `url` открывает. Ответа может не быть — ждать ~10 с.
+
+### 21.2 Адрес и формат
+
+`https://<сервер>/api/v1/bot<токен>/<метод>` — GET или POST; параметры в query, `application/x-www-form-urlencoded`,
+`multipart/form-data` (текстовые поля) или JSON. Поля-объекты (`reply_markup`, `reply_parameters`, `commands`,
+`allowed_updates`) можно передать JSON-строкой. Имя метода без учёта регистра. Ответ —
+`{"ok":true,"result":…}` или `{"ok":false,"error_code":N,"description":"…"}` (описания ошибок — как в Telegram,
+по-английски: `Bad Request: chat not found`, `Bad Request: message is not modified`, …). Неверный токен — 401
+`Unauthorized`, неизвестный метод — 404 `Not Found`, лимит — 429 с `parameters.retry_after` (секунды).
+Токен — `<id бота>:<секрет>`; nginx не пишет такие запросы ни в access-лог, ни в error-лог (`deploy/nginx.conf`).
+Бот перестаёт работать (401), если заблокирован он сам или его владелец (админ, `users.banned`).
+
+aiogram 3:
+
+```python
+from aiogram import Bot
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
+
+bot = Bot(TOKEN, session=AiohttpSession(api=TelegramAPIServer.from_base("https://<сервер>/api/v1")))
+```
+
+python-telegram-bot: `Application.builder().token(TOKEN).base_url("https://<сервер>/api/v1/bot")`.
+
+### 21.3 Объекты
+
+- **User** `{id, is_bot, first_name, username, language_code?}` (`first_name` — отображаемое имя). Отправитель
+  сообщения вебхука канала (§22) — не его создатель, а отдельный «бот»: `{id: 9000000000000 + id вебхука, is_bot: true,
+  first_name: имя вебхука}` без `username` (так же в `reply_to_message.from`).
+- **Chat** `{id, type, title?, first_name?, username?}`: `id` — id канала Vicinity; личка с ботом — `private`
+  (`first_name`, `username` собеседника), беседа — `group` (`title`), канал сервера — `supergroup`
+  (`title` = `#канал · Сервер`).
+- **Message** `{message_id, from, chat, date (unix), text?, entities?, reply_to_message?, reply_markup?, edit_date?, attachment?}`;
+  `entities` — `bot_command` в начале текста, `mention` для каждого `@имя` и `url` для голых http/https-адресов
+  (`offset`/`length` в единицах UTF-16, как в Telegram); `attachment` (расширение) — `{url, name, size, type}` вложения.
+  Текст — разметка Vicinity (§23).
+- **CallbackQuery** `{id, from, message, chat_instance, data}`; у эфемерного сообщения `message.message_id` = 0
+  и `message.ephemeral_id`.
+- **Update** `{update_id, message? | edited_message? | callback_query?}`.
+
+### 21.4 Методы
+
+| Метод | Параметры | Результат |
+|---|---|---|
+| `getMe` | — | User + `can_join_groups`, `can_read_all_group_messages` (= `read_all`), `supports_inline_queries: false` |
+| `getUpdates` | `offset`, `limit` ≤100, `timeout` ≤50, `allowed_updates` | [Update]; длинный опрос: ответ сразу, как придёт обновление, иначе `[]` по тайм-ауту. `offset` подтверждает и удаляет обновления с меньшим `update_id`; отрицательный `offset` = −N, как в Telegram, — только N последних, более ранние забываются (`offset=-1` — пропустить накопленное). Новый вызов того же бота завершает предыдущий пустым ответом. При вебхуке — 409 |
+| `setWebhook` | `url`, `secret_token?` (до 256 `[A-Za-z0-9_-]`), `drop_pending_updates?`, `allowed_updates?` | `true`; пустой `url` — снять вебхук. Накопленные обновления уходят на новый адрес по порядку. Сервер без libcurl — 400 `webhooks are not supported` |
+| `deleteWebhook` | `drop_pending_updates?` | `true` |
+| `getWebhookInfo` | — | `{url, has_custom_certificate:false, pending_update_count, last_error_date?, last_error_message?, max_connections}` |
+| `sendMessage` | `chat_id`, `text`, `parse_mode?`, `reply_markup?`, `reply_to_message_id?` \| `reply_parameters.message_id?`, `allow_sending_without_reply?`, `disable_notification?` (игнорируется) | Message; WS `new_message` всем в чате |
+| `editMessageText` | `chat_id`, `message_id`, `text`, `parse_mode?`, `reply_markup?` | Message; без `reply_markup` кнопки убираются (как в Telegram); ничего не изменилось — 400 `message is not modified` |
+| `editMessageReplyMarkup` | `chat_id`, `message_id`, `reply_markup?` | Message; WS `message_edited` с `reply_markup` |
+| `deleteMessage` | `chat_id`, `message_id` | `true`; только свои сообщения бота; WS `message_deleted` |
+| `answerCallbackQuery` | `callback_query_id`, `text?` (≤200), `show_alert?`, `url?` (http/https) | `true`; повторный ответ или старше 15 минут — 400 `query is too old or already answered`; бота убрали из чата — 403 `bot is not a member of the chat` |
+| `setMyCommands` / `getMyCommands` / `deleteMyCommands` | `commands: [{command (1–32, a-z0-9_), description (1–256)}]` (≤100; `scope`, `language_code` игнорируются) | `true` / [BotCommand] / `true` |
+| `getChat` | `chat_id` | Chat (+ поля ChatFullInfo, которые требуют библиотеки) |
+| `sendChatAction` | `chat_id`, `action` | `true`; участникам — обычное WS `typing` (§3) |
+| `sendEphemeralMessage` | `chat_id`, `user_id`, `text`, `parse_mode?`, `reply_markup?` | расширение Vicinity: сообщение видит только `user_id` (участник чата, иначе 400), в базе не хранится. Ответ — Message с `message_id: 0` и `ephemeral_id` |
+| `logOut`, `close` | — | `true` (ничего не делают) |
+
+`chat_id` — только число (id канала); бот должен быть участником (иначе 400 `chat not found` / 403
+`bot is not a member of the chat`), в личке с заблокировавшим — 403.
+
+**Эфемерное сообщение** приходит адресату WS-событием `{"type":"ephemeral_message","channel_id":N,"message":{…объект
+сообщения §2 от бота…, "id":0, "ephemeral":true, "ephemeral_id":"<hex>", "created_at"}}`. Клиент показывает его
+внизу ленты с подписью «Видно только вам», оно не влияет на непрочитанное и уведомления; его кнопки живут 15 минут.
+
+**parse_mode.** `HTML` — теги `b/strong`, `i/em`, `u/ins`, `s/strike/del`, `code`, `pre` (+`<code class="language-x">`),
+`a href` (http/https → `[текст](адрес)`, прочие схемы вроде `tg://user` — только текст), `blockquote`,
+`tg-spoiler`/`span class="tg-spoiler"…</span>` → разметка Vicinity; сущности `&lt; &gt; &amp; &quot;` и числовые
+раскодируются. Обычный текст буквальный, как в Telegram: символы разметки Vicinity (`\ * _ ~ \` | [ ] <`, а в начале
+строки `#`, `>`, `-` и `1.`) экранируются `\`, так что `html.quote(текст пользователя)` не станет заголовком, ссылкой
+или меткой времени. Голые адреса и `@имена` остаются как есть (без `\` внутри).
+`MarkdownV2`/`Markdown` — `*жирный*` → `**`, `_курсив_` → `*`, `__подчёркнутый__`, `~зачёркнутый~` → `~~`,
+`||спойлер||`, код как есть, `>цитата`, экранирующие `\` убираются. `[текст](адрес)`: адрес берётся как есть (снимаются
+только `\)` и `\\`), не http/https (`tg://user?id=…` из `mention_markdown_v2`) — остаётся один текст. В голых адресах
+и `@имена` экранирование снимается (`https://my\-site\.com` → `https://my-site.com`). Без `parse_mode` текст идёт как
+есть (разметка Vicinity, §23). Текст после преобразования — 1–4096 символов.
+
+**reply_markup.** Поддерживается только `inline_keyboard` (`keyboard`, `remove_keyboard`, `force_reply` молча
+игнорируются). Кнопка: `text` (1–64) и ровно одно из `callback_data` (1–64 байта), `url` (http/https, ≤512),
+`copy_text: {text ≤256}`, `web_app: {url https}` (открывается как ссылка). Не больше 10 рядов, 8 кнопок в ряду,
+50 всего; нарушение — 400 с понятным `description`.
+
+### 21.5 Какие обновления получает бот
+
+- **Личка с ботом** — каждое сообщение человека (`message`) и его правка (`edited_message`).
+- **Беседа и канал сервера** — команды (`/cmd` или `/cmd@имя_бота`; `/cmd@другой_bot` — нет), упоминание
+  `@имя_бота` (без учёта регистра), ответ на сообщение бота; с `read_all` — все сообщения.
+- Нажатие кнопки сообщения бота — `callback_query`.
+- Сообщения самого бота и других ботов не доставляются; сообщения вебхуков (§22) — по тем же правилам
+  (отправитель — отдельный `from`, §21.3).
+- `allowed_updates` из `getUpdates` или `setWebhook` запоминается у бота (`bots.allowed_updates`, переживает
+  перезапуск) и отсекает ненужные типы у обновлений, созданных после вызова; уже накопленные не удаляются.
+  Пустой список — все типы.
+
+Если задан вебхук — сервер POST-ит JSON Update на адрес (заголовок `X-Telegram-Bot-Api-Secret-Token`, если задан
+секрет) **по порядку `update_id`, по одному запросу в полёте на бота**; тайм-аут 10 с, тело ответа не читается
+дальше 16 КБ (нужен только код). Ответ 2xx — обновление доставлено и удаляется из очереди, `webhook_error` сбрасывается.
+Иначе ошибка видна в `getWebhookInfo` и в `webhook_error` бота, а доставка повторяется с самого старого обновления
+через 5, 10, 20, 40, затем каждые 60 с, пока вебхук установлен (очередь живёт сутки). После `setWebhook`/`deleteWebhook`
+следующие обновления идут уже по новому адресу (или ждут `getUpdates`). Без вебхука — очередь для `getUpdates`:
+хранится сутки и не больше 1000 обновлений на бота.
+Адрес вебхука — только `https://` на публичный адрес; `http://` и частные/локальные адреса (127.0.0.1, 10.x, 192.168.x,
+localhost, …) — только при `VICINITY_BOTS_ALLOW_PRIVATE_WEBHOOKS=1` (`custom_config.bots.allow_private_webhooks`,
+для разработки и e2e). Без этого флага соединение с частным адресом не открывается и тогда, когда публичное имя
+хоста разрешилось в него уже после `setWebhook`. Эфемерные сообщения для нажатий хранятся в памяти 15 минут, не больше
+500 и 4 МБ на бота (вытесняются самые старые).
+
+### 21.6 Лимиты
+
+Bot API — 30 запросов в секунду на бота; отправка и правка сообщений (`sendMessage`, `edit*`, `sendEphemeralMessage`)
+— 20 в секунду; `sendChatAction` — раз в 2 с (лишние вызовы молча принимаются). Превышение — 429 `retry_after: 1`.
+
+## 22. Входящие вебхуки каналов **[new]**
+
+Адрес, по которому внешний сервис (CI, мониторинг, форма) пишет в текстовый канал сервера — формат совместим
+с Discord (`content`, `username`, `embeds`) и Slack (`text`). Управляет только владелец сервера.
+
+| Метод | Путь | |
+|---|---|---|
+| GET | `/servers/{id}/webhooks` | `{webhooks: [{id, channel_id, channel_name, name, created_by, created_at}]}` |
+| POST | `/servers/{id}/webhooks` | `{channel_id, name (1–32)}` → **201** `{webhook, url: "/api/v1/webhooks/<id>/<секрет>"}`; `url` показывается **один раз** (в базе — sha256 секрета). Канал не этого сервера — 404, голосовой — 400, больше 25 вебхуков на сервер — 400 |
+| DELETE | `/servers/{id}/webhooks/{wid}` | `{status:"deleted"}`; адрес сразу перестаёт работать |
+| POST | `/webhooks/{id}/{секрет}` | **без** токена сессии. JSON `{content \| text, username?, embeds?, reply_markup?}` → **204**; `?wait=true` → 200 и объект сообщения (§2) |
+
+Сообщение: автор — создатель вебхука (`author_id`), но показывается как `author_name` = `username` из запроса
+(≤32, иначе имя вебхука) с `webhook: {id, name}` и пометкой «ВЕБХУК». `embeds` (если нет `content`/`text`) →
+`**заголовок**` (ссылкой при `url`) и описание. `reply_markup` — только кнопки `url` и `copy_text`. Текст — 1–4096
+символов (400), неверный id или секрет — 401, не больше 30 сообщений в минуту на вебхук (429 + `Retry-After`).
+Сообщения вебхука рассылаются как обычные (`new_message`), без Web Push, и доставляются ботам канала по правилам §21.5.
+Для создателя они **не свои**: считаются в непрочитанном и упоминаниях (§4), в сводке «Главной» (§19), уходят ему
+в Telegram (§20; в Telegram и в цитатах ответа имя вебхука помечено «(вебхук)» / «ВЕБХУК»). Вебхук работает, пока его
+создатель владеет сервером и не заблокирован на сайте, иначе POST → 403.
+
+## 23. Разметка сообщений **[new]**
+
+Текст сообщений (`text`, §2) — разметка в духе Discord. Сервер хранит текст как есть; разбирает его клиент
+(`web/src/lib/markdown.ts`, отрисовка `components/Markdown.tsx`). HTML не интерпретируется. Экранирование — `\` перед
+`\ * _ ~ \` | > @ : # - [ ] < .`.
+
+| Синтаксис | Результат |
+|---|---|
+| `**жирный**`, `*курсив*` / `_курсив_` (только целыми словами), `__подчёркнутый__`, `~~зачёркнутый~~`, `\|\|спойлер\|\|` | выделения, можно вкладывать (до 6 уровней) |
+| `` `код` ``, ```` ```язык\nблок``` ```` | код, блок кода |
+| `> цитата`, `>>> цитата до конца` | цитата (строки с `> `) |
+| `# `, `## `, `### ` в начале строки | заголовки трёх уровней |
+| `- пункт`, `* пункт`, `1. пункт` в начале строки | списки (пункт — одна строка); внутри незакрытого `**`, `__`, `\|\|`, `~~` или `` ` `` строка остаётся текстом |
+| `https://…` | ссылка (только http/https; хвостовая пунктуация отрезается) |
+| `[подпись](https://адрес)` | маскированная ссылка: подпись в одну строку, адрес только http/https, скобки в адресе парами. Если в подписи есть любое доменное имя, отличное от настоящего (`[paypal.com](https://evil.example)`, с точкой, `!` или невидимыми символами в конце — тоже), рядом показывается настоящий домен «(evil.example)» |
+| `@логин` | упоминание (подсветка, если такой пользователь известен; считается в «упоминаниях» §4) |
+| `<t:UNIX>`, `<t:UNIX:стиль>` | время в часовом поясе читателя, ru-RU: `t` 14:30, `T` 14:30:05, `d` 05.11.2026, `D` 5 ноября 2026 г., `f` (по умолчанию) 5 ноября 2026 г. в 14:30, `F` с днём недели, `R` «через 5 минут» / «3 дня назад» |
+
+Боты получают текст в этой разметке; `parse_mode` Bot API переводится в неё (§21.4).
+
+### 23.1 Меню картинок и ПК-приложение 1.3.0
+
+Правая кнопка мыши или долгое нажатие на картинку (в ленте, альбоме, просмотрщике) — меню «Открыть», «Сохранить»,
+«Копировать изображение», «Копировать ссылку», «Открыть оригинал в браузере», «Сохранить все из альбома (N)» для
+альбома (2+ картинок подряд от одного автора). Имя файла — `attachment_name` с настоящим расширением из адреса.
+В браузере сохранение — скачиванием blob, копирование — `navigator.clipboard.write` (webp/gif перекодируются в PNG).
+
+ПК-приложение 1.3.0 (`desktop/src/preload.js`, `window.vicinityDesktop`) добавляет мост; методы есть только у новых
+версий — веб-клиент проверяет их наличие и иначе действует как браузер (`web/src/lib/desktop.ts`):
+
+| Метод | Ответ |
+|---|---|
+| `saveImage(url, name)` | системный диалог «Сохранить как» → `true` сохранено, `null` отмена, `false` не удалось (сеть, тайм-аут 60 с) |
+| `saveImages([{url, name}])` | папка выбирается один раз, файлы `имя (1).png`… → число сохранённых, `-1` отмена; не больше 100 |
+| `copyImage(url)` | картинка в буфер обмена системы (PNG/JPEG, ≤50 МБ) → `true`/`false` (webp/gif копирует веб) |
+
+Принимаются только адреса картинок своего сервера (`/uploads/attachments/<id>.png|jpg|jpeg|gif|webp`) и запросы
+главного окна со страницы Vicinity; расширение файла всегда берётся из адреса. Ещё в 1.3.0 — системное контекстное
+меню текста (вырезать, копировать, вставить, выделить всё) с проверкой орфографии ru и en-US.

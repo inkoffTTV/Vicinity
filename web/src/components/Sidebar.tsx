@@ -135,8 +135,8 @@ function HomeSide() {
               onClick={() => open({ kind: 'dm', channelId: d.channel_id })}
               onContextMenu={(e) => setMenu(e, d.channel_id, null)}
             >
-              <Avatar name={d.display_name} src={d.avatar_path} id={d.user_id} size={32} presence={presence[d.user_id] ?? 'offline'} />
-              <ItemText name={d.display_name} last={d.last_message} group={false} now={now} />
+              <Avatar name={d.display_name} src={d.avatar_path} id={d.user_id} size={32} presence={d.is_bot ? undefined : presence[d.user_id] ?? 'offline'} />
+              <ItemText name={d.display_name} last={d.last_message} group={false} now={now} bot={d.is_bot} />
               {unread[d.channel_id] > 0 && <span className="badge inline">{unread[d.channel_id]}</span>}
             </button>
             <VoiceUsers channelId={d.channel_id} />
@@ -190,14 +190,22 @@ function HomeSide() {
 }
 
 // Имя лички/беседы, время и строка-превью последнего сообщения
-function ItemText({ name, last, group, now }: { name: string; last?: LastMessage | null; group: boolean; now: Date }) {
+function ItemText({ name, last, group, now, bot }: { name: string; last?: LastMessage | null; group: boolean; now: Date; bot?: boolean }) {
   const meId = useStore((s) => s.me?.user_id);
-  if (!last) return <span className="grow ellipsis side-name">{name}</span>;
+  const tag = bot ? <span className="bot-tag">Бот</span> : null;
+  if (!last)
+    return (
+      <>
+        <span className="grow ellipsis side-name">{name}</span>
+        {tag}
+      </>
+    );
   const when = parseTs(last.created_at);
   return (
     <span className="grow side-text">
       <span className="side-line">
         <span className="grow ellipsis side-name">{name}</span>
+        {tag}
         <time className="side-time" dateTime={when.toISOString()} title={fullWhen(when)}>
           {shortWhen(when, now)}
         </time>

@@ -93,13 +93,24 @@ export function ProfileModal({ userId }: { userId: number }) {
 
   const activity = (
     <div className="pactivity">
-      <section className="widget">
-        <strong>Сейчас</strong>
-        <p className="muted">
-          {PRESENCE_LABEL[presence] ?? ''}
-          {card.status_text && <> · {card.status_text}</>}
-        </p>
-      </section>
+      {p.is_bot && (
+        <section className="widget">
+          <strong>
+            <span className="bot-tag">Бот</span> @{p.username}
+          </strong>
+          <p className="muted">{p.bot_description || 'Программа, которая отвечает на сообщения. Напишите ей в личку или вызовите командой «/».'}</p>
+        </section>
+      )}
+      {/* У бота нет присутствия: «Сейчас» не показываем */}
+      {!p.is_bot && (
+        <section className="widget">
+          <strong>Сейчас</strong>
+          <p className="muted">
+            {PRESENCE_LABEL[presence] ?? ''}
+            {card.status_text && <> · {card.status_text}</>}
+          </p>
+        </section>
+      )}
       {p.activity && (p.activity.level ?? 0) > 0 && (
         <section className="widget pact">
           <strong>Уровень {p.activity.level}</strong>

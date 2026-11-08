@@ -168,6 +168,8 @@ export interface UserSummary {
   display_name: string;
   avatar_path: string;
   presence?: Presence;
+  /** Пользователь-бот (docs/API.md §21) — нет у старых серверов */
+  is_bot?: boolean;
 }
 
 export interface Reaction {
@@ -184,6 +186,8 @@ export interface ReplyPreview {
   /** Не длиннее 200 символов */
   text: string;
   attachment: string;
+  /** Цитата сообщения вебхука: author_name — имя вебхука, author_id — его создатель (docs/API.md §22) */
+  webhook?: { id: number; name: string } | null;
 }
 
 export type AttachmentType = 'image' | 'file' | '';
@@ -241,6 +245,74 @@ export interface Message {
   nonce?: string;
   /** Только у своих ещё не подтверждённых сервером сообщений */
   local?: 'sending' | 'failed';
+  /** Автор — бот (docs/API.md §21) */
+  author_bot?: boolean;
+  /** Кнопки под сообщением бота или вебхука */
+  reply_markup?: ReplyMarkup | null;
+  /** Сообщение входящего вебхука канала (§22): имя показывается вместо автора */
+  webhook?: { id: number; name: string } | null;
+  /** Эфемерное сообщение бота: видно только мне, в истории не хранится (id = 0) */
+  ephemeral?: boolean;
+  ephemeral_id?: string;
+}
+
+/** Кнопка под сообщением бота: ровно одно из действий (docs/API.md §21) */
+export interface InlineButton {
+  text: string;
+  callback_data?: string;
+  url?: string;
+  copy_text?: { text: string };
+  web_app?: { url: string };
+}
+
+export interface ReplyMarkup {
+  inline_keyboard: InlineButton[][];
+}
+
+export interface BotCommand {
+  command: string;
+  description: string;
+}
+
+/** Мой бот (Настройки → Боты, docs/API.md §21.1) */
+export interface Bot {
+  id: number;
+  username: string;
+  display_name: string;
+  avatar_path: string;
+  description: string;
+  /** Последние 4 символа токена */
+  token_hint: string;
+  read_all: boolean;
+  webhook_url: string | null;
+  webhook_error?: string | null;
+  commands: BotCommand[];
+  servers: { id: number; name: string }[];
+  created_at: string;
+}
+
+export interface ServerBot {
+  id: number;
+  username: string;
+  display_name: string;
+  avatar_path: string;
+  description: string;
+}
+
+/** Команда бота-участника канала — подсказка в поле ввода */
+export interface ChannelCommand extends BotCommand {
+  bot_id: number;
+  bot_username: string;
+}
+
+/** Входящий вебхук канала сервера (docs/API.md §22) */
+export interface ServerWebhook {
+  id: number;
+  channel_id: number;
+  channel_name?: string;
+  name: string;
+  created_by?: number;
+  created_at: string;
 }
 
 /** Сообщение с сервера: URL вложения любого типа — в `attachment` (docs/API.md §2) */
@@ -359,6 +431,8 @@ export interface LastMessage {
   attachment: string;
   created_at: string;
   kind?: MessageKind;
+  /** Последнее — от вебхука: author_name — имя вебхука */
+  webhook?: { id: number; name: string } | null;
 }
 
 export interface Dm {
@@ -370,6 +444,8 @@ export interface Dm {
   last_message?: LastMessage | null;
   /** «Заметки» — чат с самим собой (user_id — я); при подключённом Telegram зеркалится с ботом */
   notes?: boolean;
+  /** Собеседник — бот (§21) */
+  is_bot?: boolean;
 }
 
 export interface Group {
@@ -473,6 +549,9 @@ export interface Profile {
   profile_ext?: Partial<ProfileExt>;
   /** Сервер-бейджик (выбран в профиле) */
   badge?: { id: number; name: string; icon: string; tag?: string; tag_icon?: string } | null;
+  /** Профиль бота (§21): пометка и описание от владельца */
+  is_bot?: boolean;
+  bot_description?: string;
   /** Рекорды в играх «Активностей» (только сыгранные) */
   games?: Record<string, { best_floor: number; runs: number; wins: number }>;
   /** Уровень, серия, титул и награды (§16); hidden — владелец скрыл статистику, тогда только level/streak/title/emblem */
@@ -974,6 +1053,29 @@ export const api = {
   react: (channelId: number, mid: number, emoji: string) =>
     post<{ reactions: Reaction[] }>(`/channels/${channelId}/messages/${mid}/react`, { emoji }),
   uploadAttachment,
+
+  // ── Боты и вебхуки (docs/API.md §21–22) ──
+  /** Нажатие callback-кнопки; у эфемерного сообщения mid = 0 и его ephemeral_id */
+  pressButton: (channelId: number, mid: number, data: string, ephemeral_id?: string) =>
+    post<{ ok: boolean; query_id: string }>(`/channels/${channelId}/messages/${mid}/callback`, ephemeral_id ? { data, ephemeral_id } : { data }),
+  channelCommands: (channelId: number) =>
+    get<{ commands: ChannelCommand[] }>(`/channels/${channelId}/commands`).then((r) => r.commands ?? []),
+  bots: () => get<{ bots: Bot[] }>('/bots').then((r) => r.bots),
+  createBot: (username: string, display_name: string) => post<{ bot: Bot; token: string }>('/bots', { username, display_name }),
+  patchBot: (id: number, p: { display_name?: string; description?: string; read_all?: boolean }) =>
+    request<{ bot: Bot }>('PATCH', `/bots/${id}`, p).then((r) => r.bot),
+  /** Новый токен; старый сразу перестаёт работать */
+  botToken: (id: number) => post<{ bot: Bot; token: string }>(`/bots/${id}/token`),
+  deleteBot: (id: number) => del<{ status: string }>(`/bots/${id}`),
+  serverBots: (id: number) => get<{ bots: ServerBot[] }>(`/servers/${id}/bots`).then((r) => r.bots),
+  addServerBot: (id: number, username: string) =>
+    post<{ bot?: ServerBot; status: 'added' | 'already_member' }>(`/servers/${id}/bots`, { username }),
+  removeServerBot: (id: number, botId: number) => del<{ status: string }>(`/servers/${id}/bots/${botId}`),
+  serverWebhooks: (id: number) => get<{ webhooks: ServerWebhook[] }>(`/servers/${id}/webhooks`).then((r) => r.webhooks),
+  /** url (относительный, с секретом) показывается один раз */
+  createWebhook: (id: number, channel_id: number, name: string) =>
+    post<{ webhook: ServerWebhook; url: string }>(`/servers/${id}/webhooks`, { channel_id, name }),
+  deleteWebhook: (id: number, wid: number) => del<{ status: string }>(`/servers/${id}/webhooks/${wid}`),
 
   // ── Игры «Активностей» (рекорды, награды, ежедневный забег) ──
   play: {

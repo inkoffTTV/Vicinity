@@ -42,6 +42,14 @@ export function AddMemberDialog({ target, onClose }: { target: AddTarget; onClos
     if (busy) return;
     setBusy(true);
     try {
+      // Бот приглашений не принимает: на сервер его добавляет владелец сразу (docs/API.md §21.1)
+      if (target.kind === 'server' && u.is_bot) {
+        const b = await api.addServerBot(target.serverId, u.username);
+        void refreshServer(target.serverId);
+        setSent((m) => ({ ...m, [u.id]: b.status === 'added' ? 'Добавлен' : 'Уже на сервере' }));
+        toast(b.status === 'added' ? `Бот ${u.display_name} добавлен` : `Бот ${u.display_name} уже на сервере`);
+        return;
+      }
       const r =
         target.kind === 'group'
           ? await api.addGroupMember(target.channelId, u.id)
@@ -62,8 +70,9 @@ export function AddMemberDialog({ target, onClose }: { target: AddTarget; onClos
       );
     } catch (e) {
       toast(e instanceof ApiError ? e.message : 'Ошибка', 'error');
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   // Друзей ищем у себя по нику и имени; остальных — только по полному нику
@@ -81,7 +90,9 @@ export function AddMemberDialog({ target, onClose }: { target: AddTarget; onClos
           <div key={u.id} className="user-row">
             <Avatar name={u.display_name} src={u.avatar_path} id={u.id} size={32} />
             <div className="grow">
-              <div>{u.display_name}</div>
+              <div>
+                {u.display_name} {u.is_bot && <span className="bot-tag">Бот</span>}
+              </div>
               <div className="muted small">@{u.username}</div>
             </div>
             {sent[u.id] ? (

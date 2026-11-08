@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Message } from '../lib/api';
 import { useCall } from '../lib/call';
 import { mentionsUser, plainText } from '../lib/markdown';
-import { useStore } from '../lib/store';
+import { ownMessage, useStore } from '../lib/store';
 import { knownUser } from '../lib/users';
 import { socket, WsEvent } from '../lib/ws';
 import { Avatar } from './Avatar';
@@ -53,7 +53,7 @@ export function OverlayView() {
   useEffect(() => {
     let seq = 0;
     const off = socket.on((ev: WsEvent) => {
-      if (ev.type !== 'new_message' || ev.author_id === me?.user_id) return;
+      if (ev.type !== 'new_message' || ownMessage({ author_id: ev.author_id, webhook: ev.webhook }, me?.user_id)) return;
       const s = useStore.getState();
       // Лички и беседы — всегда (новая личка может ещё не попасть в список), каналы серверов — только с @упоминанием
       const inServer = Object.values(s.channelsByServer).some((list) => list.some((c) => c.id === ev.channel_id));

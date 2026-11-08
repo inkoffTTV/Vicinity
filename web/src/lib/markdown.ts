@@ -9,18 +9,31 @@ export type MdNode =
   /** @логин как написан в тексте; есть ли такой пользователь, решает отрисовка */
   | { t: 'mention'; name: string }
   | { t: 'codeblock'; lang: string; v: string }
-  | { t: 'quote'; c: MdNode[] };
+  | { t: 'quote'; c: MdNode[] }
+  /** Заголовок «# », «## », «### » в начале строки */
+  | { t: 'h'; level: 1 | 2 | 3; c: MdNode[] }
+  /** Список «- »/«* » или «1. »; пункт — одна строка */
+  | { t: 'list'; ordered: boolean; start: number; items: MdNode[][] }
+  /** [текст](https://…): host — настоящий домен, если подпись сама похожа на ссылку на другой сайт */
+  | { t: 'mlink'; href: string; c: MdNode[]; host?: string }
+  /** <t:UNIX> и <t:UNIX:стиль> — время в часовом поясе читателя */
+  | { t: 'time'; unix: number; style: TimeStyle };
+
+export type TimeStyle = 't' | 'T' | 'd' | 'D' | 'f' | 'F' | 'R';
 
 // Глубже вложенные выделения остаются текстом — защита от патологического ввода
 const MAX_DEPTH = 6;
 
-const ESCAPABLE = new Set(['\\', '*', '_', '~', '`', '|', '>', '@', ':']);
+// «.» — для «1\. » в начале строки: не нумерованный список (так экранирует Bot API в режиме HTML)
+const ESCAPABLE = new Set(['\\', '*', '_', '~', '`', '|', '>', '@', ':', '#', '-', '[', ']', '<', '.']);
+// Экранирование внутри голого адреса или @логина снимается: «https://a.b/x\_y» → «https://a.b/x_y»
+const unescapeMd = (s: string) => s.replace(/\\([\\*_~`|>@:#\-[\]<.])/g, '$1');
 
 // Сопоставление идёт с позиции (флаг y); выделения — как в Discord (simple-markdown)
 const RE = {
   code: /(`+)([\s\S]*?[^`])\1(?!`)/y,
   url: /https?:\/\/[^\s<]+/y,
-  mention: /(?<![A-Za-z0-9])@([A-Za-z0-9_.-]+)/y,
+  mention: /(?<![A-Za-z0-9])@((?:[A-Za-z0-9_.-]|\\[_.-])+)/y,
   spoiler: /\|\|([\s\S]+?)\|\|/y,
   strike: /~~([\s\S]+?)~~/y,
   bold: /\*\*([\s\S]+?)\*\*(?!\*)/y,
@@ -29,7 +42,36 @@ const RE = {
   italicStar: /\*(?=\S)((?:\*\*|\\[\s\S]|\s+(?:\\[\s\S]|[^\s*\\]|\*\*)|[^\s*\\])+?)\*(?!\*)/y,
   // _курсив_ — только целыми словами: snake_case_name остаётся как есть
   italicUnderscore: /(?<![\p{L}\p{N}_])_((?:__|\\[\s\S]|[^\\_])+?)_(?![\p{L}\p{N}_])/uy,
+  // [подпись](https://адрес) — подпись в одну строку, адрес только http/https, скобки в адресе — парами
+  masked: /\[((?:\\[\s\S]|[^\[\]\\\n]){1,256})\]\(\s*<?(https?:\/\/[^\s<>()]+(?:\([^\s<>()]*\)[^\s<>()]*)*)>?\s*\)/y,
+  time: /<t:(-?\d{1,13})(?::([tTdDfFR]))?>/y,
 };
+
+// Похожее на домен в подписи маскированной ссылки: «example.com», «https://example.com/путь», «paypal.com.»
+const DOMAIN_LIKE = /(?:https?:\/\/)?((?:[\p{L}\p{N}-]+\.)+[\p{L}]{2,})/giu;
+// Невидимые символы (нулевой ширины, направление текста, мягкий перенос) — ими прячут домен от проверки
+const INVISIBLE = /[\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/g;
+
+function hostOf(href: string): string {
+  try {
+    return new URL(href).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+/** Домен ссылки, который нужно показать рядом с подписью: подпись выдаёт себя за другой адрес */
+function spoofedHost(label: string, href: string): string | undefined {
+  const real = hostOf(href);
+  if (!real) return undefined;
+  const strip = (h: string) => h.replace(/^www\./, '');
+  // Любой домен в подписи, кроме настоящего, — показать настоящий (пунктуация и невидимые символы не мешают)
+  for (const m of label.replace(INVISIBLE, '').matchAll(DOMAIN_LIKE)) {
+    const shown = hostOf(`https://${m[1]}`);
+    if (shown && strip(shown) !== strip(real)) return real;
+  }
+  return undefined;
+}
 
 function at(re: RegExp, s: string, i: number): RegExpExecArray | null {
   re.lastIndex = i;
@@ -51,7 +93,8 @@ function trimUrl(url: string): string {
   return url.slice(0, end);
 }
 
-function inline(s: string, depth: number): MdNode[] {
+// inLink: внутри подписи ссылки — без вложенных ссылок и упоминаний (кнопка внутри <a> недопустима)
+function inline(s: string, depth: number, inLink = false): MdNode[] {
   const out: MdNode[] = [];
   let text = '';
   const push = (n: MdNode) => {
@@ -78,27 +121,45 @@ function inline(s: string, depth: number): MdNode[] {
       i += m[0].length;
       continue;
     }
-    if (ch === 'h' && !/[\p{L}\p{N}]/u.test(s[i - 1] ?? '') && (m = at(RE.url, s, i))) {
-      const href = trimUrl(m[0]);
-      if (href.length > href.indexOf('//') + 2) {
-        push({ t: 'link', href });
-        i += href.length;
+    if (ch === '[' && !inLink && depth < MAX_DEPTH && (m = at(RE.masked, s, i))) {
+      const href = m[2];
+      const c = inline(m[1], depth + 1, true);
+      if (c.length && href.length > href.indexOf('//') + 2) {
+        push({ t: 'mlink', href, c, host: spoofedHost(flat(c), href) });
+        i += m[0].length;
         continue;
       }
     }
-    if (ch === '@' && (m = at(RE.mention, s, i))) {
-      push({ t: 'mention', name: m[1] });
+    if (ch === '<' && (m = at(RE.time, s, i))) {
+      const unix = Number(m[1]);
+      if (Number.isFinite(new Date(unix * 1000).getTime())) {
+        push({ t: 'time', unix, style: (m[2] as TimeStyle | undefined) ?? 'f' });
+        i += m[0].length;
+        continue;
+      }
+    }
+    if (ch === 'h' && !inLink && !/[\p{L}\p{N}]/u.test(s[i - 1] ?? '') && (m = at(RE.url, s, i))) {
+      const raw = trimUrl(m[0]);
+      const href = unescapeMd(raw);
+      if (href.length > href.indexOf('//') + 2) {
+        push({ t: 'link', href });
+        i += raw.length;
+        continue;
+      }
+    }
+    if (ch === '@' && !inLink && (m = at(RE.mention, s, i))) {
+      push({ t: 'mention', name: unescapeMd(m[1]) });
       i += m[0].length;
       continue;
     }
     if (depth < MAX_DEPTH) {
       if (ch === '|' && (m = at(RE.spoiler, s, i))) {
-        push({ t: 'spoiler', c: inline(m[1], depth + 1) });
+        push({ t: 'spoiler', c: inline(m[1], depth + 1, inLink) });
         i += m[0].length;
         continue;
       }
       if (ch === '~' && (m = at(RE.strike, s, i))) {
-        push({ t: 's', c: inline(m[1], depth + 1) });
+        push({ t: 's', c: inline(m[1], depth + 1, inLink) });
         i += m[0].length;
         continue;
       }
@@ -121,7 +182,7 @@ function inline(s: string, depth: number): MdNode[] {
           if (hit && (!best || hit[0].length + bonus > best.q)) best = { m: hit, t, q: hit[0].length + bonus };
         }
         if (best) {
-          push({ t: best.t, c: inline(best.m[1], depth + 1) });
+          push({ t: best.t, c: inline(best.m[1], depth + 1, inLink) });
           i += best.m[0].length;
           continue;
         }
@@ -134,17 +195,77 @@ function inline(s: string, depth: number): MdNode[] {
   return out;
 }
 
+const HEADING = /^(#{1,3}) +(\S.*)$/;
+
+// В тексте до строки остался незакрытый **, __, ||, ~~ или ` — строка-«пункт» внутри него не блок,
+// иначе выделение, начатое выше, развалится (так было до заголовков и списков)
+function openSpan(lines: string[]): boolean {
+  if (!lines.length) return false;
+  const t = lines.join('\n').replace(/\\[\s\S]/g, '');
+  if ((t.match(/`/g) ?? []).length % 2) return true;
+  const noCode = t.replace(/`[^`]*`/g, '');
+  return ['**', '__', '||', '~~'].some((d) => (noCode.split(d).length - 1) % 2 === 1);
+}
+const BULLET = /^[-*] +(\S.*)$/;
+const NUMBERED = /^(\d{1,9})\. +(\S.*)$/;
+
+// Заголовки и списки — отдельными блоками по строкам, остальное — текст как есть. Строки, ставшие
+// блоками, переводы строк вокруг себя «съедают»: блок и так начинается с новой строки (white-space: pre-wrap)
+function lineBlocks(lines: string[], out: MdNode[]) {
+  let plain: string[] = [];
+  let list: { ordered: boolean; start: number; items: MdNode[][] } | null = null;
+  const flushPlain = () => {
+    if (plain.length) out.push(...inline(plain.join('\n'), 0));
+    plain = [];
+  };
+  const flushList = () => {
+    if (list) out.push({ t: 'list', ...list });
+    list = null;
+  };
+  for (const line of lines) {
+    if (openSpan(plain)) {
+      plain.push(line);
+      continue;
+    }
+    const h = HEADING.exec(line);
+    if (h) {
+      flushPlain();
+      flushList();
+      out.push({ t: 'h', level: h[1].length as 1 | 2 | 3, c: inline(h[2].trimEnd(), 0) });
+      continue;
+    }
+    const b = BULLET.exec(line);
+    const n = b ? null : NUMBERED.exec(line);
+    if (b || n) {
+      const ordered = !!n;
+      flushPlain();
+      if (list && list.ordered !== ordered) flushList();
+      if (!list) list = { ordered, start: n ? Number(n[1]) : 1, items: [] };
+      list.items.push(inline(b ? b[1] : n![2], 0));
+      continue;
+    }
+    flushList();
+    plain.push(line);
+  }
+  flushPlain();
+  flushList();
+}
+
 // Цитаты: строки с «> »; «>>> » цитирует всё до конца фрагмента
 function blocks(seg: string, out: MdNode[]) {
   const lines = seg.split('\n');
   let plain: string[] = [];
   let quote: string[] = [];
   const flushPlain = () => {
-    if (plain.length) out.push(...inline(plain.join('\n'), 0));
+    if (plain.length) lineBlocks(plain, out);
     plain = [];
   };
   const flushQuote = () => {
-    if (quote.length) out.push({ t: 'quote', c: inline(quote.join('\n'), 0) });
+    if (quote.length) {
+      const c: MdNode[] = [];
+      lineBlocks(quote, c);
+      out.push({ t: 'quote', c });
+    }
     quote = [];
   };
   for (let k = 0; k < lines.length; k++) {
@@ -204,31 +325,81 @@ export function parseMarkdown(text: string): MdNode[] {
   return out;
 }
 
+function flat(nodes: MdNode[]): string {
+  return nodes
+    .map((n) => {
+      switch (n.t) {
+        case 'text':
+        case 'code':
+          return n.v;
+        case 'codeblock':
+          return ` ${n.v} `;
+        case 'link':
+          return n.href;
+        case 'mlink':
+          return flat(n.c);
+        case 'mention':
+          return `@${n.name}`;
+        case 'spoiler':
+          return '▮▮▮';
+        case 'quote':
+        case 'h':
+          return ` ${flat(n.c)} `;
+        case 'list':
+          return ` ${n.items.map(flat).join(' ')} `;
+        case 'time':
+          return formatTime(n.unix, n.style);
+        default:
+          return flat(n.c);
+      }
+    })
+    .join('');
+}
+
 /** Текст без разметки в одну строку — для превью (цитата ответа, уведомление); спойлер скрыт */
 export function plainText(text: string): string {
-  const flat = (nodes: MdNode[]): string =>
-    nodes
-      .map((n) => {
-        switch (n.t) {
-          case 'text':
-          case 'code':
-            return n.v;
-          case 'codeblock':
-            return ` ${n.v} `;
-          case 'link':
-            return n.href;
-          case 'mention':
-            return `@${n.name}`;
-          case 'spoiler':
-            return '▮▮▮';
-          case 'quote':
-            return ` ${flat(n.c)} `;
-          default:
-            return flat(n.c);
-        }
-      })
-      .join('');
   return flat(parseMarkdown(text)).replace(/\s+/g, ' ').trim();
+}
+
+// ── Метки времени <t:UNIX:стиль> ──
+
+const RU = 'ru-RU';
+const REL_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['year', 365 * 86400],
+  ['month', 30 * 86400],
+  ['day', 86400],
+  ['hour', 3600],
+  ['minute', 60],
+  ['second', 1],
+];
+
+/** Время в часовом поясе читателя: t 14:30, T 14:30:05, d 05.11.2026, D 5 ноября 2026 г.,
+ *  f 5 ноября 2026 г. в 14:30, F с днём недели, R «через 5 минут» / «3 дня назад» */
+export function formatTime(unix: number, style: TimeStyle, now = Date.now()): string {
+  const d = new Date(unix * 1000);
+  const hm: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+  const date: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric' };
+  switch (style) {
+    case 't':
+      return d.toLocaleTimeString(RU, hm);
+    case 'T':
+      return d.toLocaleTimeString(RU, { ...hm, second: '2-digit' });
+    case 'd':
+      return d.toLocaleDateString(RU, { day: '2-digit', month: '2-digit', year: 'numeric' });
+    case 'D':
+      return d.toLocaleDateString(RU, date);
+    case 'F':
+      return d.toLocaleString(RU, { weekday: 'long', ...date, ...hm });
+    case 'R': {
+      const sec = (unix * 1000 - now) / 1000;
+      const abs = Math.abs(sec);
+      const rtf = new Intl.RelativeTimeFormat(RU, { numeric: 'auto' });
+      for (const [unit, size] of REL_UNITS) if (abs >= size || unit === 'second') return rtf.format(Math.round(sec / size), unit);
+      return '';
+    }
+    default:
+      return d.toLocaleString(RU, { ...date, ...hm });
+  }
 }
 
 // ── Упоминания ──

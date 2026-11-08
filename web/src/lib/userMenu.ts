@@ -4,14 +4,15 @@ import { MouseEvent, TouchEvent } from 'react';
 import { create } from 'zustand';
 
 interface State {
-  at: { userId: number; point: { x: number; y: number } } | null;
-  open: (userId: number, point: { x: number; y: number }) => void;
+  /** bot — известно, что это бот (например, автор сообщения с пометкой «Бот») */
+  at: { userId: number; point: { x: number; y: number }; bot?: boolean } | null;
+  open: (userId: number, point: { x: number; y: number }, bot?: boolean) => void;
   close: () => void;
 }
 
 export const useUserMenu = create<State>((set) => ({
   at: null,
-  open: (userId, point) => set({ at: { userId, point } }),
+  open: (userId, point, bot) => set({ at: { userId, point, bot } }),
   close: () => set({ at: null }),
 }));
 
@@ -26,15 +27,15 @@ const cancel = () => {
   pressStart = null;
 };
 
-/** Обработчики для элемента, который представляет пользователя */
-export function userMenuProps(userId: number) {
+/** Обработчики для элемента, который представляет пользователя; bot — это бот (меню без звонка и дружбы) */
+export function userMenuProps(userId: number, bot?: boolean) {
   return {
     onContextMenu: (e: MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       // Android сам присылает contextmenu на долгое нажатие — свой таймер уже не нужен
       cancel();
-      useUserMenu.getState().open(userId, { x: e.clientX, y: e.clientY });
+      useUserMenu.getState().open(userId, { x: e.clientX, y: e.clientY }, bot);
     },
     onTouchStart: (e: TouchEvent) => {
       const t = e.touches[0];
@@ -45,7 +46,7 @@ export function userMenuProps(userId: number) {
       pressTimer = window.setTimeout(() => {
         if (!pressStart) return;
         swallowClick = true;
-        useUserMenu.getState().open(userId, pressStart);
+        useUserMenu.getState().open(userId, pressStart, bot);
         pressStart = null;
       }, LONG_PRESS);
     },

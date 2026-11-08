@@ -1,6 +1,6 @@
 // Vicinity для Windows: окно с веб-клиентом, трей, уведомления, выбор экрана для показа и автообновление.
 // Сам интерфейс — тот же веб-клиент с сервера, поэтому обновления дизайна приходят без переустановки.
-const { app, BrowserWindow, Menu, Tray, desktopCapturer, globalShortcut, ipcMain, nativeImage, nativeTheme, screen, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, nativeTheme, screen, session, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -172,6 +172,160 @@ const openExternal = (url) => {
   if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) void shell.openExternal(url);
 };
 
+// ── Контекстное меню текста (1.3.0) ──
+function showTextMenu(wc, p) {
+  if (!sameOrigin(wc.getURL())) return;
+  const items = [];
+  if (p.isEditable) {
+    if (p.misspelledWord) {
+      for (const word of (p.dictionarySuggestions || []).slice(0, 6)) items.push({ label: word, click: () => wc.replaceMisspelling(word) });
+      if (!items.length) items.push({ label: 'Нет вариантов', enabled: false });
+      items.push({ label: 'Добавить в словарь', click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) }, { type: 'separator' });
+    }
+    const f = p.editFlags || {};
+    items.push(
+      { label: 'Вырезать', role: 'cut', enabled: !!f.canCut },
+      { label: 'Копировать', role: 'copy', enabled: !!f.canCopy },
+      { label: 'Вставить', role: 'paste', enabled: !!f.canPaste },
+      { type: 'separator' },
+      { label: 'Выделить всё', role: 'selectAll', enabled: !!f.canSelectAll },
+    );
+  } else {
+    if (p.selectionText && p.selectionText.trim()) items.push({ label: 'Копировать', role: 'copy' });
+    if (p.linkURL && /^https?:\/\//i.test(p.linkURL)) items.push({ label: 'Копировать ссылку', click: () => clipboard.writeText(p.linkURL) });
+  }
+  if (items.length) Menu.buildFromTemplate(items).popup({ window: BrowserWindow.fromWebContents(wc) ?? undefined });
+}
+
+// ── Картинки из меню веб-клиента: сохранить, сохранить альбом, скопировать (1.3.0) ──
+// Скачивание идёт обычным downloadURL (с куками сессии), а путь заранее выбран: will-download ставит его без диалога
+const pendingDownloads = new Map(); // адрес → очередь { file, resolve }
+const MAX_IMAGE = 50 * 1024 * 1024;
+
+/** Имя файла без путей и запрещённых в Windows символов */
+function safeFileName(name) {
+  const clean = String(name || '')
+    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+    .replace(/^[\s.]+|[\s.]+$/g, '')
+    .slice(0, 150);
+  return /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(clean) || !clean ? 'image' + (clean ? '_' + clean : '') : clean;
+}
+
+// Картинки на сервере лежат как /uploads/attachments/<id>.<тип>, тип определён по содержимому файла
+const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
+
+/** Расширение картинки по её адресу на сервере; null — это не картинка */
+function imageExt(url) {
+  try {
+    const ext = path.extname(new URL(url).pathname).toLowerCase();
+    return IMAGE_EXTS.has(ext) ? ext : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Имя файла картинки: имя от отправителя, но расширение — настоящее, с сервера («фото.hta» → «фото.png») */
+function imageFileName(name, url) {
+  const ext = imageExt(url);
+  const base = safeFileName(name).replace(/\.[^.]*$/, '') || 'image';
+  return ext ? base + ext : null;
+}
+
+/** Свободное имя в папке: «фото.png», «фото (1).png»… */
+function freePath(dir, name) {
+  const ext = path.extname(name);
+  const base = name.slice(0, name.length - ext.length);
+  for (let k = 0; k < 1000; k++) {
+    const file = path.join(dir, k ? `${base} (${k})${ext}` : name);
+    if (!fs.existsSync(file)) return file;
+  }
+  return path.join(dir, `${base} (${Date.now()})${ext}`);
+}
+
+function downloadTo(url, file) {
+  return new Promise((resolve) => {
+    const job = { file, resolve, timer: null };
+    const queue = pendingDownloads.get(url) ?? [];
+    queue.push(job);
+    pendingDownloads.set(url, queue);
+    // Скачивание так и не началось (сервер не ответил) — не ждём вечно
+    job.timer = setTimeout(() => {
+      const q = pendingDownloads.get(url);
+      const i = q ? q.indexOf(job) : -1;
+      if (i >= 0) q.splice(i, 1);
+      if (q && !q.length) pendingDownloads.delete(url);
+      resolve(false);
+    }, 60_000);
+    win.webContents.downloadURL(url);
+  });
+}
+
+function setupDownloads(ses) {
+  ses.on('will-download', (_e, item) => {
+    const chain = typeof item.getURLChain === 'function' ? item.getURLChain() : [];
+    const url = chain[0] || item.getURL();
+    const queue = pendingDownloads.get(url);
+    const job = queue && queue.shift();
+    if (queue && !queue.length) pendingDownloads.delete(url);
+    // Обычное скачивание (файл из ленты) — системный диалог «Сохранить как»
+    if (!job) return;
+    clearTimeout(job.timer);
+    item.setSavePath(job.file);
+    item.once('done', (_ev, state) => job.resolve(state === 'completed'));
+  });
+}
+
+// Запрос от главного окна со страницы Vicinity и про картинку с того же сервера
+const fromApp = (e) => !!win && e.sender === win.webContents && sameOrigin(e.sender.getURL());
+const imageUrl = (url) => typeof url === 'string' && url.length < 2048 && sameOrigin(url) && !!imageExt(url);
+
+// true — сохранено, null — отменено в диалоге, false — не удалось (сеть, таймаут, не картинка)
+ipcMain.handle('image:save', async (e, url, name) => {
+  if (!fromApp(e) || !imageUrl(url)) return false;
+  const ext = imageExt(url);
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'Сохранить изображение',
+    defaultPath: path.join(app.getPath('downloads'), imageFileName(name, url)),
+    filters: [{ name: 'Изображение', extensions: [ext.slice(1)] }],
+  });
+  if (canceled || !filePath) return null;
+  return downloadTo(url, filePath);
+});
+
+let albumDir = null;
+ipcMain.handle('images:save', async (e, items) => {
+  if (!fromApp(e) || !Array.isArray(items)) return 0;
+  const list = items.slice(0, 100).filter((i) => i && imageUrl(i.url));
+  if (!list.length) return 0;
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: 'Папка для изображений',
+    defaultPath: albumDir ?? app.getPath('downloads'),
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (canceled || !filePaths || !filePaths[0]) return -1;
+  albumDir = filePaths[0];
+  let saved = 0;
+  for (const i of list) if (await downloadTo(i.url, freePath(albumDir, imageFileName(i.name, i.url)))) saved++;
+  return saved;
+});
+
+ipcMain.handle('image:copy', async (e, url) => {
+  if (!fromApp(e) || !imageUrl(url)) return false;
+  try {
+    const res = await win.webContents.session.fetch(url);
+    if (!res.ok || Number(res.headers.get('content-length') || 0) > MAX_IMAGE) return false;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > MAX_IMAGE) return false;
+    // nativeImage понимает PNG и JPEG; webp и gif скопирует веб-клиент через canvas
+    const img = nativeImage.createFromBuffer(buf);
+    if (img.isEmpty()) return false;
+    clipboard.writeImage(img);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
 // ── Размер и положение окна между запусками ──
 const boundsFile = () => path.join(app.getPath('userData'), 'window.json');
 function loadBounds() {
@@ -249,6 +403,10 @@ function createWindow() {
     e.preventDefault();
     openExternal(url);
   });
+
+  // Своё меню у картинок и людей рисует веб-клиент (preventDefault у contextmenu) — тогда этого события нет.
+  // Здесь — системное меню для текста: поле ввода с подсказками орфографии, выделение, ссылка
+  win.webContents.on('context-menu', (_e, p) => showTextMenu(win.webContents, p));
 
   // Нет связи с сервером — своя страница с кнопкой «Повторить»
   win.webContents.on('did-fail-load', (_e, code, _desc, url, isMain) => {
@@ -435,6 +593,14 @@ function setupPermissions() {
   const ses = session.defaultSession;
   ses.setPermissionRequestHandler((wc, permission, callback) => callback(sameOrigin(wc.getURL()) && ALLOWED.has(permission)));
   ses.setPermissionCheckHandler((wc, permission, origin) => (origin === ORIGIN || (wc && sameOrigin(wc.getURL()))) && ALLOWED.has(permission));
+  setupDownloads(ses);
+  // Подсказки орфографии для русского и английского (на Windows словари системные)
+  try {
+    const langs = ['ru', 'en-US'].filter((l) => ses.availableSpellCheckerLanguages.includes(l));
+    if (langs.length) ses.setSpellCheckerLanguages(langs);
+  } catch {
+    /* словари по умолчанию */
+  }
 
   // Показ экрана: своё окно выбора (экран или окно), со звуком системы для целого экрана
   ses.setDisplayMediaRequestHandler(async (_request, callback) => {

@@ -2,9 +2,11 @@ import { ArrowDown, ArrowUp } from 'lucide-react';
 import { ChatBgLayer } from './ChatBackground';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Message, parseTs } from '../lib/api';
+import { useBots } from '../lib/bots';
+import { imageMenuProps, imageTarget } from '../lib/imageMenu';
 import { canManagePins, usePins } from '../lib/pins';
 import { prefersReducedMotion } from '../lib/prefs';
-import { useStore } from '../lib/store';
+import { ownMessage, useStore } from '../lib/store';
 import { Icon } from './Icon';
 import { MessageRow } from './Message';
 import { Modal } from './Modal';
@@ -18,10 +20,16 @@ const READ_ZONE = 40;
 
 const smooth = (): ScrollBehavior => (prefersReducedMotion() ? 'auto' : 'smooth');
 
+// Кто «автор» для группировки: у сообщений вебхука — сам вебхук с отображаемым именем, а не его создатель
+const authorKey = (m: Message) => (m.webhook ? `w${m.webhook.id}:${m.author_name}` : `u${m.author_id}`);
+const NO_EPHEMERAL: Message[] = [];
+
 const newestId = (list: Message[] | undefined) => (list ?? []).reduce((a, m) => (m.local ? a : Math.max(a, m.id)), 0);
 
 export function MessageList({ channelId }: { channelId: number }) {
   const messages = useStore((s) => s.messages[channelId]);
+  // Эфемерные сообщения ботов — только у меня, всегда внизу ленты
+  const ephemeral = useBots((s) => s.ephemeral[channelId] ?? NO_EPHEMERAL);
   const loading = useStore((s) => !!s.loadingChannel[channelId]);
   const hasMore = useStore((s) => s.hasMore[channelId]);
   const hasNewer = useStore((s) => !!s.hasNewer[channelId]);
@@ -98,12 +106,12 @@ export function MessageList({ channelId }: { channelId: number }) {
     // В окне старой истории (переход к сообщению) черту по счётчику не ставим — там не последние сообщения
     if (opened && opened.count > 0 && !loading && !hasNewer && openedDone.current !== opened) {
       openedDone.current = opened;
-      const others = messages.filter((m) => !m.local && m.author_id !== meId);
+      const others = messages.filter((m) => !m.local && !ownMessage(m, meId));
       setFirstUnread(others[Math.max(0, others.length - opened.count)]?.id ?? null);
     }
     const seen = seenBeforeHide.current;
     if (document.hidden && seen !== null && firstUnread === null) {
-      const first = messages.find((m) => !m.local && m.id > seen && m.author_id !== meId);
+      const first = messages.find((m) => !m.local && m.id > seen && !ownMessage(m, meId));
       if (first) setFirstUnread(first.id);
     }
     scheduleRead();
@@ -166,7 +174,7 @@ export function MessageList({ channelId }: { channelId: number }) {
     // Снизу догрузились сообщения — кнопка «к последним» по новому расстоянию до низа
     setScrolledAway(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight);
     updateUnreadAbove();
-  }, [messages, loadingOlder, focus, firstUnread]);
+  }, [messages, ephemeral, loadingOlder, focus, firstUnread]);
 
   useEffect(() => {
     if (flash === null) return;
@@ -230,7 +238,7 @@ export function MessageList({ channelId }: { channelId: number }) {
             !newDay &&
             !unreadHere &&
             !m.reply_to &&
-            prev.author_id === m.author_id &&
+            authorKey(prev) === authorKey(m) &&
             d.getTime() - parseTs(prev.created_at).getTime() < GROUP_GAP;
           return (
             <Fragment key={m.id}>
@@ -259,6 +267,22 @@ export function MessageList({ channelId }: { channelId: number }) {
             </Fragment>
           );
         })}
+        {!hasNewer &&
+          ephemeral.map((m) => (
+            <MessageRow
+              key={`e-${m.ephemeral_id}`}
+              msg={m}
+              grouped={false}
+              tapped={false}
+              onTap={() => {}}
+              onImage={setLightbox}
+              onMediaLoad={onMediaLoad}
+              flash={false}
+              canModerate={false}
+              canPin={false}
+              pinned={false}
+            />
+          ))}
         {hasNewer && (
           <div className="history-note">
             <button className="link-btn small" onClick={() => void loadNewer(channelId)} disabled={loadingNewer}>
@@ -284,7 +308,17 @@ export function MessageList({ channelId }: { channelId: number }) {
       )}
       {lightbox && (
         <Modal onClose={() => setLightbox(null)} bare>
-          <img className="lightbox" src={lightbox} alt="" onClick={() => setLightbox(null)} />
+          <img
+            className="lightbox"
+            src={lightbox}
+            alt=""
+            onClick={() => setLightbox(null)}
+            // То же меню картинки, что и в ленте (без «Открыть»)
+            {...imageMenuProps(() => {
+              const m = useStore.getState().messages[channelId]?.find((x) => x.attachment === lightbox && !x.local);
+              return m ? imageTarget(m) : null;
+            })}
+          />
         </Modal>
       )}
     </div>

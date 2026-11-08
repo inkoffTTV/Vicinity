@@ -115,15 +115,11 @@ void postFromTelegram(int64_t chatId, int64_t tgMessageId, int64_t userId, int64
         sendText(chatId, escapeHtml(why));
         return;
     }
-    auto ins = db->execSqlSync("INSERT INTO messages(channel_id, author_id, text) VALUES(?, ?, ?) RETURNING id",
-                               channelId, userId, text);
-    Json::Value msg = Messages::load(db, ins[0]["id"].as<int64_t>());
-    Json::Value ws = msg;
-    ws["type"] = "new_message";
-    Broadcast::toChannel(channelId, ws);
-    WebPush::notifyMessage(msg, channelId);
-    Telegram::notifyMessage(msg, channelId, true);
-    Activity::bump(userId, Activity::Kind::Message);
+    // Общий путь отправки (utils/Messages.h): WS, Web Push, активность, боты; обратно в Telegram — нет
+    Messages::Post post;
+    post.text = text;
+    post.fromTelegram = true;
+    Messages::post(db, channelId, userId, post);
     // Отметка «доставлено» реакцией на свой ответ — без лишнего сообщения в чате
     Json::Value react;
     react["chat_id"] = static_cast<Json::Int64>(chatId);
@@ -331,7 +327,9 @@ void notifyMessage(const Json::Value& msg, int64_t channelId, bool fromTelegram)
             return;
         }
         std::set<int64_t> audience = Broadcast::channelAudience(channelId);
-        audience.erase(author);
+        // Сообщение вебхука записано на создателя, но написал его не он — ему тоже приходит
+        const bool webhook = msg["webhook"].isObject();
+        if (!webhook) audience.erase(author);
         if (audience.empty()) return;
         auto ch = db->execSqlSync("SELECT type, name, server_id FROM channels WHERE id = ?", channelId);
         if (ch.empty()) return;
@@ -354,7 +352,9 @@ void notifyMessage(const Json::Value& msg, int64_t channelId, bool fromTelegram)
         std::string where;
         if (serverId) where = " · #" + escapeHtml(chName) + " · " + escapeHtml(serverName);
         else if (chType == "group") where = " · " + escapeHtml(chName);
-        const std::string head = "<b>" + escapeHtml(msg["author_name"].asString()) + "</b>" + where;
+        // Имя вебхука задаёт его вызывающий: помечаем, чтобы его не приняли за участника
+        const std::string mark = webhook ? " (вебхук)" : msg["author_bot"].asBool() ? " (бот)" : "";
+        const std::string head = "<b>" + escapeHtml(msg["author_name"].asString()) + "</b>" + mark + where;
         const std::string url = gSiteUrl.empty() ? std::string()
                                 : gSiteUrl + (serverId ? "/channels/" + std::to_string(serverId) + "/" + std::to_string(channelId)
                                                        : "/channels/@me/" + std::to_string(channelId));

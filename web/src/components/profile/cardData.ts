@@ -53,6 +53,7 @@ export function cardFromProfile(p: Profile, ext: ProfileExt, presence: Profile['
     pronouns: p.pronouns,
     status_text: statusOf(pj),
     presence,
+    bot: !!p.is_bot,
     bio: p.bio,
     created_at: parseTs(p.created_at),
     badges: p.badges,

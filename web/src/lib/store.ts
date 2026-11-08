@@ -196,6 +196,11 @@ export function activeChannelId(v: View): number | null {
 /** Черновики поля ввода по каналам (живут до выхода из аккаунта) */
 export const drafts = new Map<number, string>();
 
+/** Своё сообщение: автор — я, и это не сообщение моего вебхука (у них author_id — создатель вебхука) */
+export function ownMessage(m: { author_id: number; webhook?: unknown }, meId: number | undefined): boolean {
+  return meId !== undefined && m.author_id === meId && !m.webhook;
+}
+
 // ── Список сообщений канала: подтверждённые по возрастанию id, в конце — свои неотправленные ──
 
 function ordered(list: Message[]): Message[] {
@@ -217,7 +222,7 @@ function confirmLocal(list: Message[], nonce: string, build: (local: Message) =>
 // сервера (без nonce в событии) — первую ожидающую с тем же текстом.
 function insertIncoming(list: Message[], msg: Message, meId: number | undefined): Message[] {
   if (list.some((m) => m.id === msg.id)) return list;
-  if (msg.author_id === meId) {
+  if (ownMessage(msg, meId)) {
     const local = list.find((m) =>
       msg.nonce
         ? m.local && m.nonce === msg.nonce
@@ -248,6 +253,10 @@ function messageFromEvent(ev: WsEvent): Message {
     reply: ev.reply,
     kind: ev.kind,
     meta: ev.meta,
+    // Боты и вебхуки (docs/API.md §21–22)
+    author_bot: ev.author_bot === true,
+    reply_markup: ev.reply_markup ?? null,
+    webhook: ev.webhook ?? null,
   };
 }
 
@@ -256,12 +265,23 @@ function applyMessageEvent(list: Message[], ev: WsEvent, meId: number | undefine
   switch (ev.type) {
     case 'new_message':
       return insertIncoming(list, messageFromEvent(ev), meId);
-    case 'message_edited':
-      return patchReplies(
-        list.map((m) => (m.id === ev.id ? { ...m, text: ev.text, edited: true, edited_at: Date.now() } : m)),
-        ev.id,
-        (r) => ({ ...r, text: [...String(ev.text)].slice(0, REPLY_PREVIEW).join('') }),
+    case 'message_edited': {
+      // Правка бота может менять только кнопки (editMessageReplyMarkup): текст тогда прежний
+      const hasText = typeof ev.text === 'string';
+      const edited = typeof ev.edited === 'boolean' ? ev.edited : true;
+      const next = list.map((m) =>
+        m.id === ev.id
+          ? {
+              ...m,
+              text: hasText ? ev.text : m.text,
+              edited,
+              edited_at: hasText && ev.text !== m.text ? Date.now() : m.edited_at,
+              reply_markup: 'reply_markup' in ev ? ev.reply_markup ?? null : m.reply_markup,
+            }
+          : m,
       );
+      return hasText ? patchReplies(next, ev.id, (r) => ({ ...r, text: [...String(ev.text)].slice(0, REPLY_PREVIEW).join('') })) : next;
+    }
     case 'message_deleted':
       // Цитаты удалённого сообщения в ответах на него пропадают — как у сервера (reply: null)
       return patchReplies(
@@ -535,9 +555,12 @@ export const useStore = create<State>((set, get) => {
     });
     const messages: Record<number, Message[]> = {};
     for (const [ch, list] of Object.entries(s.messages))
-      messages[Number(ch)] = list.some((m) => m.author_id === uid)
+      // Сообщения вебхука записаны на создателя, но показаны под именем вебхука — их не трогаем
+      messages[Number(ch)] = list.some((m) => m.author_id === uid && !m.webhook)
         ? list.map((m) =>
-            m.author_id === uid ? { ...m, author_name: name ?? m.author_name, author_avatar: avatar ?? m.author_avatar } : m,
+            m.author_id === uid && !m.webhook
+              ? { ...m, author_name: name ?? m.author_name, author_avatar: avatar ?? m.author_avatar }
+              : m,
           )
         : list;
     const membersByServer: Record<number, Member[]> = {};
@@ -585,7 +608,8 @@ export const useStore = create<State>((set, get) => {
               kind: ev.kind,
             };
       if (!lm || lm.id !== ev.id) return lm;
-      if (ev.type === 'message_edited') return { ...lm, text: [...String(ev.text ?? '')].slice(0, REPLY_PREVIEW).join('') };
+      if (ev.type === 'message_edited')
+        return typeof ev.text === 'string' ? { ...lm, text: [...ev.text].slice(0, REPLY_PREVIEW).join('') } : lm;
       // Удалили последнее — каким стало новое последнее, знает только сервер
       window.clearTimeout(lastRefreshTimer);
       lastRefreshTimer = window.setTimeout(() => void get().refreshDms(), 300);
@@ -618,7 +642,7 @@ export const useStore = create<State>((set, get) => {
 
     const s = get();
     const visible = activeChannelId(s.view) === ch && !document.hidden;
-    if (!visible && ev.author_id !== s.me?.user_id) {
+    if (!visible && !ownMessage({ author_id: ev.author_id, webhook: ev.webhook }, s.me?.user_id)) {
       const mentioned = !!s.me && mentionsUser(ev.text ?? '', s.me.username);
       set({
         unread: { ...s.unread, [ch]: (s.unread[ch] ?? 0) + 1 },
@@ -799,7 +823,7 @@ export const useStore = create<State>((set, get) => {
     const sent = (list ?? []).filter((m) => !m.local);
     if (!s.hasNewer[ch] && sent.length && sent[0].id <= lastRead) {
       const meId = s.me?.user_id;
-      const rest = sent.filter((m) => m.id > lastRead && m.author_id !== meId);
+      const rest = sent.filter((m) => m.id > lastRead && !ownMessage(m, meId));
       const mentions = rest.filter((m) => s.me && mentionsUser(m.text, s.me.username)).length;
       set({
         unread: { ...s.unread, [ch]: Math.min(s.unread[ch] ?? 0, rest.length) },

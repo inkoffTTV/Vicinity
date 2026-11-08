@@ -13,6 +13,7 @@
 #include "../utils/WebPush.h"
 #include "../utils/Telegram.h"
 #include "../utils/Activity.h"
+#include "../utils/Bots.h"
 #include "../models/User.h"
 #include "../../shared/crypto/common_consts.h"
 #include <drogon/drogon.h>
@@ -218,27 +219,32 @@ void ChatController::sendMessage(const HttpRequestPtr& req,
         if (!attachment.empty()) {
             attName = Uploads::cleanFileName(JsonUtils::getStr(*json, "attachment_name"));
             if (attName->empty()) attName = Uploads::downloadName(attachment);   // имя, запомненное при загрузке
+            // Тип картинки определён по содержимому: расширение имени — то же, что у файла на сервере,
+            // иначе «фото.hta» сохранилось бы на диск под чужим расширением
+            if (attachmentType == "image" && !attName->empty()) {
+                const auto dot = attachment.rfind('.');
+                const std::string ext = dot == std::string::npos ? std::string() : attachment.substr(dot);
+                std::string base = *attName;
+                if (const auto d = base.rfind('.'); d != std::string::npos && d > 0) base.erase(d);
+                attName = base + ext;
+            }
             attSize = Uploads::fileSize(attachment);
             attType = attachmentType;
         }
         if (replyTo > 0) reply = replyTo;
 
-        auto ins = db->execSqlSync(
-            "INSERT INTO messages(channel_id, author_id, text, attachment, "
-            "attachment_name, attachment_size, attachment_type, reply_to, kind, meta) "
-            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-            channelId, userId, text, attachment, attName, attSize, attType, reply, kind, meta);
-        Json::Value msg = Messages::load(db, ins[0]["id"].as<int64_t>());
-        msg["nonce"] = nonce;
-
-        // Рассылаем по WebSocket только тем, кто видит канал
-        Json::Value ws = msg;
-        ws["type"] = "new_message";
-        Broadcast::toChannel(channelId, ws);
-        // Тем, кого нет в сети, — на телефон
-        WebPush::notifyMessage(msg, channelId);
-        Telegram::notifyMessage(msg, channelId);
-        Activity::bump(userId, Activity::Kind::Message);
+        // Вставка, WS new_message, Web Push, Telegram, активность и доставка ботам — общий путь
+        Messages::Post post;
+        post.text = text;
+        post.attachment = attachment;
+        post.attachmentName = attName;
+        post.attachmentSize = attSize;
+        post.attachmentType = attType;
+        post.replyTo = reply;
+        post.kind = kind;
+        post.meta = meta;
+        post.nonce = nonce;
+        Json::Value msg = Messages::post(db, channelId, userId, post);
 
         Json::Value resp;
         resp["id"]         = msg["id"];
@@ -286,13 +292,29 @@ void ChatController::addMember(const HttpRequestPtr& req,
         if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::FriendRequest, self)) {
             cb(error("Слишком много приглашений, подождите минуту", k429TooManyRequests)); return;
         }
-        auto u = db->execSqlSync("SELECT id FROM users WHERE id = ?", target);
+        auto u = db->execSqlSync("SELECT id, is_bot FROM users WHERE id = ?", target);
         if (u.empty()) { cb(error("Пользователь не найден", k404NotFound)); return; }
         if (Access::blockedBetween(db, self, target)) {
             cb(error("Этого пользователя нельзя пригласить", k403Forbidden)); return;
         }
         if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Invite, self)) {
             cb(error("Слишком много приглашений, попробуйте позже", k429TooManyRequests)); return;
+        }
+        // Бот (docs/API.md §21) приглашения не принимает — входит в беседу сразу
+        if (u[0]["is_bot"].as<int>() != 0) {
+            auto ins = db->execSqlSync(
+                "INSERT OR IGNORE INTO channel_members(channel_id, user_id) VALUES(?, ?) RETURNING user_id", channelId, target);
+            if (ins.empty()) { cb(error("Уже в беседе", k409Conflict)); return; }
+            Json::Value joined;
+            joined["type"]       = "channel_member_joined";
+            joined["channel_id"] = static_cast<Json::Int64>(channelId);
+            joined["user_id"]    = static_cast<Json::Int64>(target);
+            Broadcast::toChannel(channelId, joined, target);
+            Json::Value resp;
+            resp["status"]     = "added";
+            resp["channel_id"] = static_cast<Json::Int64>(channelId);
+            cb(HttpUtils::json(std::move(resp)));
+            return;
         }
 
         // В беседу больше не добавляют сразу: приглашённый сам принимает или отклоняет (InviteController)
@@ -323,9 +345,10 @@ void ChatController::editMessage(const HttpRequestPtr& req,
         // Исключённый с сервера не правит сообщения в его каналах
         auto acc = Access::channel(db, channelId, userId);
         if (acc != Access::Result::Ok) { cb(accessError(acc)); return; }
+        // Сообщения вебхука (автор — его создатель) правятся только целиком заново, не отсюда
         auto r = db->execSqlSync(
             "UPDATE messages SET text = ?, edited = 1 "
-            "WHERE id = ? AND channel_id = ? AND author_id = ? RETURNING id",
+            "WHERE id = ? AND channel_id = ? AND author_id = ? AND webhook_id IS NULL RETURNING id",
             text, msgId, channelId, userId);
         if (r.empty()) { cb(error("Можно редактировать только свои сообщения", k403Forbidden)); return; }
 
@@ -335,6 +358,8 @@ void ChatController::editMessage(const HttpRequestPtr& req,
         ws["id"]         = static_cast<Json::Int64>(msgId);
         ws["text"]       = text;
         Broadcast::toChannel(channelId, ws);
+        // Ботам канала — edited_message по тем же правилам, что и новое сообщение
+        Bots::onMessage(db, Messages::load(db, msgId), channelId, true);
 
         Json::Value resp; resp["status"] = "edited";
         cb(HttpUtils::json(std::move(resp)));
@@ -366,6 +391,7 @@ void ChatController::deleteMessage(const HttpRequestPtr& req,
             Uploads::removeByUrl(r[0]["attachment"].as<std::string>());
         db->execSqlSync("DELETE FROM reactions WHERE message_id = ?", msgId);
         db->execSqlSync("DELETE FROM pins WHERE message_id = ?", msgId);
+        db->execSqlSync("DELETE FROM bot_callbacks WHERE message_id = ?", msgId);
 
         Json::Value ws;
         ws["type"]       = "message_deleted";

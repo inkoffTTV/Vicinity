@@ -95,8 +95,11 @@ void FriendsController::request(const HttpRequestPtr& req,
 
     auto db = app().getDbClient();
     try {
-        auto u = db->execSqlSync("SELECT id FROM users WHERE id=?", target);
+        auto u = db->execSqlSync("SELECT id, is_bot FROM users WHERE id=?", target);
         if (u.empty()) { cb(errResp("Пользователь не найден", k404NotFound)); return; }
+        if (u[0]["is_bot"].as<int>() != 0) {
+            cb(errResp("Это бот: в друзья его не добавить, но написать ему можно", k400BadRequest)); return;
+        }
         // Незнакомцу — только по полному нику или его ссылке на профиль (не перебором номеров)
         if (!Access::canReach(db, self, target, JsonUtils::getStr(*json, "link"), JsonUtils::getStr(*json, "username"))) {
             cb(errResp("Пользователь не найден", k404NotFound)); return;

@@ -116,14 +116,14 @@ void ReadController::unread(const HttpRequestPtr& req,
 
             auto cnt = db->execSqlSync(
                 "SELECT COUNT(*) AS n FROM (SELECT 1 FROM messages "
-                "WHERE channel_id = ? AND id > ? AND author_id != ? LIMIT ?)",
+                "WHERE channel_id = ? AND id > ? AND (author_id != ? OR webhook_id IS NOT NULL) LIMIT ?)",
                 channelId, lastRead, userId, kMaxUnread);
             const int64_t unreadCount = cnt[0]["n"].as<int64_t>();
             if (unreadCount == 0) continue;   // новое — только своё
 
             // LIKE отбирает кандидатов, границы упоминания проверяются здесь
             auto texts = db->execSqlSync(
-                "SELECT text FROM messages WHERE channel_id = ? AND id > ? AND author_id != ? "
+                "SELECT text FROM messages WHERE channel_id = ? AND id > ? AND (author_id != ? OR webhook_id IS NOT NULL) "
                 "AND text LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT ?",
                 channelId, lastRead, userId, mentionLike, kMaxUnread);
             int64_t mentionCount = 0;

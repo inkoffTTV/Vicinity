@@ -54,7 +54,7 @@ socket.on((ev: WsEvent) => {
     usePins.setState({
       byChannel: {
         ...byChannel,
-        [ev.channel_id]: byChannel[ev.channel_id]!.map((p) => (p.id === ev.id ? { ...p, text: ev.text, edited: true } : p)),
+        [ev.channel_id]: byChannel[ev.channel_id]!.map((p) => (p.id === ev.id && typeof ev.text === 'string' ? { ...p, text: ev.text, edited: true } : p)),
       },
     });
 });

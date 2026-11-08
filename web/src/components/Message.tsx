@@ -1,8 +1,9 @@
-import { Copy, Paperclip, Pencil, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Pin, PinOff, Plus, Reply, SmilePlus, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink, Paperclip, Pencil, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Pin, PinOff, Plus, Reply, SmilePlus, Trash2 } from 'lucide-react';
 import { parseProposal } from '../lib/chatBg';
 import { BgProposal } from './ChatBackground';
 import { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent, useEffect, useRef, useState } from 'react';
-import { CallMeta, Message, parseTs, Reaction } from '../lib/api';
+import { CallMeta, InlineButton, Message, parseTs, Reaction } from '../lib/api';
+import { buttonKey, safeUrl, useBots } from '../lib/bots';
 import { useCall } from '../lib/call';
 import { formatClock } from '../lib/voiceNote';
 import { copyText } from '../lib/clipboard';
@@ -67,7 +68,9 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
   const [picker, setPicker] = useState(false);
   const [fullPicker, setFullPicker] = useState(false);
   const reactBtn = useRef<HTMLButtonElement>(null);
-  const mine = msg.author_id === me.user_id;
+  // Сообщение вебхука записано на его создателя, но это не «моё» сообщение: не правится и не открывает профиль
+  const mine = msg.author_id === me.user_id && !msg.webhook;
+  const hook = !!msg.webhook;
   const time = parseTs(msg.created_at);
   const editing = editingId === msg.id;
   const mentioned = !mine && mentionsUser(msg.text, me.username);
@@ -112,11 +115,18 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
   // Только что пришедшее сообщение появляется с анимацией (theme.css .msg.fresh)
   const [fresh] = useState(() => Date.now() - time.getTime() < 8000);
   if (fresh) classes.push('fresh');
+  if (msg.ephemeral) classes.push('ephemeral');
   const nameStyle = authorNameStyle(msg);
   const bgProposal = parseProposal(msg.text);
 
   return (
-    <div className={classes.join(' ')} data-mid={msg.id} onClick={onClick} onMouseLeave={() => setPicker(false)}>
+    <div
+      className={classes.join(' ')}
+      data-mid={msg.ephemeral ? undefined : msg.id}
+      data-ephemeral={msg.ephemeral_id}
+      onClick={onClick}
+      onMouseLeave={() => setPicker(false)}
+    >
       {msg.reply_to ? <ReplyQuote msg={msg} /> : null}
       <div className="msg-main">
         <div className="msg-gutter">
@@ -124,13 +134,17 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
             <span className="msg-time-hover" title={time.toLocaleString('ru-RU')}>
               {time.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
             </span>
+          ) : hook ? (
+            <span aria-hidden="true">
+              <Avatar name={msg.author_name} src={msg.author_avatar} id={-(msg.webhook?.id ?? 0)} size={40} />
+            </span>
           ) : (
             <button
               className="plain"
               onClick={() => showProfile(msg.author_id)}
               tabIndex={-1}
               aria-hidden="true"
-              {...userMenuProps(msg.author_id)}
+              {...userMenuProps(msg.author_id, msg.author_bot)}
             >
               <Avatar name={msg.author_name} src={msg.author_avatar} id={msg.author_id} size={40} />
             </button>
@@ -139,14 +153,25 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
         <div className="msg-body">
           {!grouped && (
             <div className="msg-meta">
-              <button
-                className={`msg-author plain${nameStyle.className}`}
-                style={nameStyle.style}
-                onClick={() => showProfile(msg.author_id)}
-                {...userMenuProps(msg.author_id)}
-              >
-                {msg.author_name}
-              </button>
+              {hook ? (
+                <span className="msg-author">{msg.author_name}</span>
+              ) : (
+                <button
+                  className={`msg-author plain${nameStyle.className}`}
+                  style={nameStyle.style}
+                  onClick={() => showProfile(msg.author_id)}
+                  {...userMenuProps(msg.author_id, msg.author_bot)}
+                >
+                  {msg.author_name}
+                </button>
+              )}
+              {hook ? (
+                <span className="bot-tag" title="Сообщение отправлено через вебхук">
+                  Вебхук
+                </span>
+              ) : (
+                msg.author_bot && <span className="bot-tag">Бот</span>
+              )}
               {msg.author_emblem && <Emblem id={msg.author_emblem} size={14} title={msg.author_title || undefined} />}
               {msg.author_badge && <ServerTag tag={msg.author_badge.tag} icon={msg.author_badge.icon} serverId={msg.author_badge.server_id} small />}
               <span className="msg-time" title={time.toLocaleString('ru-RU')}>
@@ -184,6 +209,15 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
           ) : (
             <Attachment msg={msg} onImage={onImage} onMediaLoad={onMediaLoad} />
           )}
+          {msg.reply_markup?.inline_keyboard?.length ? <InlineKeyboard msg={msg} /> : null}
+          {msg.ephemeral && msg.ephemeral_id && (
+            <div className="msg-ephemeral small">
+              <span className="muted">Видно только вам</span> ·{' '}
+              <button className="link-btn" onClick={() => useBots.getState().hideEphemeral(msg.channel_id, msg.ephemeral_id!)}>
+                Скрыть
+              </button>
+            </div>
+          )}
           {msg.reactions.length > 0 && (
             <div className="reactions">
               {msg.reactions.map((r) => (
@@ -205,7 +239,7 @@ export function MessageRow({ msg, grouped, tapped, onTap, onImage, onMediaLoad, 
           )}
         </div>
       </div>
-      {!msg.local && (
+      {!msg.local && !msg.ephemeral && (
         <div
           className={`msg-actions${picker || tapped ? ' show' : ''}`}
           onClick={(e) => e.stopPropagation()}
@@ -294,7 +328,8 @@ function ReplyQuote({ msg }: { msg: Message }) {
         <span className="muted">Исходное сообщение удалено</span>
       </div>
     );
-  const author = users.byId.get(r.author_id);
+  // У сообщения вебхука автор в базе — его создатель: ни его аватара, ни имени без пометки
+  const author = r.webhook ? undefined : users.byId.get(r.author_id);
   const preview = r.text ? (
     plainText(r.text)
   ) : r.attachment ? (
@@ -315,8 +350,9 @@ function ReplyQuote({ msg }: { msg: Message }) {
       title="Перейти к исходному сообщению"
     >
       <span className="reply-spine" aria-hidden="true" />
-      <Avatar name={r.author_name} src={author?.avatar_path} id={r.author_id} size={16} />
+      <Avatar name={r.author_name} src={author?.avatar_path} id={r.webhook ? -r.webhook.id : r.author_id} size={16} />
       <span className="reply-author">{r.author_name}</span>
+      {r.webhook && <span className="bot-tag">Вебхук</span>}
       <span className="reply-text ellipsis">{preview}</span>
     </button>
   );
@@ -467,4 +503,54 @@ const isTouch = typeof window !== 'undefined' && window.matchMedia('(hover: none
  *  Safari присылает подтверждающий Enter с isComposing=false, но keyCode 229. */
 export function composing(e: KeyboardEvent) {
   return e.nativeEvent.isComposing || e.keyCode === 229;
+}
+
+// Кнопки под сообщением бота (docs/API.md §21): callback — боту, ссылка — в новой вкладке, copy_text — в буфер
+function InlineKeyboard({ msg }: { msg: Message }) {
+  const rows = (msg.reply_markup?.inline_keyboard ?? []).filter((r) => Array.isArray(r) && r.length > 0);
+  return (
+    <div className="bot-keyboard" role="group" aria-label="Кнопки бота">
+      {rows.map((row, i) => (
+        <div className="bot-kb-row" key={i}>
+          {row.map((b, j) => (
+            <KeyboardButton key={j} msg={msg} b={b} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function KeyboardButton({ msg, b }: { msg: Message; b: InlineButton }) {
+  const waiting = useBots((s) => (b.callback_data ? buttonKey(msg, b.callback_data) in s.pending : false));
+  const link = safeUrl(b.url ?? b.web_app?.url);
+  if (b.url || b.web_app) {
+    if (!link) return null;
+    return (
+      <a className="bot-kb-btn" href={link.href} target="_blank" rel="noopener noreferrer" title={`${b.text} — ${link.host}`}>
+        <span className="ellipsis">{b.text}</span>
+        <Icon icon={ExternalLink} size={14} />
+      </a>
+    );
+  }
+  if (!b.callback_data && !b.copy_text) return null;
+  // Сообщение ещё не на сервере — нажимать нечего. Пока ждём ответа бота, кнопка не disabled, а aria-disabled:
+  // так фокус клавиатуры и экранного диктора остаётся на ней
+  const disabled = waiting || !!msg.local;
+  return (
+    <button
+      type="button"
+      className={`bot-kb-btn${waiting ? ' waiting' : ''}`}
+      aria-disabled={disabled || undefined}
+      aria-busy={waiting || undefined}
+      title={b.copy_text ? `${b.text} — скопировать` : b.text}
+      onClick={() => {
+        if (!disabled) void useBots.getState().press(msg, b);
+      }}
+    >
+      {waiting && <span className="bot-kb-spinner" aria-hidden="true" />}
+      <span className="ellipsis">{b.text}</span>
+      {b.copy_text && <Icon icon={Copy} size={14} />}
+    </button>
+  );
 }

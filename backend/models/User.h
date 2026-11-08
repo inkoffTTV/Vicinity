@@ -23,6 +23,7 @@ struct User {
     int         subscriptionTier = 0;
     int         developer        = 0;
     int         banned           = 0;
+    int         isBot            = 0;   // пользователь-бот (docs/API.md §21): без входа, друзей и присутствия
 };
 
 namespace UserModel {

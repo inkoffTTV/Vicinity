@@ -16,6 +16,8 @@ add_executable(VicinityServer
     controllers/TelegramController.cc
     controllers/AdminController.cc
     controllers/AuthController.cc
+    controllers/BotApiController.cc
+    controllers/BotsController.cc
     controllers/ChannelController.cc
     controllers/ChatController.cc
     controllers/FriendsController.cc
@@ -33,6 +35,7 @@ add_executable(VicinityServer
     controllers/SettingsController.cc
     controllers/ThemesController.cc
     controllers/UserController.cc
+    controllers/WebhookController.cc
     controllers/WSController.cc
     filters/AuthFilter.cc
     filters/RateLimitFilter.cc
@@ -47,6 +50,7 @@ add_executable(VicinityServer
     utils/Access.cc
     utils/Activity.cc
     utils/Altcha.cc
+    utils/Bots.cc
     utils/Broadcast.cc
     utils/Calls.cc
     utils/CryptoUtils.cc

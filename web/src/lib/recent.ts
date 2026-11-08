@@ -39,7 +39,7 @@ export function previewParts(lm: LastMessage, meId: number | undefined, group: b
     attachment = lm.attachment.startsWith('/uploads/files/') ? 'file' : 'image';
     if (!text) body = attachment === 'file' ? 'Файл' : 'Изображение';
   }
-  const who = lm.author_id === meId ? 'Вы: ' : group ? `${lm.author_name}: ` : '';
+  const who = lm.author_id === meId && !lm.webhook ? 'Вы: ' : group ? `${lm.author_name}${lm.webhook ? ' (вебхук)' : ''}: ` : '';
   return { who, attachment, text: body };
 }
 

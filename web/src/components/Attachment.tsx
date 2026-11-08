@@ -1,6 +1,7 @@
 import { Download } from 'lucide-react';
 import { Message } from '../lib/api';
 import { attachmentName, fileIcon, fileKind, formatSize, mediaKind } from '../lib/files';
+import { imageMenuProps, imageTarget } from '../lib/imageMenu';
 import { useStore } from '../lib/store';
 import { Icon } from './Icon';
 
@@ -49,7 +50,13 @@ export function Attachment({ msg, onImage, onMediaLoad }: Props) {
   if (image)
     return (
       <>
-        <button className="plain attachment" onClick={() => onImage(msg.attachment)} aria-label="Открыть изображение">
+        <button
+          className="plain attachment"
+          onClick={() => onImage(msg.attachment)}
+          aria-label="Открыть изображение"
+          // Меню картинки — только у отправленной: у неотправленной адрес локальный (blob:)
+          {...(msg.local ? {} : imageMenuProps(() => imageTarget(msg, () => onImage(msg.attachment))))}
+        >
           <img src={msg.attachment} alt={name} onLoad={onMediaLoad} />
         </button>
         {progress}

@@ -483,6 +483,60 @@ void initialize() {
          "UNIQUE(kind, target_id, invitee_id))");
     exec("CREATE INDEX IF NOT EXISTS idx_invites_invitee ON invites(invitee_id)");
 
+    // Боты (utils/Bots.cc, docs/API.md §21): пользователь с is_bot = 1 и строка bots с хэшем токена.
+    // Пароля у бота нет (password_hash = '!'), сессий тоже — только Bot API по токену.
+    exec("ALTER TABLE users ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0");
+    exec("CREATE TABLE IF NOT EXISTS bots ("
+         "user_id INTEGER PRIMARY KEY,"
+         "owner_id INTEGER NOT NULL,"
+         "token_hash TEXT NOT NULL UNIQUE,"
+         "token_hint TEXT NOT NULL,"
+         "description TEXT NOT NULL DEFAULT '',"
+         "commands TEXT NOT NULL DEFAULT '[]',"
+         "read_all INTEGER NOT NULL DEFAULT 0,"
+         "webhook_url TEXT DEFAULT NULL,"
+         "webhook_secret TEXT DEFAULT NULL,"
+         "webhook_error TEXT DEFAULT NULL,"
+         "webhook_error_at TEXT DEFAULT NULL,"
+         "allowed_updates TEXT DEFAULT NULL,"
+         "created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
+    // allowed_updates — JSON-список типов обновлений (NULL — все); для баз, где bots уже создана
+    exec("ALTER TABLE bots ADD COLUMN allowed_updates TEXT DEFAULT NULL");
+    exec("CREATE INDEX IF NOT EXISTS idx_bots_owner ON bots(owner_id)");
+    // Очередь обновлений для getUpdates: не старше суток и не больше 1000 на бота
+    exec("CREATE TABLE IF NOT EXISTS bot_updates ("
+         "update_id INTEGER PRIMARY KEY AUTOINCREMENT,"
+         "bot_id INTEGER NOT NULL,"
+         "payload TEXT NOT NULL,"
+         "created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
+    exec("CREATE INDEX IF NOT EXISTS idx_bot_updates_bot ON bot_updates(bot_id, update_id)");
+    // Нажатия inline-кнопок: ждут answerCallbackQuery 15 минут
+    exec("CREATE TABLE IF NOT EXISTS bot_callbacks ("
+         "id TEXT PRIMARY KEY,"
+         "bot_id INTEGER NOT NULL,"
+         "user_id INTEGER NOT NULL,"
+         "channel_id INTEGER NOT NULL,"
+         "message_id INTEGER NOT NULL,"
+         "data TEXT NOT NULL DEFAULT '',"
+         "created_at TEXT DEFAULT CURRENT_TIMESTAMP,"
+         "answered INTEGER NOT NULL DEFAULT 0)");
+    exec("CREATE INDEX IF NOT EXISTS idx_bot_callbacks_bot ON bot_callbacks(bot_id)");
+    // Кнопки под сообщением (JSON {"inline_keyboard": [[...]]}) и сообщения входящих вебхуков:
+    // webhook_name — имя, под которым показано сообщение (остаётся, даже если вебхук удалят)
+    exec("ALTER TABLE messages ADD COLUMN reply_markup TEXT DEFAULT NULL");
+    exec("ALTER TABLE messages ADD COLUMN webhook_id INTEGER DEFAULT NULL");
+    exec("ALTER TABLE messages ADD COLUMN webhook_name TEXT DEFAULT NULL");
+    // Входящие вебхуки каналов (controllers/WebhookController.cc, docs/API.md §22)
+    exec("CREATE TABLE IF NOT EXISTS webhooks ("
+         "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+         "server_id INTEGER NOT NULL,"
+         "channel_id INTEGER NOT NULL,"
+         "name TEXT NOT NULL,"
+         "token_hash TEXT NOT NULL UNIQUE,"
+         "created_by INTEGER NOT NULL,"
+         "created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
+    exec("CREATE INDEX IF NOT EXISTS idx_webhooks_server ON webhooks(server_id)");
+
     initFts();
 
     exec("CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id)");

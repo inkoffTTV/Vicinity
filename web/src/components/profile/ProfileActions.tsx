@@ -57,7 +57,8 @@ export function ProfileActions({ p, link, onChanged, onClose, onEdit }: { p: Pro
   };
 
   const friendBtn = () => {
-    if (self || p.blocked) return null;
+    // Бота в друзья не добавить (сервер отклонит), а с заявкой ничего не сделать
+    if (self || p.blocked || p.is_bot) return null;
     if (status === 'none' || status === 'declined')
       return (
         <button type="button" className="icon-btn pa-square" aria-label="Добавить в друзья" title="Добавить в друзья" disabled={!!busy} onClick={() => act('friend', () => api.friendRequest(p.id, via), 'Заявка отправлена')}>
@@ -121,7 +122,7 @@ export function ProfileActions({ p, link, onChanged, onClose, onEdit }: { p: Pro
               <Icon icon={Link2} size={16} /> Поделиться профилем
             </button>
           )}
-          {!self && status === 'friends' && !p.blocked && (
+          {!self && status === 'friends' && !p.blocked && !p.is_bot && (
             <button
               role="menuitem"
               disabled={!callIdle}

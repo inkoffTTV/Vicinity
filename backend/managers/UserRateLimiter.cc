@@ -25,6 +25,10 @@ Limit limitFor(UserRateLimiter::Action a) {
         case A::VoiceBytes:    return {64000, 64000.0 / 48000.0};
         case A::ActivityJoin:  return {30, 60};
         case A::ActivityMsg:   return {240, 4};
+        case A::BotApi:        return {30, 1};
+        case A::BotSend:       return {20, 1};
+        case A::Callback:      return {10, 5};
+        case A::Webhook:       return {30, 60};
     }
     return {10, 60};
 }

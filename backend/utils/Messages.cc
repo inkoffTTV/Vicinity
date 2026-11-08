@@ -1,5 +1,10 @@
 #include "Messages.h"
+#include "Activity.h"
+#include "Bots.h"
+#include "Broadcast.h"
 #include "JsonUtils.h"
+#include "Telegram.h"
+#include "WebPush.h"
 #include "ProfileExt.h"
 #include "TextUtils.h"
 #include <map>
@@ -11,7 +16,8 @@ namespace Messages {
 static constexpr size_t kPreviewLen = 200;
 
 const std::string kColumns =
-    "m.id, m.channel_id, m.author_id, u.display_name AS author_name, u.avatar_path AS author_avatar, "
+    "m.id, m.channel_id, m.author_id, u.display_name AS author_name, u.is_bot AS author_is_bot, "
+    "m.reply_markup, m.webhook_id, m.webhook_name, u.avatar_path AS author_avatar, "
     "u.subscription_tier AS author_tier, u.accent_color AS author_accent, "
     "json_extract(u.profile_ext, '$.name_style') AS author_style, "
     "(SELECT bs.id || '|' || bs.tag || '|' || IFNULL(bs.tag_icon, '') FROM servers bs "
@@ -19,8 +25,10 @@ const std::string kColumns =
     "WHERE bs.id = json_extract(u.profile_ext, '$.badge_server') AND bs.tag IS NOT NULL) AS author_badge, "
     "m.text, m.created_at, m.edited, m.attachment, m.attachment_name, m.attachment_size, "
     "m.attachment_type, m.reply_to, m.kind, m.meta, act.title AS author_title, act.emblem AS author_emblem, "
-    "rm.id AS reply_id, rm.author_id AS reply_author_id, ru.display_name AS reply_author_name, "
-    "rm.text AS reply_text, rm.attachment AS reply_attachment";
+    "rm.id AS reply_id, rm.author_id AS reply_author_id, "
+    "COALESCE(rm.webhook_name, ru.display_name) AS reply_author_name, "
+    "rm.text AS reply_text, rm.attachment AS reply_attachment, rm.webhook_id AS reply_webhook_id, "
+    "rm.webhook_name AS reply_webhook_name";
 
 const std::string kFrom =
     "messages m JOIN users u ON u.id = m.author_id "
@@ -29,8 +37,9 @@ const std::string kFrom =
     "LEFT JOIN users ru ON ru.id = rm.author_id";
 
 const std::string kLastColumns =
-    "lm.id AS lm_id, lm.author_id AS lm_author_id, lu.display_name AS lm_author_name, "
-    "lm.text AS lm_text, lm.attachment AS lm_attachment, lm.created_at AS lm_created_at, lm.kind AS lm_kind";
+    "lm.id AS lm_id, lm.author_id AS lm_author_id, COALESCE(lm.webhook_name, lu.display_name) AS lm_author_name, "
+    "lm.text AS lm_text, lm.attachment AS lm_attachment, lm.created_at AS lm_created_at, lm.kind AS lm_kind, "
+    "lm.webhook_id AS lm_webhook_id, lm.webhook_name AS lm_webhook_name";
 
 const std::string kLastJoin =
     "LEFT JOIN messages lm ON lm.id = (SELECT MAX(id) FROM messages WHERE channel_id = c.id) "
@@ -53,6 +62,15 @@ Json::Value badgeFromString(const std::string& s) {
 
 static Json::Int64 int64(const drogon::orm::Row& row, const char* col) {
     return row[col].isNull() ? 0 : static_cast<Json::Int64>(row[col].as<int64_t>());
+}
+
+// {id, name} вебхука, от которого сообщение, или null
+static Json::Value webhookOf(const drogon::orm::Row& row, const char* idCol, const char* nameCol) {
+    if (row[idCol].isNull()) return Json::Value(Json::nullValue);
+    Json::Value hook;
+    hook["id"]   = int64(row, idCol);
+    hook["name"] = str(row, nameCol);
+    return hook;
 }
 
 Json::Value fromRow(const drogon::orm::Row& row) {
@@ -91,6 +109,28 @@ Json::Value fromRow(const drogon::orm::Row& row) {
     if (!row["meta"].isNull() && !JsonUtils::parse(row["meta"].as<std::string>(), meta)) meta = Json::nullValue;
     msg["meta"] = meta;
     msg["reactions"] = Json::Value(Json::arrayValue);
+    // Боты и вебхуки (docs/API.md §21–22): пометка автора-бота, кнопки под сообщением, имя вебхука
+    msg["author_bot"] = !row["author_is_bot"].isNull() && row["author_is_bot"].as<int>() != 0;
+    Json::Value markup(Json::nullValue);
+    if (!row["reply_markup"].isNull() && !JsonUtils::parse(row["reply_markup"].as<std::string>(), markup)) markup = Json::nullValue;
+    msg["reply_markup"] = markup;
+    if (row["webhook_id"].isNull()) {
+        msg["webhook"] = Json::Value(Json::nullValue);
+    } else {
+        Json::Value hook;
+        hook["id"]   = int64(row, "webhook_id");
+        hook["name"] = str(row, "webhook_name");
+        msg["webhook"] = hook;
+        // Сообщение вебхука показывается под его именем, без оформления профиля создателя
+        msg["author_name"]   = hook["name"];
+        msg["author_avatar"] = "";
+        msg["author_tier"]   = 0;
+        msg["author_accent"] = "";
+        msg["author_style"]  = Json::Value(Json::nullValue);
+        msg["author_badge"]  = Json::Value(Json::nullValue);
+        msg["author_title"]  = "";
+        msg["author_emblem"] = "";
+    }
     msg["reply_to"]  = int64(row, "reply_to");
     if (row["reply_id"].isNull()) {
         msg["reply"] = Json::Value(Json::nullValue);   // ответа нет или исходное удалено
@@ -101,6 +141,8 @@ Json::Value fromRow(const drogon::orm::Row& row) {
         reply["author_name"] = str(row, "reply_author_name");
         reply["text"]        = TextUtils::utf8Truncate(str(row, "reply_text"), kPreviewLen);
         reply["attachment"]  = str(row, "reply_attachment");
+        // Цитата сообщения вебхука: имя задаёт вебхук, а не человек — клиент ставит пометку и не берёт аватар создателя
+        reply["webhook"]     = webhookOf(row, "reply_webhook_id", "reply_webhook_name");
         msg["reply"] = reply;
     }
     return msg;
@@ -116,6 +158,7 @@ Json::Value lastFromRow(const drogon::orm::Row& row) {
     last["attachment"]  = str(row, "lm_attachment");
     last["created_at"]  = str(row, "lm_created_at");
     last["kind"]        = str(row, "lm_kind");
+    last["webhook"]     = webhookOf(row, "lm_webhook_id", "lm_webhook_name");
     return last;
 }
 
@@ -171,6 +214,29 @@ Json::Value load(const drogon::orm::DbClientPtr& db, int64_t messageId) {
     if (rows.empty()) return Json::Value(Json::nullValue);
     Json::Value msg = fromRow(rows[0]);
     msg["reactions"] = reactions(db, messageId);
+    return msg;
+}
+
+Json::Value post(const drogon::orm::DbClientPtr& db, int64_t channelId, int64_t authorId, const Post& p) {
+    auto ins = db->execSqlSync(
+        "INSERT INTO messages(channel_id, author_id, text, attachment, attachment_name, attachment_size, "
+        "attachment_type, reply_to, kind, meta, reply_markup, webhook_id, webhook_name) "
+        "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        channelId, authorId, p.text, p.attachment, p.attachmentName, p.attachmentSize, p.attachmentType,
+        p.replyTo, p.kind, p.meta, p.replyMarkup, p.webhookId, p.webhookName);
+    Json::Value msg = load(db, ins[0]["id"].as<int64_t>());
+    msg["nonce"] = p.nonce;
+
+    // Рассылаем по WebSocket только тем, кто видит канал
+    Json::Value ws = msg;
+    ws["type"] = "new_message";
+    Broadcast::toChannel(channelId, ws);
+    // Тем, кого нет в сети, — на телефон и в Telegram
+    if (p.push) WebPush::notifyMessage(msg, channelId);
+    Telegram::notifyMessage(msg, channelId, p.fromTelegram);
+    if (p.activity) Activity::bump(authorId, Activity::Kind::Message);
+    // Ботам канала — по правилам доставки (utils/Bots.h); сообщения ботов другим ботам не идут
+    if (!msg["author_bot"].asBool()) Bots::onMessage(db, msg, channelId, false);
     return msg;
 }
 

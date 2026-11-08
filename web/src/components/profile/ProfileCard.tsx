@@ -23,6 +23,8 @@ export interface CardData {
   pronouns: string;
   status_text: string;
   presence: Presence;
+  /** Бот (§21): вместо присутствия — пометка «Бот» */
+  bot?: boolean;
   bio: string;
   created_at: Date;
   badges: { id: string; label: string; color: string }[];
@@ -178,7 +180,7 @@ export function ProfileCard({ d, actions, onBadge }: { d: CardData; actions?: Re
             </button>
           )}
         </div>
-        <div className="pcard-presence muted small">{PRESENCE_LABEL[d.presence] ?? ''}</div>
+        <div className="pcard-presence muted small">{d.bot ? <span className="bot-tag">Бот</span> : PRESENCE_LABEL[d.presence] ?? ''}</div>
         {d.badges.length > 0 && (
           <div className="pcard-badges">
             {d.badges.map((b) => (
