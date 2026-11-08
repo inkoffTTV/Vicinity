@@ -1,13 +1,16 @@
 #include "Bots.h"
 #include "CryptoUtils.h"
 #include "JsonUtils.h"
+#include "Messages.h"
 #include "TextUtils.h"
+#include "Uploads.h"
 #include <drogon/drogon.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cctype>
 #include <chrono>
 #include <ctime>
@@ -366,6 +369,20 @@ long postJson(const std::string& url, const std::string& secret, const std::stri
     if (code > 0) why = "Вебхук ответил кодом " + std::to_string(code);
     else why = res == CURLE_OPERATION_TIMEDOUT ? "Вебхук не ответил за 10 секунд" : "Нет соединения с адресом вебхука";
     return code;
+}
+
+// Тело файла, который бот попросил скачать по ссылке: копим до лимита, дальше обрываем
+struct FetchBody {
+    std::string* data = nullptr;
+    int64_t max = 0;
+    bool tooBig = false;
+};
+size_t collectBody(char* p, size_t size, size_t n, void* user) {
+    auto* f = static_cast<FetchBody*>(user);
+    const size_t len = size * n;
+    if (static_cast<int64_t>(f->data->size() + len) > f->max) { f->tooBig = true; return 0; }
+    f->data->append(p, len);
+    return len;
 }
 
 enum class Delivered { Done, More, Failed };
@@ -924,6 +941,96 @@ bool httpUrl(const std::string& url, size_t maxLen, bool httpsOnly = false) {
     return u.scheme == "https" || (!httpsOnly && u.scheme == "http");
 }
 
+// Расширение файла по URL вложения (имя на сервере), в нижнем регистре
+std::string urlExtension(const std::string& url) {
+    const auto slash = url.rfind('/');
+    const auto dot = url.rfind('.');
+    if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) return "";
+    return lower(url.substr(dot + 1));
+}
+
+// Вид вложения в Bot API: photo, animation, video, audio, voice или document. Бот выбрал его методом
+// (meta.media); у людей — по типу и расширению, как делают клиенты Telegram
+std::string mediaKind(const Json::Value& msg) {
+    const std::string type = msg["attachment_type"].asString();
+    if (msg["kind"].asString() == "voice") return "voice";
+    const Json::Value& meta = msg["meta"];
+    if (meta.isObject() && meta["media"].isString()) {
+        const std::string m = meta["media"].asString();
+        if (m == "photo" && type == "image") return m;
+        if (m == "document" || m == "animation") return m;
+        if ((m == "video" || m == "audio") && type == "file") return m;
+    }
+    const std::string ext = urlExtension(msg["attachment_url"].asString());
+    if (type == "image") return ext == "gif" ? "animation" : "photo";
+    // webm бывает и только звуком (запись голоса в Chrome) — без пометки бота это документ
+    static const std::set<std::string> kVideo = {"mp4", "m4v", "mov", "mkv"};
+    static const std::set<std::string> kAudio = {"mp3", "m4a", "ogg", "oga", "opus", "wav", "aac", "flac"};
+    if (kVideo.count(ext)) return "video";
+    if (kAudio.count(ext)) return "audio";
+    return "document";
+}
+
+// Поля вложения в Message: photo | document | video | audio | voice | animation (+ document, как в Telegram)
+void addMedia(Json::Value& m, const Json::Value& msg) {
+    const std::string url = msg["attachment_url"].asString();
+    const std::string id = Bots::fileId(url);
+    if (id.empty()) return;
+    const std::string kind = mediaKind(msg);
+    const Json::Value& meta = msg["meta"];
+    auto metaInt = [&meta](const char* k) -> Json::Int64 {
+        return meta.isObject() && meta[k].isNumeric() ? static_cast<Json::Int64>(std::llround(meta[k].asDouble())) : 0;
+    };
+    Json::Value f;
+    f["file_id"]        = id;
+    f["file_unique_id"] = Bots::fileUniqueId(url);
+    if (msg["attachment_size"].asInt64() > 0) f["file_size"] = msg["attachment_size"];
+    if (kind == "photo") {
+        const auto [w, h] = Uploads::imageSize(url);
+        f["width"]  = w;
+        f["height"] = h;
+        Json::Value sizes(Json::arrayValue);
+        sizes.append(f);
+        m["photo"] = sizes;
+        return;
+    }
+    std::string mime = Uploads::mimeType(url);
+    // Контейнер общий для видео и звука (webm, mp4): у голосового и аудио — audio/…
+    if ((kind == "voice" || kind == "audio") && mime.compare(0, 6, "video/") == 0) mime = "audio/" + mime.substr(6);
+    f["mime_type"] = mime;
+    if (kind == "voice") {
+        f["duration"] = metaInt("duration");
+        m["voice"] = f;
+        return;
+    }
+    std::string name = msg["attachment_name"].asString();
+    if (name.empty()) name = url.substr(url.rfind('/') + 1);
+    f["file_name"] = name;
+    if (kind == "document") {
+        m["document"] = f;
+        return;
+    }
+    if (kind == "audio") {
+        f["duration"] = metaInt("duration");
+        for (const char* k : {"performer", "title"})
+            if (meta.isObject() && meta[k].isString() && !meta[k].asString().empty()) f[k] = meta[k];
+        m["audio"] = f;
+        return;
+    }
+    const Json::Value doc = f;
+    Json::Int64 w = metaInt("width"), h = metaInt("height");
+    if ((w <= 0 || h <= 0) && msg["attachment_type"].asString() == "image") {
+        const auto size = Uploads::imageSize(url);
+        w = size.first;
+        h = size.second;
+    }
+    f["width"]    = w;
+    f["height"]   = h;
+    f["duration"] = metaInt("duration");
+    m[kind] = f;   // video | animation
+    if (kind == "animation") m["document"] = doc;
+}
+
 } // namespace
 
 namespace Bots {
@@ -1076,13 +1183,25 @@ Json::Value tgChat(const drogon::orm::DbClientPtr& db, int64_t channelId, int64_
     return c;
 }
 
+namespace {
+Json::Value buildMessage(const drogon::orm::DbClientPtr& db, const Json::Value& msg, int64_t botId, bool edited,
+                         const Json::Value* chat);
+}
+
 Json::Value tgMessage(const drogon::orm::DbClientPtr& db, const Json::Value& msg, int64_t botId, bool edited) {
+    return buildMessage(db, msg, botId, edited, nullptr);
+}
+
+namespace {
+// chat — уже построенный Chat (для reply_to_message того же чата), nullptr — построить
+Json::Value buildMessage(const drogon::orm::DbClientPtr& db, const Json::Value& msg, int64_t botId, bool edited,
+                         const Json::Value* chat) {
     Json::Value m;
     const int64_t channelId = msg["channel_id"].asInt64();
     m["message_id"] = msg["id"];
     m["from"] = msg["webhook"].isObject() ? webhookSender(msg["webhook"], msg["author_name"])
                                           : tgUser(db, msg["author_id"].asInt64());
-    m["chat"] = tgChat(db, channelId, botId);
+    m["chat"] = chat ? *chat : tgChat(db, channelId, botId);
     m["date"] = static_cast<Json::Int64>(unixTime(msg["created_at"].asString()));
     const std::string text = msg["text"].asString();
     if (!text.empty()) {
@@ -1091,7 +1210,18 @@ Json::Value tgMessage(const drogon::orm::DbClientPtr& db, const Json::Value& msg
         if (!entities.empty()) m["entities"] = entities;
     }
     if (edited || msg["edited"].asBool()) m["edit_date"] = static_cast<Json::Int64>(std::time(nullptr));
-    if (msg["reply"].isObject()) {
+    // Ответ: исходное сообщение целиком (с photo/document и caption, как в Telegram), без своего reply_to_message
+    Json::Value replied(Json::nullValue);
+    if (msg["reply"].isObject() && msg["reply"]["id"].asInt64() > 0) {
+        replied = Messages::load(db, msg["reply"]["id"].asInt64());
+        if (replied.isObject() && replied["channel_id"].asInt64() == channelId) {
+            replied["reply"] = Json::Value(Json::nullValue);
+            m["reply_to_message"] = buildMessage(db, replied, botId, false, &m["chat"]);
+        } else {
+            replied = Json::Value(Json::nullValue);
+        }
+    }
+    if (msg["reply"].isObject() && replied.isNull()) {
         Json::Value r;
         r["message_id"] = msg["reply"]["id"];
         r["from"]       = msg["reply"]["webhook"].isObject()
@@ -1103,6 +1233,21 @@ Json::Value tgMessage(const drogon::orm::DbClientPtr& db, const Json::Value& msg
         m["reply_to_message"] = r;
     }
     if (msg["reply_markup"].isObject()) m["reply_markup"] = msg["reply_markup"];
+    // Альбом sendMediaGroup: общий media_group_id у всех его сообщений
+    if (msg["meta"].isObject() && msg["meta"]["media_group_id"].isString())
+        m["media_group_id"] = msg["meta"]["media_group_id"];
+    // Вложение: photo/document/… с file_id (§21.7), текст становится подписью
+    if (!msg["attachment_url"].asString().empty()) {
+        addMedia(m, msg);
+        if (m.isMember("text")) {
+            m["caption"] = m["text"];
+            m.removeMember("text");
+            if (m.isMember("entities")) {
+                m["caption_entities"] = m["entities"];
+                m.removeMember("entities");
+            }
+        }
+    }
     // Расширение Vicinity: вложение сообщения (файл или картинка) ссылкой
     if (!msg["attachment_url"].asString().empty()) {
         Json::Value a;
@@ -1114,6 +1259,7 @@ Json::Value tgMessage(const drogon::orm::DbClientPtr& db, const Json::Value& msg
     }
     return m;
 }
+} // namespace
 
 HttpResponsePtr ok(const Json::Value& result) {
     Json::Value v;
@@ -1246,6 +1392,116 @@ std::string webhookUrlProblem(const std::string& url) {
     if (u.scheme != "https" && u.scheme != "http") return "bad webhook: An HTTPS URL must be provided for webhook";
     if (!gAllowPrivate && privateHost(u.host)) return "bad webhook: IP address is reserved or private";
     return "";
+}
+
+// ---------- Файлы ----------
+
+std::string fileId(const std::string& url) {
+    const std::string type = Uploads::attachmentType(url);
+    if (type.empty()) return "";
+    return std::string("vc") + (type == "image" ? "a" : "f") + "_" + url.substr(url.rfind('/') + 1);
+}
+
+std::string fileUniqueId(const std::string& url) {
+    const std::string id = fileId(url);
+    if (id.empty()) return "";
+    // Один и тот же файл у копий (повтор по file_id — жёсткая ссылка, Uploads::duplicate), как в Telegram
+    if (const std::string same = Uploads::fileIdentity(url); !same.empty())
+        return "vu" + CryptoUtils::sha256Hex("file:" + same).substr(0, 20);
+    // Файла уже нет: имя — 32 hex случайных, первые 20 однозначно указывают на него
+    return "vu" + id.substr(4, 20);
+}
+
+std::string urlFromFileId(const std::string& id) {
+    if (id.size() < 6 || id.size() > 64 || id.compare(0, 2, "vc") != 0 || id[3] != '_') return "";
+    const std::string dir = id[2] == 'a' ? "attachments" : id[2] == 'f' ? "files" : "";
+    if (dir.empty()) return "";
+    const std::string url = "/uploads/" + dir + "/" + id.substr(4);
+    return Uploads::isUploadUrl(url, dir) ? url : "";
+}
+
+std::string filePath(const std::string& url) {
+    if (Uploads::attachmentType(url).empty()) return "";
+    return url.substr(std::string("/uploads/").size());
+}
+
+bool canFetchUrls() {
+#ifdef VICINITY_HAVE_CURL
+    return true;
+#else
+    return false;
+#endif
+}
+
+std::string fetchUrlProblem(const std::string& url) {
+    if (url.size() > 2048 || !TextUtils::isValidUtf8(url) || TextUtils::hasControlChars(url) ||
+        url.find(' ') != std::string::npos)
+        return "wrong file identifier/HTTP URL specified";
+    ParsedUrl u;
+    if (!parseUrl(url, u) || (u.scheme != "https" && u.scheme != "http"))
+        return "wrong file identifier/HTTP URL specified";
+    if (!gAllowPrivate && privateHost(u.host)) return "wrong HTTP URL specified: the address is private or local";
+    return "";
+}
+
+bool fetchUrl(const std::string& url, int64_t maxBytes, std::string& data, std::string& contentType, std::string& why,
+              long timeoutMs) {
+#ifdef VICINITY_HAVE_CURL
+    if (const std::string p = fetchUrlProblem(url); !p.empty()) { why = p; return false; }
+    if (timeoutMs <= 0 || maxBytes <= 0) {
+        why = timeoutMs <= 0 ? "failed to get HTTP URL content" : "file is too big";
+        return false;
+    }
+    CURL* curl = curl_easy_init();
+    if (!curl) { why = "failed to get HTTP URL content"; return false; }
+    data.clear();
+    FetchBody body{&data, maxBytes};
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, collectBody);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    curl_easy_setopt(curl, CURLOPT_MAXFILESIZE_LARGE, static_cast<curl_off_t>(maxBytes));
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, std::min(timeoutMs, kFetchTimeoutMs));
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, kWebhookConnect);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    // Перенаправления — да, но каждое новое соединение проходит openPublicSocket: частный адрес
+    // не откроется ни напрямую, ни через перенаправление, ни через DNS
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
+    curl_easy_setopt(curl, CURLOPT_PROXY, "");
+    curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, openPublicSocket);
+#if LIBCURL_VERSION_NUM >= 0x075500
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+#else
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, static_cast<long>(CURLPROTO_HTTP | CURLPROTO_HTTPS));
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, static_cast<long>(CURLPROTO_HTTP | CURLPROTO_HTTPS));
+#endif
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Vicinity-Bot-API/1.0");
+    const CURLcode res = curl_easy_perform(curl);
+    long code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+    char* ct = nullptr;
+    curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ct);
+    contentType = ct ? ct : "";
+    curl_easy_cleanup(curl);
+    if (body.tooBig || res == CURLE_FILESIZE_EXCEEDED) {
+        why = "file is too big";
+        data.clear();
+        return false;
+    }
+    if (res != CURLE_OK || code < 200 || code >= 300) {
+        why = "failed to get HTTP URL content";
+        data.clear();
+        return false;
+    }
+    if (data.empty()) { why = "file must be non-empty"; return false; }
+    return true;
+#else
+    (void)url; (void)maxBytes; (void)data; (void)contentType; (void)timeoutMs;
+    why = "sending files by URL is not supported on this server";
+    return false;
+#endif
 }
 
 void onMessage(const drogon::orm::DbClientPtr& db, const Json::Value& msg, int64_t channelId, bool edited) {

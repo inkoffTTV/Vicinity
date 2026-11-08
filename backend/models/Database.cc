@@ -540,6 +540,9 @@ void initialize() {
     initFts();
 
     exec("CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id)");
+    // Bot API ищет сообщения по вложению (getFile, скачивание, повтор по file_id — §21.7). Индекс без WHERE:
+    // частичный SQLite не берёт для «attachment = ?»
+    exec("CREATE INDEX IF NOT EXISTS idx_messages_attachment_url ON messages(attachment)");
     exec("CREATE INDEX IF NOT EXISTS idx_channel_members_user ON channel_members(user_id)");
     exec("CREATE INDEX IF NOT EXISTS idx_server_members_user ON server_members(user_id)");
     exec("CREATE INDEX IF NOT EXISTS idx_channels_server ON channels(server_id)");

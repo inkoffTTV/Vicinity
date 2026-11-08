@@ -1,9 +1,28 @@
 #include "Cascade.h"
+#include "../utils/Uploads.h"
 #include <drogon/orm/DbClient.h>
+#include <string>
+#include <vector>
 
 namespace Cascade {
 
-static void channelRows(const std::shared_ptr<drogon::orm::Transaction>& tr, int64_t channelId) {
+using Files = std::vector<std::string>;
+
+// Вложения удаляемых сообщений: файлы удаляются после транзакции, иначе остались бы доступны по ссылке
+static void collect(const std::shared_ptr<drogon::orm::Transaction>& tr, const char* where, int64_t id, Files& files) {
+    auto rows = tr->execSqlSync(std::string("SELECT attachment FROM messages WHERE ") + where +
+                                " AND attachment IS NOT NULL AND attachment != ''", id);
+    for (const auto& r : rows) files.push_back(r["attachment"].as<std::string>());
+}
+
+// Транзакция уже завершена (единственное соединение SQLite свободно): удалить файлы
+static void removeFiles(std::shared_ptr<drogon::orm::Transaction>& tr, const Files& files) {
+    tr.reset();   // commit
+    for (const auto& url : files) Uploads::removeByUrl(url);
+}
+
+static void channelRows(const std::shared_ptr<drogon::orm::Transaction>& tr, int64_t channelId, Files& files) {
+    collect(tr, "channel_id = ?", channelId, files);
     tr->execSqlSync("DELETE FROM reactions WHERE message_id IN (SELECT id FROM messages WHERE channel_id = ?)",
                     channelId);
     tr->execSqlSync("DELETE FROM pins WHERE channel_id = ?", channelId);
@@ -19,19 +38,22 @@ static void channelRows(const std::shared_ptr<drogon::orm::Transaction>& tr, int
 
 void deleteChannel(const drogon::orm::DbClientPtr& db, int64_t channelId) {
     auto tr = db->newTransaction();
+    Files files;
     try {
-        channelRows(tr, channelId);
+        channelRows(tr, channelId, files);
     } catch (...) {
         tr->rollback();
         throw;
     }
+    removeFiles(tr, files);
 }
 
 void deleteServer(const drogon::orm::DbClientPtr& db, int64_t serverId) {
     auto tr = db->newTransaction();
+    Files files;
     try {
         auto channels = tr->execSqlSync("SELECT id FROM channels WHERE server_id = ?", serverId);
-        for (const auto& row : channels) channelRows(tr, row["id"].as<int64_t>());
+        for (const auto& row : channels) channelRows(tr, row["id"].as<int64_t>(), files);
         tr->execSqlSync("DELETE FROM server_bans WHERE server_id = ?", serverId);
         tr->execSqlSync("DELETE FROM server_members WHERE server_id = ?", serverId);
         tr->execSqlSync("DELETE FROM invites WHERE kind = 'server' AND target_id = ?", serverId);
@@ -41,9 +63,11 @@ void deleteServer(const drogon::orm::DbClientPtr& db, int64_t serverId) {
         tr->rollback();
         throw;
     }
+    removeFiles(tr, files);
 }
 
-static void userRows(const std::shared_ptr<drogon::orm::Transaction>& tr, int64_t userId) {
+static void userRows(const std::shared_ptr<drogon::orm::Transaction>& tr, int64_t userId, Files& files) {
+    collect(tr, "author_id = ?", userId, files);
     const char* own = "SELECT id FROM messages WHERE author_id = ?";
     tr->execSqlSync(std::string("DELETE FROM reactions WHERE user_id = ? OR message_id IN (") + own + ")",
                     userId, userId);
@@ -75,15 +99,17 @@ static void userRows(const std::shared_ptr<drogon::orm::Transaction>& tr, int64_
 
 void deleteUser(const drogon::orm::DbClientPtr& db, int64_t userId) {
     auto tr = db->newTransaction();
+    Files files;
     try {
         // Боты удаляемого человека уходят вместе с ним
         auto bots = tr->execSqlSync("SELECT user_id FROM bots WHERE owner_id = ?", userId);
-        for (const auto& row : bots) userRows(tr, row["user_id"].as<int64_t>());
-        userRows(tr, userId);
+        for (const auto& row : bots) userRows(tr, row["user_id"].as<int64_t>(), files);
+        userRows(tr, userId, files);
     } catch (...) {
         tr->rollback();
         throw;
     }
+    removeFiles(tr, files);
 }
 
 } // namespace Cascade

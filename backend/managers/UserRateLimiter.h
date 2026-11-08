@@ -34,6 +34,7 @@ public:
         BotSend,        // сообщения бота (send/edit/ephemeral) — 20 в секунду на бота
         Callback,       // нажатия inline-кнопок — 10 за 5 с на человека
         Webhook,        // входящие вебхуки — 30 в минуту на вебхук
+        BotBytes,       // байты новых файлов ботов (docs/API.md §21.7) — 1 ГБ в час на владельца; cost — размер файла
     };
 
     static UserRateLimiter& instance();

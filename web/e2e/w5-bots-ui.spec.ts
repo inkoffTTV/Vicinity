@@ -1,6 +1,6 @@
 import { APIRequestContext, expect, Page, test } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
-import { createServer, joinServer, pageErrors, registerUser, uniqueName } from './helpers';
+import { createServer, joinServer, pageErrors, pngBuffer, registerUser, uniqueName } from './helpers';
 import { apiUser, ApiUser, call, composer, openChannelId } from './w1-helpers';
 import { confirmDialog, openServerId, openServerSettings, settingsTab } from './w2-helpers';
 import { openNav } from './ui-helpers';
@@ -385,4 +385,52 @@ test('bots UI: settings, buttons, callbacks, ephemeral, commands, server bots an
   expect((await call(request, alice, 'GET', `/servers/${serverId}/bots`)).body.bots).toEqual([]);
 
   expect(errors).toEqual([]);
+});
+
+test('bots UI: photo from a bot is an inline image with lightbox, document is a file card', async ({ browser, request }) => {
+  test.setTimeout(90_000);
+  const a = await registerUser(browser, 'Зритель');
+  const errors = pageErrors(a.page);
+  const viewer: ApiUser = await apiUser(request, a);
+  const username = `${uniqueName('ph')}_bot`;
+  const created = await call(request, viewer, 'POST', '/bots', { username, display_name: 'Фотобот' });
+  expect(created.status).toBe(201);
+  const token: string = created.body.token;
+
+  // Личка с ботом — кнопкой «Написать» в Настройки → Боты
+  await a.page.getByRole('button', { name: 'Настройки', exact: true }).click();
+  await settingsTab(a, 'Боты').click();
+  await a.page.locator('.settings-page .bot-item', { hasText: `@${username}` }).getByRole('button', { name: 'Написать' }).click();
+  await expect(a.page.locator('.chat-title', { hasText: 'Фотобот' })).toBeVisible();
+  const dmId = await openChannelId(a);
+
+  // sendPhoto multipart, как aiogram (attach://)
+  const r = await request.post(`/api/v1/bot${token}/sendPhoto`, {
+    multipart: {
+      chat_id: String(dmId),
+      photo: 'attach://pic',
+      caption: 'Закат над рекой',
+      pic: { name: 'sunset.png', mimeType: 'image/png', buffer: pngBuffer(160, 90) },
+    },
+  });
+  expect((await r.json()).ok).toBe(true);
+  const msg = a.page.locator('.msg', { hasText: 'Закат над рекой' });
+  await expect(msg.locator('.msg-meta .bot-tag')).toHaveText('Бот');
+  const img = msg.locator('button.attachment img');
+  await expect(img).toBeVisible();
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBe(160);
+  await msg.locator('button.attachment').click();
+  const lightbox = a.page.locator('img.lightbox');
+  await expect(lightbox).toBeVisible();
+  await a.page.keyboard.press('Escape');
+  await expect(lightbox).toHaveCount(0);
+
+  // sendDocument — карточка файла с именем
+  const d = await request.post(`/api/v1/bot${token}/sendDocument`, {
+    multipart: { chat_id: String(dmId), document: { name: 'прогноз.txt', mimeType: 'text/plain', buffer: Buffer.from('ясно, +20') } },
+  });
+  expect((await d.json()).ok).toBe(true);
+  await expect(a.page.locator('.attachment-file', { hasText: 'прогноз.txt' })).toBeVisible();
+  expect(errors).toEqual([]);
+  await a.context.close();
 });

@@ -29,6 +29,7 @@ Limit limitFor(UserRateLimiter::Action a) {
         case A::BotSend:       return {20, 1};
         case A::Callback:      return {10, 5};
         case A::Webhook:       return {30, 60};
+        case A::BotBytes:      return {1024.0 * 1024 * 1024, 3600};
     }
     return {10, 60};
 }

@@ -604,7 +604,7 @@ commands: [{command, description}], servers: [{id, name}], owner_id, created_at}
 ### 21.2 Адрес и формат
 
 `https://<сервер>/api/v1/bot<токен>/<метод>` — GET или POST; параметры в query, `application/x-www-form-urlencoded`,
-`multipart/form-data` (текстовые поля) или JSON. Поля-объекты (`reply_markup`, `reply_parameters`, `commands`,
+`multipart/form-data` (текстовые поля и файлы, §21.7) или JSON. Поля-объекты (`reply_markup`, `reply_parameters`, `commands`,
 `allowed_updates`) можно передать JSON-строкой. Имя метода без учёта регистра. Ответ —
 `{"ok":true,"result":…}` или `{"ok":false,"error_code":N,"description":"…"}` (описания ошибок — как в Telegram,
 по-английски: `Bad Request: chat not found`, `Bad Request: message is not modified`, …). Неверный токен — 401
@@ -635,7 +635,18 @@ python-telegram-bot: `Application.builder().token(TOKEN).base_url("https://<се
 - **Message** `{message_id, from, chat, date (unix), text?, entities?, reply_to_message?, reply_markup?, edit_date?, attachment?}`;
   `entities` — `bot_command` в начале текста, `mention` для каждого `@имя` и `url` для голых http/https-адресов
   (`offset`/`length` в единицах UTF-16, как в Telegram); `attachment` (расширение) — `{url, name, size, type}` вложения.
-  Текст — разметка Vicinity (§23).
+  Текст — разметка Vicinity (§23). **[new]** У сообщения с вложением вместо `text`/`entities` — `caption`/`caption_entities`
+  и одно из полей файла (§21.7): `photo: [PhotoSize]`, `document`, `video`, `audio`, `voice` или `animation` (+ `document`).
+  `reply_to_message` — исходное сообщение целиком (с файлом и `caption`), но без своего `reply_to_message`.
+  У сообщений одного `sendMediaGroup` — общий `media_group_id` (строка из цифр).
+- **PhotoSize** `{file_id, file_unique_id, width, height, file_size}` — один размер, оригинал; ширина и высота
+  читаются из заголовка файла (PNG, JPEG, GIF, WEBP; у JPEG с EXIF Orientation 5–8 — как показывается, повёрнутыми),
+  не удалось — 0.
+- **Document** `{file_id, file_unique_id, file_name, mime_type, file_size}`; **Video** и **Animation** — то же +
+  `width, height, duration`; **Audio** — + `duration, performer?, title?`; **Voice** `{file_id, file_unique_id, duration,
+  mime_type, file_size}`. `width`/`height`/`duration` — те, что бот передал при отправке, иначе 0 (у GIF — из файла).
+  `mime_type` — по расширению; у `voice` и `audio` в контейнере webm/mp4 — `audio/webm`, `audio/mp4`.
+- **File** `{file_id, file_unique_id, file_size, file_path}`.
 - **CallbackQuery** `{id, from, message, chat_instance, data}`; у эфемерного сообщения `message.message_id` = 0
   и `message.ephemeral_id`.
 - **Update** `{update_id, message? | edited_message? | callback_query?}`.
@@ -652,6 +663,11 @@ python-telegram-bot: `Application.builder().token(TOKEN).base_url("https://<се
 | `sendMessage` | `chat_id`, `text`, `parse_mode?`, `reply_markup?`, `reply_to_message_id?` \| `reply_parameters.message_id?`, `allow_sending_without_reply?`, `disable_notification?` (игнорируется) | Message; WS `new_message` всем в чате |
 | `editMessageText` | `chat_id`, `message_id`, `text`, `parse_mode?`, `reply_markup?` | Message; без `reply_markup` кнопки убираются (как в Telegram); ничего не изменилось — 400 `message is not modified` |
 | `editMessageReplyMarkup` | `chat_id`, `message_id`, `reply_markup?` | Message; WS `message_edited` с `reply_markup` |
+| `sendPhoto` / `sendDocument` / `sendVideo` / `sendAudio` / `sendAnimation` / `sendVoice` **[new]** | `chat_id`, файл в поле `photo` / `document` / `video` / `audio` / `animation` / `voice` (§21.7), `caption?`, `parse_mode?`, `reply_markup?`, `reply_to_message_id?` \| `reply_parameters?`, `duration?`, `width?`, `height?`, `performer?`, `title?`, `disable_notification?` (игнорируется) | Message с файлом; подпись становится текстом сообщения (0–4096 символов после `parse_mode`) |
+| `sendMediaGroup` **[new]** | `chat_id`, `media: [InputMediaPhoto \| InputMediaVideo \| InputMediaDocument \| InputMediaAudio]` (2–10; документы и аудио — только с такими же), `reply_to_message_id?` \| `reply_parameters?` | [Message] — сообщения подряд, подпись только у элементов с `caption`; `reply_markup` — 400 (как в Telegram) |
+| `editMessageCaption` **[new]** | `chat_id`, `message_id`, `caption?`, `parse_mode?`, `reply_markup?` | Message; пустая подпись убирает её; у сообщения без файла — 400 `there is no caption in the message to edit`, а `editMessageText` у сообщения с файлом — 400 `there is no text in the message to edit`. WS `message_edited` |
+| `editMessageMedia` | — | 400 (не поддерживается: удалите сообщение и отправьте новое) |
+| `getFile` **[new]** | `file_id` | File; скачивание — §21.7 |
 | `deleteMessage` | `chat_id`, `message_id` | `true`; только свои сообщения бота; WS `message_deleted` |
 | `answerCallbackQuery` | `callback_query_id`, `text?` (≤200), `show_alert?`, `url?` (http/https) | `true`; повторный ответ или старше 15 минут — 400 `query is too old or already answered`; бота убрали из чата — 403 `bot is not a member of the chat` |
 | `setMyCommands` / `getMyCommands` / `deleteMyCommands` | `commands: [{command (1–32, a-z0-9_), description (1–256)}]` (≤100; `scope`, `language_code` игнорируются) | `true` / [BotCommand] / `true` |
@@ -711,8 +727,58 @@ localhost, …) — только при `VICINITY_BOTS_ALLOW_PRIVATE_WEBHOOKS=1`
 
 ### 21.6 Лимиты
 
-Bot API — 30 запросов в секунду на бота; отправка и правка сообщений (`sendMessage`, `edit*`, `sendEphemeralMessage`)
-— 20 в секунду; `sendChatAction` — раз в 2 с (лишние вызовы молча принимаются). Превышение — 429 `retry_after: 1`.
+Bot API — 30 запросов в секунду на бота; отправка и правка сообщений (`sendMessage`, `send<файл>`, `edit*`,
+`sendEphemeralMessage`; `sendMediaGroup` — по одному на элемент) — 20 в секунду; `sendChatAction` — раз в 2 с (лишние
+вызовы молча принимаются). Превышение — 429 `retry_after: 1`. Запросы со скачиванием по ссылкам (§21.7) — не больше 8
+одновременно на сервер и 2 на бота, сверх — 429. Новые файлы (multipart и ссылки, не `file_id`) — 20 в минуту на бота,
+как загрузки людей; байты новых файлов всех ботов одного владельца — 1 ГБ в час, сверх — 429 `retry_after: 60`.
+Размер файла — по подписке владельца бота, как у его собственных вложений (`Tiers`: 15 / 25 / 50 МБ, Ultra — тоже 50):
+часть multipart — до этого лимита, все скачивания одного запроса вместе — до 20 МБ и не больше его же.
+
+### 21.7 Картинки и файлы **[new]**
+
+Файл в `sendPhoto` и др. (и `media` в элементах `sendMediaGroup`) передаётся одним из трёх способов:
+1. **multipart/form-data**: частью с именем поля (`curl -F photo=@кадр.png`) или строкой `attach://<имя>` со ссылкой на
+   часть `<имя>` — так шлёт aiogram (`FSInputFile`, `BufferedInputFile`). Размер — по подписке владельца бота (§21.6),
+   больше — 400 `file is too big`. Одна и та же часть в нескольких элементах альбома сохраняется один раз.
+2. **file_id**, который вернул этот сервер (в `photo`, `document`, … или `getFile`). Новое сообщение получает свою копию
+   под новым именем (жёсткая ссылка: место на диске не тратится), поэтому удаление любого сообщения — автором,
+   владельцем сервера или вместе с ботом, каналом, аккаунтом — отзывает его ссылку `/uploads/…`, а копии живут до удаления
+   своих сообщений. `file_unique_id` у копий общий; `file_id` у копии свой. Файл исходного сообщения удалили, пока шла
+   отправка, — 400 `wrong file identifier/HTTP URL specified`.
+3. **http(s)-ссылка**: сервер скачивает файл сам (libcurl, до 3 перенаправлений, 20 с на файл и 40 с на все ссылки
+   запроса — дольше 400 `failed to get HTTP URL content`, и ни одно сообщение не отправляется; размер — §21.6).
+   Одна и та же ссылка в альбоме скачивается один раз. Частные и локальные
+   адреса (127.0.0.1, 10.x, 169.254.x, localhost, …) — как у вебхуков (§21.5) только с `allow_private_webhooks`; проверяется
+   адрес каждого соединения, так что перенаправление или DNS-имя на частный адрес не помогают. Имя файла — из пути
+   ссылки, без расширения — по `Content-Type`. Ошибка скачивания — 400 `failed to get HTTP URL content`, больше лимита —
+   400 `file is too big`. Сервер без libcurl — 400.
+
+Файл сохраняется так же, как вложение человека (§2): картинка (по сигнатуре: PNG, JPEG, GIF, WEBP) — в
+`/uploads/attachments/`, прочее — в `/uploads/files/`, запрещённые типы (html, svg, js, exe, …) — 400 `file type is not
+allowed`. Сообщение выглядит в клиентах как обычное вложение: картинка в ленте с лайтбоксом и меню, видео и звук с
+проигрывателем, файл карточкой; `sendVoice` — голосовое сообщение (`kind: "voice"`, `meta.duration` из `duration`).
+`sendPhoto` с не-картинкой — 400 `IMAGE_PROCESS_FAILED`; `sendVideo`/`sendAudio` с картинкой — 400; `sendVoice` —
+только аудиофайл (ogg, opus, mp3, m4a, … — по имени или по содержимому). Имя без расширения (aiogram `URLInputFile`
+шлёт случайное) получает расширение по содержимому: ogg, mp3, aac, m4a, mp4, mov, webm, mkv, wav, flac, pdf (так же
+и у вложений людей — в URL, имя человека не меняется). Вид, которым бот отправил файл, хранится в `meta.media` и возвращается тем
+же полем Message. У файлов людей: картинка — `photo` (GIF — `animation` + `document`), mp4/mov/mkv — `video`
+(webm — `document`: это бывает и запись звука),
+mp3/m4a/ogg/wav/flac — `audio`, голосовое — `voice`, остальное — `document`. Подпись человека — `caption`.
+
+**file_id** — `vca_<имя файла>` (картинка) или `vcf_<имя файла>` (файл); имя — 128 случайных бит, так что подобрать его
+нельзя, а без прав он ничего не даёт: бот может использовать (`getFile`, повторная отправка, скачивание) только файл,
+который он сам отправил, или вложение сообщения в чате, где он участник; иначе 400 `invalid file_id` /
+`wrong file identifier/HTTP URL specified`. `file_unique_id` — `vu` + 20 hex, общий для всех ботов и для копий одного
+файла. Удаление бота, канала, сервера или аккаунта удаляет и файлы их сообщений.
+
+**Скачивание:** `GET /api/v1/file/bot<токен>/<file_path>` (`file_path` из `getFile`: `attachments/<имя>` или
+`files/<имя>`) — ровно то, что строит aiogram из `TelegramAPIServer.from_base(".../api/v1")`, так что
+`bot.download_file(file.file_path, …)` и `bot.download(file_id)` работают без изменений. Ответ — байты файла:
+картинка со своим `Content-Type`, остальное — `application/octet-stream`, `Content-Disposition: attachment` с исходным
+именем, `nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`, `Cache-Control: private, no-store`.
+Неверный токен — 401, нет файла или нет права — 404, `..` и прочие пути вне каталога вложений не проходят маршрут.
+nginx не пишет эти адреса в логи (токен в пути).
 
 ## 22. Входящие вебхуки каналов **[new]**
 

@@ -68,6 +68,36 @@ bool markupHasCallback(const Json::Value& markup, const std::string& data);
 // Адрес вебхука бота: https (http и частные адреса — только с allow_private_webhooks). Пусто — подходит
 std::string webhookUrlProblem(const std::string& url);
 
+// ---------- Файлы (docs/API.md §21.7) ----------
+
+// Потолки; ниже них — лимит вложений по подписке владельца бота (Tiers::uploadLimitBytes)
+constexpr int64_t kFileMaxBytes = 50LL * 1024 * 1024;   // файл, загруженный ботом (multipart)
+constexpr int64_t kUrlMaxBytes  = 20LL * 1024 * 1024;   // все файлы одного запроса, которые сервер скачивает по ссылкам
+constexpr long kFetchTimeoutMs  = 20000;                // одно скачивание
+constexpr long kPlanTimeoutMs   = 40000;                // все скачивания одного запроса (aiogram ждёт 60 с, nginx — 75 с)
+constexpr int  kMaxFetches      = 8;                    // запросов со скачиванием одновременно на сервер
+constexpr int  kMaxFetchesPerBot = 2;                   // … и на одного бота
+
+// file_id вложения: «vc» + a|f (картинка или файл) + «_» + случайное имя файла на сервере. Без прав бота
+// (сообщение с этим файлом в его чате или его собственное) ничего не даёт. "" — URL не вложение
+std::string fileId(const std::string& url);
+// file_unique_id: один и тот же для всех ботов
+std::string fileUniqueId(const std::string& url);
+// URL вложения (/uploads/...) по file_id; "" — это не наш file_id
+std::string urlFromFileId(const std::string& id);
+// file_path для getFile и /file/bot<токен>/<file_path>: «attachments/<имя>» или «files/<имя>»
+std::string filePath(const std::string& url);
+
+// Сервер умеет скачивать файлы по ссылке (собран с libcurl)
+bool canFetchUrls();
+// Ссылка для sendPhoto/…: http(s), без логина в адресе; частные и локальные адреса — только с
+// allow_private_webhooks (как у вебхуков). Пусто — подходит
+std::string fetchUrlProblem(const std::string& url);
+// Скачать по ссылке не больше maxBytes (не дольше timeoutMs, до 3 перенаправлений; адрес каждого соединения
+// проверяется по правилам выше). false — причина в why (текст ошибки Bot API без «Bad Request: »)
+bool fetchUrl(const std::string& url, int64_t maxBytes, std::string& data, std::string& contentType, std::string& why,
+              long timeoutMs = kFetchTimeoutMs);
+
 // ---------- Доставка обновлений ----------
 
 // Новое (или изменённое) сообщение в канале → обновления ботам-участникам по правилам §21.

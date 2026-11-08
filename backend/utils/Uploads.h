@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 
 // Загрузка файлов (вложения, аватары, баннеры, иконки серверов).
 // Файлы лежат в upload_path (каталог, который раздаётся как /uploads/), имя — случайное
@@ -31,8 +32,24 @@ Saved saveImage(const drogon::HttpFile& file, const std::string& subDir);
 // отправителя (utils/Tiers.h); 0 — общий лимит MAX_UPLOAD_SIZE
 Attachment saveAttachment(const drogon::HttpFile& file, int64_t maxBytes = 0);
 
+// То же для байтов в памяти (бот прислал ссылку, сервер скачал файл сам — docs/API.md §21.7).
+// rawName — имя от источника; для картинки расширение имени заменяется на настоящее
+Attachment saveAttachmentData(std::string_view content, const std::string& rawName, int64_t maxBytes);
+
 // Удаляет ранее загруженный файл по его URL (/uploads/...). Чужие пути игнорируются.
+// У каждого сообщения свой URL вложения (повтор по file_id — duplicate), так что удаление
+// сообщения отзывает его ссылку
 void removeByUrl(const std::string& url);
+
+// Копия вложения под новым случайным именем в том же каталоге (жёсткая ссылка, иначе копия файла),
+// с тем же именем для скачивания; "" — исходного файла нет или не удалось
+std::string duplicate(const std::string& url);
+
+// Расширение по содержимому файла-вложения (картинка, звук, видео, PDF); "" — не узнали
+std::string contentExtension(const std::string& url);
+
+// Идентичность файла на диске (устройство, inode, размер, mtime): одинакова у копий из duplicate; "" — нет файла
+std::string fileIdentity(const std::string& url);
 
 // URL указывает на файл в /uploads/<subDir>/ (без подкаталогов и «..»)
 bool isUploadUrl(const std::string& url, const std::string& subDir);
@@ -44,6 +61,18 @@ bool isAudioName(const std::string& name);
 
 // Размер вложения по его URL; 0 — это не вложение или файла нет
 int64_t fileSize(const std::string& url);
+
+// Путь к файлу вложения на диске; "" — URL не вложение
+std::string localPath(const std::string& url);
+
+// Ширина и высота картинки-вложения по заголовку файла (PNG, GIF, JPEG, WEBP); {0, 0} — не удалось
+std::pair<int, int> imageSize(const std::string& url);
+
+// MIME-тип по расширению имени файла; неизвестное — application/octet-stream
+std::string mimeType(const std::string& name);
+
+// Расширение по MIME-типу (Content-Type ответа при скачивании по ссылке); "" — неизвестный
+std::string extensionForMime(const std::string& mime);
 
 // Исходное имя загруженного файла-вложения (/uploads/files/...) — для Content-Disposition при скачивании.
 // rememberName запоминает его при загрузке, downloadName возвращает ("" — неизвестно).

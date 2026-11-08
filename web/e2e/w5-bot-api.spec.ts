@@ -1,9 +1,11 @@
 import { APIRequestContext, expect, test } from '@playwright/test';
+import { spawn } from 'node:child_process';
 import { createServer as createHttpServer, IncomingMessage, Server } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { uniqueName } from './helpers';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { pngBuffer, uniqueName } from './helpers';
 import { ApiUser, apiRegister, call, post } from './w1-helpers';
 
 // Боты, Bot API в стиле Telegram и вебхуки каналов (docs/API.md §21–22) — только через API, без браузера.
@@ -11,6 +13,9 @@ import { ApiUser, apiRegister, call, post } from './w1-helpers';
 const port = Number(process.env.VICINITY_E2E_PORT ?? 18080);
 const WS_URL = `ws://localhost:${port}/ws`;
 const HOOK_PORT = port + 10;
+// Мок «интернета» для sendPhoto по ссылке и второй сервер без allow_private_webhooks (§21.7)
+const FILES_PORT = port + 11;
+const STRICT_PORT = port + 12;
 
 type Mode = 'json' | 'form' | 'get';
 
@@ -786,3 +791,461 @@ test.describe.serial('боты: доставка, совместимость и 
   });
 });
 
+
+/** Мок раздачи файлов для sendPhoto/sendDocument по ссылке */
+function filesServer(png: Buffer) {
+  const server: Server = createHttpServer((req, res) => {
+    if (req.url === '/img.png') {
+      res.writeHead(200, { 'Content-Type': 'image/png' });
+      res.end(png);
+    } else if (req.url === '/moved') {
+      res.writeHead(302, { Location: '/img.png' });
+      res.end();
+    } else if (req.url === '/note') {
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('просто текст');
+    } else if (req.url === '/slow') {
+      // Медленный хост: держит место скачивания 2,5 с
+      setTimeout(() => {
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        res.end(png);
+      }, 2500);
+    } else if (req.url === '/big') {
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+      res.end(Buffer.alloc(21 * 1024 * 1024, 1));
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+  return {
+    start: () => new Promise<void>((r) => server.listen(FILES_PORT, '127.0.0.1', () => r())),
+    stop: () => new Promise<void>((r) => server.close(() => r())),
+  };
+}
+
+/** Bot API с файлами: multipart (поля и части attach://) — как шлёт aiogram */
+async function botForm(request: APIRequestContext, token: string, method: string, multipart: Record<string, any>) {
+  for (;;) {
+    const r = await request.post(`/api/v1/bot${token}/${method}`, { multipart });
+    const body = await r.json();
+    if (r.status() !== 429) return { status: r.status(), body };
+    await new Promise((res) => setTimeout(res, body.parameters.retry_after * 1000));
+  }
+}
+
+const file = (name: string, mimeType: string, buffer: Buffer) => ({ name, mimeType, buffer });
+
+/** Каталог загрузок e2e-сервера: upload_path "." внутри document_root "./uploads/" (backend/config.json) */
+function uploadDir() {
+  return join(readFileSync(join(tmpdir(), `vicinity-e2e-${port}.dir`), 'utf8').trim(), 'uploads');
+}
+/** Файл на диске по URL /uploads/… */
+const uploadPath = (url: string) => join(uploadDir(), url.replace(/^\/uploads\//, ''));
+const countFiles = (sub: string) => readdirSync(join(uploadDir(), sub)).length;
+
+/** JPEG из одних заголовков: APP1 Exif с Orientation и SOF0 с размером кадра (декодировать не нужно) */
+function exifJpeg(width: number, height: number, orientation: number) {
+  const tiff = Buffer.alloc(26);
+  tiff.write('II', 0, 'latin1');
+  tiff.writeUInt16LE(42, 2);
+  tiff.writeUInt32LE(8, 4);
+  tiff.writeUInt16LE(1, 8);
+  tiff.writeUInt16LE(0x0112, 10);
+  tiff.writeUInt16LE(3, 12);
+  tiff.writeUInt32LE(1, 14);
+  tiff.writeUInt16LE(orientation, 18);
+  const exif = Buffer.concat([Buffer.from('Exif\0\0', 'latin1'), tiff]);
+  const len = Buffer.alloc(2);
+  len.writeUInt16BE(exif.length + 2);
+  const sof = Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, height >> 8, height & 255, width >> 8, width & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]);
+  return Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe1]), len, exif, sof, Buffer.from([0xff, 0xd9])]);
+}
+
+/** Скачать файл бота по file_path из getFile */
+async function download(request: APIRequestContext, token: string, filePath: string) {
+  return request.get(`/api/v1/file/bot${token}/${filePath}`);
+}
+
+test.describe.serial('боты: картинки и файлы (§21.7)', () => {
+  let a: ApiUser & { username: string };
+  let other: ApiUser & { username: string };
+  let fb: Bot;
+  let foreign: Bot;
+  let chat = 0;
+  let photoId = '';
+  const png = pngBuffer(48, 32);
+  const files = filesServer(pngBuffer(20, 10));
+
+  test.beforeAll(async ({ request }) => {
+    a = await apiRegister(request, 'Фотограф');
+    other = await apiRegister(request, 'Чужой');
+    fb = await createBot(request, a, 'Фотобот');
+    foreign = await createBot(request, other, 'Чужой бот');
+    chat = await dmWith(request, a, fb);
+    await files.start();
+  });
+
+  test.afterAll(async () => {
+    await files.stop();
+  });
+
+  test('sendPhoto: multipart, attach://, file_id; подпись — caption; не картинка — 400', async ({ request }) => {
+    const r1 = await botForm(request, fb.token, 'sendPhoto', {
+      chat_id: String(chat),
+      photo: file('кадр.png', 'image/png', png),
+      caption: '<b>Привет</b> с картинкой',
+      parse_mode: 'HTML',
+    });
+    expect(r1.body, JSON.stringify(r1.body)).toMatchObject({ ok: true });
+    const m1 = r1.body.result;
+    expect(m1.text).toBeUndefined();
+    expect(m1.caption).toBe('**Привет** с картинкой');
+    expect(m1.photo).toHaveLength(1);
+    expect(m1.photo[0]).toMatchObject({ width: 48, height: 32, file_size: png.length });
+    expect(m1.photo[0].file_id).toMatch(/^vca_[0-9a-f]{32}\.png$/);
+    photoId = m1.photo[0].file_id;
+
+    // Человек видит обычное сообщение-картинку с подписью
+    const hist = await call(request, a, 'GET', `/channels/${chat}/messages`);
+    const seen = hist.body.messages.find((m: any) => m.id === m1.message_id);
+    expect(seen).toMatchObject({ attachment_type: 'image', attachment_name: 'кадр.png', text: '**Привет** с картинкой', author_bot: true });
+    expect(seen.attachment).toMatch(/^\/uploads\/attachments\/[0-9a-f]{32}\.png$/);
+
+    // Как aiogram: строка attach://<имя> и часть с этим именем
+    const r2 = await botForm(request, fb.token, 'sendPhoto', { chat_id: String(chat), photo: 'attach://pic1', pic1: file('x.png', 'image/png', pngBuffer(8, 6)) });
+    expect(r2.body.result.photo[0]).toMatchObject({ width: 8, height: 6 });
+    expect(r2.body.result.caption).toBeUndefined();
+
+    // Повтор по file_id — своя копия того же файла (жёсткая ссылка): свой URL и file_id, общий file_unique_id
+    const m3 = await ok(request, fb.token, 'sendPhoto', { chat_id: chat, photo: photoId, caption: 'ещё раз' });
+    expect(m3.photo[0].file_id).not.toBe(photoId);
+    expect(m3.photo[0].file_unique_id).toBe(m1.photo[0].file_unique_id);
+    expect(m3.attachment.url).not.toBe(seen.attachment);
+    expect(statSync(uploadPath(m3.attachment.url)).ino).toBe(statSync(uploadPath(seen.attachment)).ino);
+    // Удаление копии отзывает только её ссылку
+    await ok(request, fb.token, 'deleteMessage', { chat_id: chat, message_id: m3.message_id });
+    expect((await request.get(m3.attachment.url)).status()).toBe(404);
+    expect((await request.get(seen.attachment)).status()).toBe(200);
+    // …а удаление последнего сообщения с файлом — и сам файл
+    const m4 = await ok(request, fb.token, 'sendPhoto', { chat_id: chat, photo: photoId });
+    await ok(request, fb.token, 'deleteMessage', { chat_id: chat, message_id: m1.message_id });
+    expect((await request.get(seen.attachment)).status()).toBe(404);
+    expect((await request.get(m4.attachment.url)).status()).toBe(200);
+    photoId = m4.photo[0].file_id;
+
+    const bad = await botForm(request, fb.token, 'sendPhoto', { chat_id: String(chat), photo: file('fake.png', 'image/png', Buffer.from('не картинка')) });
+    expect(bad.status).toBe(400);
+    expect(bad.body.description).toContain('IMAGE_PROCESS_FAILED');
+    const noFile = await bot(request, fb.token, 'sendPhoto', { chat_id: chat });
+    expect(noFile.status).toBe(400);
+    for (const photo of ['vca_00000000000000000000000000000000.png', '../../etc/passwd', 'vca_../../vicinity.db', 'attach://none'])
+      expect((await bot(request, fb.token, 'sendPhoto', { chat_id: chat, photo })).body.description, photo).toContain('wrong file identifier');
+  });
+
+  test('по ссылке: картинка, перенаправление, документ; не картинка в sendPhoto и слишком большой файл — 400', async ({ request }) => {
+    const url = `http://127.0.0.1:${FILES_PORT}`;
+    const p = await ok(request, fb.token, 'sendPhoto', { chat_id: chat, photo: `${url}/img.png`, caption: 'из сети' });
+    expect(p.photo[0]).toMatchObject({ width: 20, height: 10 });
+    expect(p.attachment.name).toBe('img.png');
+    const moved = await ok(request, fb.token, 'sendPhoto', { chat_id: chat, photo: `${url}/moved` });
+    expect(moved.photo[0]).toMatchObject({ width: 20, height: 10 });
+
+    const notImage = await bot(request, fb.token, 'sendPhoto', { chat_id: chat, photo: `${url}/note` });
+    expect(notImage.status).toBe(400);
+    expect(notImage.body.description).toContain('IMAGE_PROCESS_FAILED');
+    const doc = await ok(request, fb.token, 'sendDocument', { chat_id: chat, document: `${url}/note` });
+    expect(doc.document).toMatchObject({ file_name: 'note.txt', mime_type: 'text/plain' });
+    expect((await bot(request, fb.token, 'sendDocument', { chat_id: chat, document: `${url}/missing` })).body.description).toContain(
+      'failed to get HTTP URL content',
+    );
+    expect((await bot(request, fb.token, 'sendDocument', { chat_id: chat, document: `${url}/big` })).body.description).toContain('too big');
+    expect((await bot(request, fb.token, 'sendDocument', { chat_id: chat, document: 'ftp://127.0.0.1/x' })).status).toBe(400);
+  });
+
+  test('без allow_private_webhooks ссылки на частные и локальные адреса не скачиваются', async ({ request }) => {
+    test.setTimeout(60_000);
+    // Второй сервер с запретом (основной e2e-сервер разрешает 127.0.0.1 для моков)
+    const here = dirname(fileURLToPath(import.meta.url));
+    const child = spawn(process.execPath, [join(here, 'start-backend.mjs')], {
+      env: { ...process.env, VICINITY_E2E_PORT: String(STRICT_PORT), VICINITY_BOTS_ALLOW_PRIVATE_WEBHOOKS: '0' },
+      stdio: 'ignore',
+      detached: true,
+    });
+    try {
+      const base = `http://localhost:${STRICT_PORT}`;
+      for (let i = 0; ; i++) {
+        const up = await request.get(`${base}/api/v1/health`).then((r) => r.ok(), () => false);
+        if (up) break;
+        if (i > 100) throw new Error('strict backend did not start');
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      const name = uniqueName('strict');
+      const reg = await request.post(`${base}/api/v1/auth/register`, { data: { username: name, password: 'password123', display_name: 'Строгий' } });
+      const token = (await reg.json()).token;
+      const auth = { Authorization: `Bearer ${token}` };
+      const created = await (await request.post(`${base}/api/v1/bots`, { headers: auth, data: { username: `${name}_bot`, display_name: 'Б' } })).json();
+      const dm = await (await request.post(`${base}/api/v1/dms`, { headers: auth, data: { user_id: created.bot.id, username: `${name}_bot` } })).json();
+      for (const photo of [
+        `http://127.0.0.1:${FILES_PORT}/img.png`,
+        `http://localhost:${FILES_PORT}/img.png`,
+        `http://[::1]:${FILES_PORT}/img.png`,
+        'http://10.0.0.1/x.png',
+        'http://169.254.169.254/latest/meta-data',
+      ]) {
+        const r = await request.post(`${base}/api/v1/bot${created.token}/sendPhoto`, { data: { chat_id: dm.channel_id, photo } });
+        expect(r.status(), photo).toBe(400);
+        expect((await r.json()).description, photo).toContain('private or local');
+      }
+    } finally {
+      // Вся группа процессов: node и сам VicinityServer
+      if (child.pid) process.kill(-child.pid, 'SIGKILL');
+    }
+  });
+
+  test('sendDocument: текстовый файл; getFile и скачивание; чужой бот и неверный токен', async ({ request }) => {
+    const text = Buffer.from('строка 1\nстрока 2\n');
+    const r = await botForm(request, fb.token, 'sendDocument', { chat_id: String(chat), document: file('заметка.txt', 'text/plain', text), caption: 'файл' });
+    const d = r.body.result.document;
+    expect(d).toMatchObject({ file_name: 'заметка.txt', mime_type: 'text/plain', file_size: text.length });
+    expect(r.body.result.caption).toBe('файл');
+    const f = await ok(request, fb.token, 'getFile', { file_id: d.file_id });
+    expect(f).toMatchObject({ file_id: d.file_id, file_unique_id: d.file_unique_id, file_size: text.length });
+    expect(f.file_path).toMatch(/^files\/[0-9a-f]{32}\.txt$/);
+    const got = await download(request, fb.token, f.file_path);
+    expect(got.status()).toBe(200);
+    expect(Buffer.from(await got.body()).equals(text)).toBe(true);
+    expect(got.headers()['content-type']).toBe('application/octet-stream');
+    expect(got.headers()['content-disposition']).toContain("filename*=UTF-8''%D0%B7");
+
+    // Чужой бот не в этом чате: ни getFile, ни скачивание, ни повтор по file_id
+    expect((await bot(request, foreign.token, 'getFile', { file_id: d.file_id })).body.description).toContain('invalid file_id');
+    expect((await download(request, foreign.token, f.file_path)).status()).toBe(404);
+    const foreignChat = await dmWith(request, other, foreign);
+    expect((await bot(request, foreign.token, 'sendDocument', { chat_id: foreignChat, document: d.file_id })).status).toBe(400);
+    // Неверный токен, несуществующий файл, попытка выйти из каталога
+    expect((await download(request, `${fb.id}:${'0'.repeat(48)}`, f.file_path)).status()).toBe(401);
+    expect((await download(request, fb.token, 'files/00000000000000000000000000000000.txt')).status()).toBe(404);
+    // «..» Drogon отклоняет сам (403), до маршрута дело не доходит
+    for (const path of ['files/..%2F..%2Fvicinity.db', 'files/../../vicinity.db', '..%2Fvicinity.db'])
+      expect([403, 404], path).toContain((await download(request, fb.token, path)).status());
+    expect((await download(request, fb.token, 'avatars/x.png')).status()).toBe(404);
+  });
+
+  test('sendMediaGroup: две картинки подряд, подпись только у первой; кнопки и один элемент — 400', async ({ request }) => {
+    const r = await botForm(request, fb.token, 'sendMediaGroup', {
+      chat_id: String(chat),
+      media: JSON.stringify([
+        { type: 'photo', media: 'attach://p1', caption: 'альбом' },
+        { type: 'photo', media: 'attach://p2' },
+      ]),
+      p1: file('1.png', 'image/png', pngBuffer(10, 10)),
+      p2: file('2.png', 'image/png', pngBuffer(12, 12)),
+    });
+    expect(r.body, JSON.stringify(r.body)).toMatchObject({ ok: true });
+    const msgs = r.body.result;
+    expect(msgs).toHaveLength(2);
+    expect(msgs[1].message_id).toBe(msgs[0].message_id + 1);
+    expect(msgs[0].caption).toBe('альбом');
+    expect(msgs[1].caption).toBeUndefined();
+    expect(msgs.map((m: any) => m.photo[0].width)).toEqual([10, 12]);
+    // Альбом — общий media_group_id, как в Telegram
+    expect(msgs[0].media_group_id).toMatch(/^\d+$/);
+    expect(msgs[1].media_group_id).toBe(msgs[0].media_group_id);
+
+    const media = [{ type: 'photo', media: photoId }, { type: 'photo', media: photoId }];
+    expect((await bot(request, fb.token, 'sendMediaGroup', { chat_id: chat, media, reply_markup: keyboard([[{ text: 'x', callback_data: 'x' }]]) })).status).toBe(400);
+    expect((await bot(request, fb.token, 'sendMediaGroup', { chat_id: chat, media: [media[0]] })).status).toBe(400);
+    expect((await bot(request, fb.token, 'sendMediaGroup', { chat_id: chat, media: [media[0], { type: 'document', media: photoId }] })).status).toBe(400);
+    expect(await ok(request, fb.token, 'sendMediaGroup', { chat_id: chat, media })).toHaveLength(2);
+  });
+
+  test('editMessageCaption меняет подпись; editMessageText у картинки и подпись у текста — 400', async ({ request }) => {
+    const m = await ok(request, fb.token, 'sendPhoto', { chat_id: chat, photo: photoId, caption: 'старая' });
+    const ws = await Socket.open(a.token);
+    try {
+      const e = await ok(request, fb.token, 'editMessageCaption', { chat_id: chat, message_id: m.message_id, caption: '<i>новая</i>', parse_mode: 'HTML' });
+      expect(e.caption).toBe('*новая*');
+      expect(e.photo[0].file_id).toBe(m.photo[0].file_id);
+      expect(await ws.next((x) => x.type === 'message_edited' && x.id === m.message_id)).toMatchObject({ text: '*новая*', edited: true });
+    } finally {
+      ws.close();
+    }
+    const same = await bot(request, fb.token, 'editMessageCaption', { chat_id: chat, message_id: m.message_id, caption: '<i>новая</i>', parse_mode: 'HTML' });
+    expect(same.body.description).toContain('not modified');
+    expect((await bot(request, fb.token, 'editMessageText', { chat_id: chat, message_id: m.message_id, text: 'x' })).body.description).toContain(
+      'no text',
+    );
+    const t = await ok(request, fb.token, 'sendMessage', { chat_id: chat, text: 'просто текст' });
+    expect((await bot(request, fb.token, 'editMessageCaption', { chat_id: chat, message_id: t.message_id, caption: 'x' })).body.description).toContain(
+      'no caption',
+    );
+    // Подпись можно убрать совсем
+    const cleared = await ok(request, fb.token, 'editMessageCaption', { chat_id: chat, message_id: m.message_id });
+    expect(cleared.caption).toBeUndefined();
+  });
+
+  test('человек присылает картинку → в обновлении photo с file_id → getFile → те же байты', async ({ request }) => {
+    await drain(request, fb.token);
+    const img = pngBuffer(64, 40);
+    const up = await request.post(`/api/v1/channels/${chat}/attachments`, {
+      headers: { Authorization: `Bearer ${a.token}` },
+      multipart: { file: file('фото.png', 'image/png', img) },
+    });
+    expect(up.status()).toBe(201);
+    const att = await up.json();
+    await post(request, a, chat, 'вот фото', { attachment: att.url, attachment_name: att.name });
+    const doc = await request.post(`/api/v1/channels/${chat}/attachments`, {
+      headers: { Authorization: `Bearer ${a.token}` },
+      multipart: { file: file('отчёт.pdf', 'application/pdf', Buffer.from('%PDF-1.4 test')) },
+    });
+    const docAtt = await doc.json();
+    await post(request, a, chat, '', { attachment: docAtt.url, attachment_name: docAtt.name });
+
+    const ups = await drain(request, fb.token);
+    const photoMsg = ups.find((u) => u.message?.photo)?.message;
+    expect(photoMsg).toMatchObject({ caption: 'вот фото', from: { id: a.id, is_bot: false } });
+    expect(photoMsg.text).toBeUndefined();
+    expect(photoMsg.photo[0]).toMatchObject({ width: 64, height: 40, file_size: img.length });
+    const docMsg = ups.find((u) => u.message?.document)?.message;
+    expect(docMsg.document).toMatchObject({ file_name: 'отчёт.pdf', mime_type: 'application/pdf' });
+    expect(docMsg.caption).toBeUndefined();
+
+    const f = await ok(request, fb.token, 'getFile', { file_id: photoMsg.photo[0].file_id });
+    const got = await download(request, fb.token, f.file_path);
+    expect(got.status()).toBe(200);
+    expect(got.headers()['content-type']).toBe('image/png');
+    expect(Buffer.from(await got.body()).equals(img)).toBe(true);
+    // Чужой бот этот файл не получит
+    expect((await bot(request, foreign.token, 'getFile', { file_id: photoMsg.photo[0].file_id })).status).toBe(400);
+    expect((await download(request, foreign.token, f.file_path)).status()).toBe(404);
+  });
+
+  test('альбом: одна часть дважды — один файл на диске; ошибка в элементе удаляет уже сохранённые', async ({ request }) => {
+    const r = await botForm(request, fb.token, 'sendMediaGroup', {
+      chat_id: String(chat),
+      media: JSON.stringify([{ type: 'photo', media: 'attach://p' }, { type: 'photo', media: 'attach://p' }]),
+      p: file('same.png', 'image/png', pngBuffer(9, 9)),
+    });
+    expect(r.body, JSON.stringify(r.body)).toMatchObject({ ok: true });
+    const [x, y] = r.body.result;
+    expect(x.attachment.url).not.toBe(y.attachment.url);
+    expect(statSync(uploadPath(x.attachment.url)).ino).toBe(statSync(uploadPath(y.attachment.url)).ino);
+    expect(y.photo[0].file_unique_id).toBe(x.photo[0].file_unique_id);
+
+    const images = countFiles('attachments');
+    const docs = countFiles('files');
+    const bad = await botForm(request, fb.token, 'sendMediaGroup', {
+      chat_id: String(chat),
+      media: JSON.stringify([{ type: 'photo', media: 'attach://good' }, { type: 'photo', media: 'attach://text' }]),
+      good: file('good.png', 'image/png', pngBuffer(7, 7)),
+      text: file('text.txt', 'text/plain', Buffer.from('не картинка')),
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.body.description).toContain('IMAGE_PROCESS_FAILED');
+    expect(countFiles('attachments')).toBe(images);
+    expect(countFiles('files')).toBe(docs);
+  });
+
+  test('ответ на картинку: reply_to_message с photo и caption, без text', async ({ request }) => {
+    await drain(request, fb.token);
+    const pic = await ok(request, fb.token, 'sendPhoto', { chat_id: chat, photo: photoId, caption: 'подпись' });
+    await post(request, a, chat, '/sticker', { reply_to: pic.message_id });
+    const ups = await drain(request, fb.token);
+    const reply = ups.find((u) => u.message?.text === '/sticker')?.message.reply_to_message;
+    expect(reply).toMatchObject({ message_id: pic.message_id, caption: 'подпись', from: { id: fb.id, is_bot: true } });
+    expect(reply.text).toBeUndefined();
+    expect(reply.photo[0].file_id).toBe(pic.photo[0].file_id);
+    expect(reply.date).toBeGreaterThan(0);
+    expect(reply.reply_to_message).toBeUndefined();
+  });
+
+  test('файл человека, отправленный ботом по file_id: удаление исходного отзывает его ссылку; удаление бота — файлы бота', async ({ request }) => {
+    const cb = await createBot(request, a, 'Копирующий бот');
+    const dm = await dmWith(request, a, cb);
+    const up = await request.post(`/api/v1/channels/${dm}/attachments`, {
+      headers: { Authorization: `Bearer ${a.token}` },
+      multipart: { file: file('личное.png', 'image/png', pngBuffer(30, 30)) },
+    });
+    expect(up.status()).toBe(201);
+    const att = await up.json();
+    const mid = await post(request, a, dm, '', { attachment: att.url, attachment_name: att.name });
+    const fid = (await drain(request, cb.token)).find((u) => u.message?.photo)?.message.photo[0].file_id;
+    expect(fid).toBeTruthy();
+
+    const copy = await ok(request, cb.token, 'sendPhoto', { chat_id: dm, photo: fid });
+    expect(copy.attachment.url).not.toBe(att.url);
+    // Автор удаляет своё сообщение: его ссылка больше не работает, копия бота — своя
+    expect((await call(request, a, 'DELETE', `/channels/${dm}/messages/${mid}`)).status).toBe(200);
+    expect((await request.get(att.url)).status()).toBe(404);
+    expect((await request.get(copy.attachment.url)).status()).toBe(200);
+    expect((await bot(request, cb.token, 'sendPhoto', { chat_id: dm, photo: fid })).body.description).toContain('wrong file identifier');
+
+    // Удаление бота удаляет и файлы его сообщений
+    expect((await call(request, a, 'DELETE', `/bots/${cb.id}`)).status).toBe(200);
+    expect((await request.get(copy.attachment.url)).status()).toBe(404);
+  });
+
+  test('размер по подписке владельца; имя без расширения — по содержимому; EXIF; голосовое webm', async ({ request }) => {
+    test.setTimeout(60_000);
+    const owner = await apiRegister(request, 'Без подписки');
+    const tb = await createBot(request, owner, 'Бот без подписки');
+    const dm = await dmWith(request, owner, tb);
+    // Бесплатно — 15 МБ, как у самого человека; Standard — 50
+    const big = file('big.bin', 'application/octet-stream', Buffer.alloc(16 * 1024 * 1024, 7));
+    const tooBig = await botForm(request, tb.token, 'sendDocument', { chat_id: String(dm), document: big });
+    expect(tooBig.status).toBe(400);
+    expect(tooBig.body.description).toContain('too big');
+    await dbRun('UPDATE users SET subscription_tier = 2 WHERE id = ?', owner.id);
+    const fine = await botForm(request, tb.token, 'sendDocument', { chat_id: String(dm), document: big });
+    expect(fine.body.result?.document?.file_size, JSON.stringify(fine.body).slice(0, 300)).toBe(16 * 1024 * 1024);
+
+    // aiogram URLInputFile: случайное имя без расширения — расширение по содержимому
+    const ogg = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(200)]);
+    const v = await botForm(request, tb.token, 'sendVoice', { chat_id: String(dm), voice: file('Xk3_aP9qLw', 'application/octet-stream', ogg), duration: '3' });
+    expect(v.body, JSON.stringify(v.body)).toMatchObject({ ok: true });
+    expect(v.body.result.voice).toMatchObject({ mime_type: 'audio/ogg', duration: 3 });
+    const mp3 = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(200)]);
+    const au = await botForm(request, tb.token, 'sendAudio', { chat_id: String(dm), audio: file('Zq81LmPx0a', 'application/octet-stream', mp3) });
+    expect(au.body.result.audio).toMatchObject({ file_name: 'Zq81LmPx0a.mp3', mime_type: 'audio/mpeg' });
+
+    // Снимок телефона: кадр 40×20 с Orientation 6 показывается 20×40
+    const turned = await botForm(request, tb.token, 'sendPhoto', { chat_id: String(dm), photo: file('phone.jpg', 'image/jpeg', exifJpeg(40, 20, 6)) });
+    expect(turned.body.result.photo[0]).toMatchObject({ width: 20, height: 40 });
+    const straight = await botForm(request, tb.token, 'sendPhoto', { chat_id: String(dm), photo: file('flat.jpg', 'image/jpeg', exifJpeg(40, 20, 1)) });
+    expect(straight.body.result.photo[0]).toMatchObject({ width: 40, height: 20 });
+
+    // Голосовое из Chrome (webm) — audio/webm; обычный webm-файл человека — document, а не video
+    await drain(request, tb.token);
+    const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x84]), Buffer.from('webm'), Buffer.alloc(100)]);
+    for (const [name, extra] of [
+      ['voice-1.webm', { kind: 'voice', meta: { duration: 2, peaks: [] } }],
+      ['clip.webm', {}],
+    ] as const) {
+      const up = await request.post(`/api/v1/channels/${dm}/attachments`, {
+        headers: { Authorization: `Bearer ${owner.token}` },
+        multipart: { file: file(name, 'audio/webm', webm) },
+      });
+      const att = await up.json();
+      await post(request, owner, dm, '', { attachment: att.url, attachment_name: att.name, ...extra });
+    }
+    const ups = await drain(request, tb.token);
+    expect(ups.find((u) => u.message?.voice)?.message.voice.mime_type).toBe('audio/webm');
+    const clip = ups.find((u) => u.message?.document?.file_name === 'clip.webm')?.message;
+    expect(clip).toBeTruthy();
+    expect(clip.video).toBeUndefined();
+  });
+
+  test('скачивания по ссылкам: не больше двух сразу на бота, другой бот не ждёт', async ({ request }) => {
+    const s1 = await createBot(request, a, 'Медленный 1');
+    const s2 = await createBot(request, a, 'Медленный 2');
+    const c1 = await dmWith(request, a, s1);
+    const c2 = await dmWith(request, a, s2);
+    const photo = `http://127.0.0.1:${FILES_PORT}/slow`;
+    const send = (token: string, chatId: number) =>
+      request.post(`/api/v1/bot${token}/sendPhoto`, { data: { chat_id: chatId, photo } }).then((r) => r.status());
+    const statuses = await Promise.all([send(s1.token, c1), send(s1.token, c1), send(s1.token, c1), send(s2.token, c2)]);
+    expect(statuses.slice(0, 3).sort()).toEqual([200, 200, 429]);
+    expect(statuses[3]).toBe(200);
+  });
+});
