@@ -247,11 +247,14 @@ test('bots UI: settings, buttons, callbacks, ephemeral, commands, server bots an
   const eight = phone.locator('.msg', { hasText: 'Восемь вариантов' }).locator('.bot-kb-btn');
   await expect(eight).toHaveCount(8);
   const boxes = await eight.evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ x: r.x, y: r.y, w: r.width })));
-  expect(new Set(boxes.map((r) => Math.round(r.y))).size).toBe(2);
+  // Не помещаются в один ряд — переносятся на следующие строки, но подписи видны целиком (без обрезки)
+  expect(new Set(boxes.map((r) => Math.round(r.y))).size).toBeGreaterThanOrEqual(2);
   for (const r of boxes) {
     expect(r.w).toBeGreaterThanOrEqual(56);
     expect(r.x + r.w).toBeLessThanOrEqual(390);
   }
+  const clipped = await eight.locator('.bot-kb-label').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).length);
+  expect(clipped).toBe(0);
   await phoneShot(phone, 'bots-dm-390');
 
   // ── Сервер: владелец добавляет бота во вкладке «Боты» ──

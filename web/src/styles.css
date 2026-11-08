@@ -5772,9 +5772,10 @@ a:focus-visible > .ico {
   flex-direction: column;
   gap: var(--space-1);
   margin-top: var(--space-2);
-  max-width: min(400px, 100%);
+  max-width: min(560px, 100%);
 }
-/* Не больше четырёх кнопок в строке: остальные переносятся, иначе на телефоне подписи не прочитать */
+/* Кнопки ряда делят ширину поровну; если подписи не помещаются, кнопки переносятся на новую строку,
+   а длинная подпись — на несколько строк: текст ответа виден целиком, без многоточия */
 .bot-kb-row {
   display: flex;
   flex-wrap: wrap;
@@ -5782,8 +5783,8 @@ a:focus-visible > .ico {
   min-width: 0;
 }
 .bot-kb-btn {
-  flex: 1 1 calc(25% - var(--space-1));
-  min-width: calc(25% - var(--space-1));
+  flex: 1 1 0;
+  min-width: min(100%, 8rem);
   min-height: var(--control-h);
   display: inline-flex;
   align-items: center;
@@ -5822,6 +5823,12 @@ a:focus-visible > .ico {
   .bot-kb-btn {
     padding-inline: var(--space-2);
   }
+}
+.bot-kb-label {
+  min-width: 0;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .bot-kb-btn svg {
   flex-shrink: 0;

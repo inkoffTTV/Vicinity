@@ -528,7 +528,7 @@ function KeyboardButton({ msg, b }: { msg: Message; b: InlineButton }) {
     if (!link) return null;
     return (
       <a className="bot-kb-btn" href={link.href} target="_blank" rel="noopener noreferrer" title={`${b.text} — ${link.host}`}>
-        <span className="ellipsis">{b.text}</span>
+        <span className="bot-kb-label">{b.text}</span>
         <Icon icon={ExternalLink} size={14} />
       </a>
     );
@@ -549,7 +549,7 @@ function KeyboardButton({ msg, b }: { msg: Message; b: InlineButton }) {
       }}
     >
       {waiting && <span className="bot-kb-spinner" aria-hidden="true" />}
-      <span className="ellipsis">{b.text}</span>
+      <span className="bot-kb-label">{b.text}</span>
       {b.copy_text && <Icon icon={Copy} size={14} />}
     </button>
   );
