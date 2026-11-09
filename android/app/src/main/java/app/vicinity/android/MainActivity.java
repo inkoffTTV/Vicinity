@@ -107,7 +107,14 @@ public class MainActivity extends Activity {
         } else {
             return null;
         }
-        if (path == null || !path.matches("^/(invite|gift|u|users|channels)/[A-Za-z0-9@_/-]*$")) return null;
+        if (path == null) return null;
+        // Каталог ботов: /bots и /bots/<username>?start=<payload> (docs/API.md §21.9)
+        if (path.matches("^/bots/?$")) return "/bots";
+        if (path.matches("^/bots/@?[A-Za-z0-9_]{1,32}$")) {
+            String start = uri.getQueryParameter("start");
+            return start != null && start.matches("^[A-Za-z0-9_-]{1,64}$") ? path + "?start=" + start : path;
+        }
+        if (!path.matches("^/(invite|gift|u|users|channels)/[A-Za-z0-9@_/-]*$")) return null;
         return path;
     }
 

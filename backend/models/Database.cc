@@ -506,6 +506,9 @@ void initialize() {
     // Мини-приложения (docs/API.md §21.8): webapp_key = hex(HMAC_SHA256("WebAppData", токен)) — ключ подписи initData.
     // Токен хранится только хэшем, поэтому ключ заполняется при создании/перевыпуске токена и при вызове Bot API
     exec("ALTER TABLE bots ADD COLUMN webapp_key TEXT DEFAULT NULL");
+    // Каталог ботов (docs/API.md §21.9): короткое описание (≤120, setMyShortDescription) и флаг «Показывать в каталоге»
+    exec("ALTER TABLE bots ADD COLUMN short_description TEXT NOT NULL DEFAULT ''");
+    exec("ALTER TABLE bots ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0");
     // Кнопка меню бота (setChatMenuButton): channel_id = 0 — для всех чатов, иначе для одного
     exec("CREATE TABLE IF NOT EXISTS bot_menu_buttons ("
          "bot_id INTEGER NOT NULL,"
@@ -538,6 +541,12 @@ void initialize() {
          "created_at TEXT DEFAULT CURRENT_TIMESTAMP,"
          "answered INTEGER NOT NULL DEFAULT 0)");
     exec("CREATE INDEX IF NOT EXISTS idx_bot_callbacks_bot ON bot_callbacks(bot_id)");
+    // Личка с ботом начата (первое сообщение или нажатие кнопки): кнопка «Начать» больше не показывается (§21.9)
+    exec("CREATE TABLE IF NOT EXISTS bot_dm_started ("
+         "channel_id INTEGER NOT NULL,"
+         "user_id INTEGER NOT NULL,"
+         "PRIMARY KEY(channel_id, user_id))");
+    exec("CREATE INDEX IF NOT EXISTS idx_bot_dm_started_user ON bot_dm_started(user_id)");
     // Кнопки под сообщением (JSON {"inline_keyboard": [[...]]}) и сообщения входящих вебхуков:
     // webhook_name — имя, под которым показано сообщение (остаётся, даже если вебхук удалят)
     exec("ALTER TABLE messages ADD COLUMN reply_markup TEXT DEFAULT NULL");

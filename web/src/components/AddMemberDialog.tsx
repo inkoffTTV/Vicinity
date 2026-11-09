@@ -52,7 +52,7 @@ export function AddMemberDialog({ target, onClose }: { target: AddTarget; onClos
       }
       const r =
         target.kind === 'group'
-          ? await api.addGroupMember(target.channelId, u.id)
+          ? await api.addGroupMember(target.channelId, u.id, u.is_bot ? u.username : undefined)
           : await api.addServerMember(target.serverId, u.id);
       // Сервер старой версии добавляет сразу — обновим состав
       if (r.status === 'added') {

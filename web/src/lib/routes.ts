@@ -6,6 +6,8 @@
 //   /invite/<CODE>                     — приглашение на сервер
 //   /users/<userId>                    — профиль (виден только знакомым)
 //   /u/<код>                           — профиль по ссылке «Поделиться профилем» (работает у всех)
+//   /bots                              — каталог ботов
+//   /bots/<username>[?start=<payload>] — страница бота; payload уйдёт боту в «/start <payload>» (lib/botStart.ts)
 // nginx и vite preview отдают index.html на любой путь, так что прямая ссылка и перезагрузка работают.
 import type { Dm, Group, Server, ServerChannel } from './api';
 import type { View } from './store';
@@ -17,7 +19,8 @@ export type Route =
   | { kind: 'invite'; code: string }
   | { kind: 'gift'; code: string }
   | { kind: 'user'; userId: number }
-  | { kind: 'profileLink'; code: string };
+  | { kind: 'profileLink'; code: string }
+  | { kind: 'bots'; username: string | null };
 
 const id = (s: string | undefined) => (s && /^\d{1,15}$/.test(s) ? Number(s) : null);
 
@@ -30,6 +33,11 @@ export function parsePath(path: string): Route | null {
   if (parts[0] === 'gift' && parts.length === 2 && /^[A-Za-z0-9-]{12,14}$/.test(parts[1]))
     return { kind: 'gift', code: parts[1].toUpperCase() };
   if (parts[0] === 'u' && parts.length === 2 && /^[A-Za-z0-9]{16,32}$/.test(parts[1])) return { kind: 'profileLink', code: parts[1] };
+  if (parts[0] === 'bots' && parts.length === 1) return { kind: 'bots', username: null };
+  if (parts[0] === 'bots' && parts.length === 2) {
+    const name = parts[1].replace(/^@/, '').toLowerCase();
+    return /^[a-z0-9_]{1,32}$/.test(name) ? { kind: 'bots', username: name } : null;
+  }
   if (parts[0] === 'users' && parts.length === 2) {
     const userId = id(parts[1]);
     return userId === null ? null : { kind: 'user', userId };
@@ -52,6 +60,7 @@ interface Lists {
 /** Экран по адресу; null — такого экрана у пользователя нет (чужой сервер, удалённая беседа) */
 export function viewForRoute(s: Lists, r: Route): View | null {
   if (r.kind === 'main') return { kind: 'home' };
+  if (r.kind === 'bots') return { kind: 'bots', username: r.username };
   if (r.kind === 'home') {
     if (r.channelId === null) return { kind: 'friends' };
     if (s.dms.some((d) => d.channel_id === r.channelId)) return { kind: 'dm', channelId: r.channelId };
@@ -75,6 +84,8 @@ export function pathFor(v: View): string {
       return `/channels/@me/${v.channelId}`;
     case 'server':
       return v.channelId === null ? `/channels/${v.serverId}` : `/channels/${v.serverId}/${v.channelId}`;
+    case 'bots':
+      return v.username ? `/bots/${encodeURIComponent(v.username)}` : '/bots';
   }
 }
 
@@ -82,3 +93,5 @@ export function pathFor(v: View): string {
 export const inviteLink = (code: string) => `${location.origin}/invite/${encodeURIComponent(code)}`;
 /** Ссылка на подарочный код подписки: открывает приложение и предлагает активировать */
 export const giftLink = (code: string) => `${location.origin}/gift/${encodeURIComponent(code)}`;
+/** Ссылка на страницу бота (кнопка «Поделиться» в каталоге) */
+export const botLink = (username: string) => `${location.origin}/bots/${encodeURIComponent(username)}`;

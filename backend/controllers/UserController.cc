@@ -2,6 +2,7 @@
 #include "../utils/HttpUtils.h"
 #include "../models/User.h"
 #include "../utils/Access.h"
+#include "../utils/Bots.h"
 #include "../utils/Activity.h"
 #include "../utils/Privacy.h"
 #include "../utils/Notes.h"
@@ -146,11 +147,20 @@ void UserController::profile(const HttpRequestPtr& req,
     // Остальным — тот же ответ, что для несуществующего: перебором номеров людей не найти.
     try {
         auto adb = app().getDbClient();
-        // Профиль бота открыт всем: его ищут и добавляют по @имени
-        if (!u->isBot && !Access::canSeeProfile(adb, self, id) &&
-            Access::profileLinkOwner(adb, req->getParameter("link")) != id) {
-            cb(errResp("Пользователь не найден", k404NotFound)); return;
+        // Бот — по правилам каталога (§21.9): публичный, свой, с общего сервера или из общего чата и не заблокирован;
+        // или по полному @имени (?username=, как личка, §7). Чужой приватный бот по одному номеру — тот же 404:
+        // перебором номеров его описание не узнать
+        bool visible = false;
+        if (u->isBot) {
+            std::string uname = req->getParameter("username");
+            if (!uname.empty() && uname[0] == '@') uname.erase(0, 1);
+            visible = Bots::visibleTo(adb, self, id) ||
+                      (!uname.empty() && uname.size() <= 64 && Bots::available(adb, id) &&
+                       !adb->execSqlSync("SELECT 1 FROM users WHERE id = ? AND username = ? COLLATE NOCASE", id, uname).empty());
+        } else {
+            visible = Access::canSeeProfile(adb, self, id) || Access::profileLinkOwner(adb, req->getParameter("link")) == id;
         }
+        if (!visible) { cb(errResp("Пользователь не найден", k404NotFound)); return; }
     } catch (const std::exception& e) {
         cb(errResp(HttpUtils::internal(e), k500InternalServerError)); return;
     }
@@ -372,6 +382,8 @@ void UserController::startDm(const HttpRequestPtr& req,
     try {
         auto target = UserModel::findById(targetId);
         if (!target) { cb(errResp("User not found", k404NotFound)); return; }
+        // Бот, заблокированный админом, или бот заблокированного владельца не виден никому (§21.9)
+        if (target->isBot && !Bots::available(db, targetId)) { cb(errResp("Пользователь не найден", k404NotFound)); return; }
         // Незнакомцу — только по его ссылке или полному нику (не перебором номеров)
         if (!Access::canReach(db, selfId, targetId, JsonUtils::getStr(*json, "link"), JsonUtils::getStr(*json, "username"))) {
             cb(errResp("Пользователь не найден", k404NotFound)); return;

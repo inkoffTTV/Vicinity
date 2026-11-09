@@ -300,8 +300,17 @@ void ChatController::addMember(const HttpRequestPtr& req,
         if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Invite, self)) {
             cb(error("Слишком много приглашений, попробуйте позже", k429TooManyRequests)); return;
         }
-        // Бот (docs/API.md §21) приглашения не принимает — входит в беседу сразу
+        // Бот (docs/API.md §21) приглашения не принимает — входит в беседу сразу.
+        // Чужого приватного бота, которого вы не видите (§21.9), по одному id не добавить — как будто его нет;
+        // с полным @именем (username в теле) — можно, как личку (§7). Заблокированный админом бот — нигде
         if (u[0]["is_bot"].as<int>() != 0) {
+            std::string uname = TextUtils::trim(JsonUtils::getStr(*json, "username"));
+            if (!uname.empty() && uname[0] == '@') uname.erase(0, 1);
+            const bool byName = !uname.empty() && uname.size() <= 64 &&
+                !db->execSqlSync("SELECT 1 FROM users WHERE id = ? AND username = ? COLLATE NOCASE", target, uname).empty();
+            if (!(byName ? Bots::available(db, target) : Bots::visibleTo(db, self, target))) {
+                cb(error("Пользователь не найден", k404NotFound)); return;
+            }
             auto ins = db->execSqlSync(
                 "INSERT OR IGNORE INTO channel_members(channel_id, user_id) VALUES(?, ?) RETURNING user_id", channelId, target);
             if (ins.empty()) { cb(error("Уже в беседе", k409Conflict)); return; }

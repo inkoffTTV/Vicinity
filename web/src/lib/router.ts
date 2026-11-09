@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { api, ApiError } from './api';
 import { parsePath, pathFor, viewForRoute } from './routes';
+import { startPayload, useBotStart } from './botStart';
 import { useStore } from './store';
 
 interface InviteState {
@@ -57,12 +58,13 @@ window.addEventListener('popstate', () => {
     useGift.setState({ code: route.code });
     return;
   }
+  if (route?.kind === 'bots' && route.username) useBotStart.getState().remember(route.username, startPayload(location.search));
   replaceNext = true;
   s.open((route && viewForRoute(s, route)) ?? { kind: 'friends' });
 });
 
 /**
- * Открыть адрес приложения (/invite/…, /gift/…, /u/…, /users/…, /channels/…) внутри уже открытого
+ * Открыть адрес приложения (/invite/…, /gift/…, /u/…, /users/…, /channels/…, /bots/…) внутри уже открытого
  * клиента, без перезагрузки и без нового окна. false — это не адрес экрана приложения.
  * Так работают ссылки из сообщений, а ещё приложения для Windows и Android, когда их открывают
  * по ссылке снаружи (событие vicinity-open, ниже).
@@ -78,11 +80,14 @@ export function openAppUrl(href: string): boolean {
   const route = parsePath(url.pathname);
   if (!route) return false;
   const s = useStore.getState();
+  // Страница бота: параметр запуска ?start=… сохраняется для кнопки «Начать» (lib/botStart.ts)
+  const start = route.kind === 'bots' && route.username ? startPayload(url.search) : null;
   if (!s.me) {
     // Ещё не вошли: экран откроется после входа (store читает адрес при загрузке)
-    history.pushState(null, '', url.pathname);
+    history.pushState(null, '', url.pathname + (start ? `?start=${start}` : ''));
     return true;
   }
+  if (route.kind === 'bots' && route.username) useBotStart.getState().remember(route.username, start);
   if (route.kind === 'invite') {
     history.pushState(null, '', url.pathname);
     useInvite.setState({ code: route.code });

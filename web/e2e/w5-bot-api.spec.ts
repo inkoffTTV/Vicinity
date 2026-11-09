@@ -229,7 +229,9 @@ test.describe.serial('боты и вебхуки (API)', () => {
     // Поиск и профиль показывают пометку бота
     const found = await call(request, b, 'GET', `/users/search?q=${main.username}`);
     expect(found.body.users[0]).toMatchObject({ id: main.id, is_bot: true });
-    const profile = await call(request, c, 'GET', `/users/${main.id}/profile`);
+    // Профиль чужого приватного бота — по полному @имени (как личка); по одному номеру — 404 (§21.9)
+    expect((await call(request, c, 'GET', `/users/${main.id}/profile`)).status).toBe(404);
+    const profile = await call(request, c, 'GET', `/users/${main.id}/profile?username=${main.username.toUpperCase()}`);
     expect(profile.body.is_bot).toBe(true);
   });
 
@@ -1247,5 +1249,296 @@ test.describe.serial('боты: картинки и файлы (§21.7)', () => 
     const statuses = await Promise.all([send(s1.token, c1), send(s1.token, c1), send(s1.token, c1), send(s2.token, c2)]);
     expect(statuses.slice(0, 3).sort()).toEqual([200, 200, 429]);
     expect(statuses[3]).toBe(200);
+  });
+});
+
+test.describe.serial('боты: описание и каталог (§21.9)', () => {
+  let owner: ApiUser & { username: string };
+  let guild: ApiUser & { username: string };
+  let stranger: ApiUser & { username: string };
+  let pub: Bot;
+  let priv: Bot;
+  let srv: Bot;
+  let serverId = 0;
+  // Уникальное слово в именах — каталог общий для всех тестов этого сервера
+  const tag = uniqueName('kat').replace(/[^a-z0-9]/gi, '');
+
+  const dir = async (who: ApiUser, q = tag) => {
+    const r = await call(request0, who, 'GET', `/bots/directory?q=${encodeURIComponent(q)}`);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    return r.body.bots as any[];
+  };
+  let request0: APIRequestContext;
+
+  test.beforeAll(async ({ playwright }) => {
+    request0 = await playwright.request.newContext({ baseURL: `http://localhost:${port}` });
+    owner = await apiRegister(request0, 'Создатель');
+    guild = await apiRegister(request0, 'Гильдия');
+    stranger = await apiRegister(request0, 'Прохожий');
+  });
+  test.afterAll(async () => {
+    await request0.dispose();
+  });
+
+  test('setMyDescription / setMyShortDescription / setMyName: значения, лимиты, form-urlencoded', async ({ request }) => {
+    pub = await createBot(request, owner, `Погода ${tag}`);
+    expect(await ok(request, pub.token, 'getMyDescription')).toEqual({ description: '' });
+    expect(await ok(request, pub.token, 'getMyShortDescription')).toEqual({ short_description: '' });
+
+    const long = 'Я'.repeat(512);
+    expect(await ok(request, pub.token, 'setMyDescription', { description: long, language_code: 'ru' })).toBe(true);
+    expect((await ok(request, pub.token, 'getMyDescription', { language_code: 'ru' })).description).toBe(long);
+    const tooLong = await bot(request, pub.token, 'setMyDescription', { description: long + 'Я' });
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.body.description).toContain('too long');
+    // Многострочное описание — как в Telegram; aiogram шлёт form-urlencoded
+    await ok(request, pub.token, 'setMyDescription', { description: `Прогноз погоды ${tag}\nПишите /weather Город` }, 'form');
+    expect((await ok(request, pub.token, 'getMyDescription', {}, 'get')).description).toBe(`Прогноз погоды ${tag}\nПишите /weather Город`);
+
+    expect(await ok(request, pub.token, 'setMyShortDescription', { short_description: 'х'.repeat(120) })).toBe(true);
+    expect((await bot(request, pub.token, 'setMyShortDescription', { short_description: 'х'.repeat(121) })).status).toBe(400);
+    expect((await bot(request, pub.token, 'setMyShortDescription', { short_description: 'одна\nдве' })).status).toBe(400);
+    await ok(request, pub.token, 'setMyShortDescription', { short_description: 'Погода за секунду' }, 'form');
+    expect(await ok(request, pub.token, 'getMyShortDescription')).toEqual({ short_description: 'Погода за секунду' });
+    // Пустое значение убирает описание
+    await ok(request, pub.token, 'setMyShortDescription', {});
+    expect(await ok(request, pub.token, 'getMyShortDescription')).toEqual({ short_description: '' });
+    await ok(request, pub.token, 'setMyShortDescription', { short_description: 'Погода за секунду' });
+
+    await ok(request, pub.token, 'setMyName', { name: `Синоптик ${tag}` });
+    expect(await ok(request, pub.token, 'getMyName')).toEqual({ name: `Синоптик ${tag}` });
+    expect((await bot(request, pub.token, 'setMyName', { name: 'я'.repeat(33) })).status).toBe(400);
+    await ok(request, pub.token, 'setMyCommands', { commands: [{ command: 'weather', description: 'Погода в городе' }] });
+
+    // Владелец видит то же в GET /bots
+    const mine = (await call(request, owner, 'GET', '/bots')).body.bots.find((x: any) => x.id === pub.id);
+    expect(mine).toMatchObject({ short_description: 'Погода за секунду', is_public: false, display_name: `Синоптик ${tag}` });
+  });
+
+  test('PATCH /bots/{id}: short_description и is_public, проверки длины', async ({ request }) => {
+    const r = await call(request, owner, 'PATCH', `/bots/${pub.id}`, { is_public: true, short_description: '  Погода за секунду  ' });
+    expect(r.status).toBe(200);
+    expect(r.body.bot).toMatchObject({ is_public: true, short_description: 'Погода за секунду' });
+    expect((await call(request, owner, 'PATCH', `/bots/${pub.id}`, { short_description: 'х'.repeat(121) })).status).toBe(400);
+    expect((await call(request, owner, 'PATCH', `/bots/${pub.id}`, { description: 'х'.repeat(513) })).status).toBe(400);
+    expect((await call(request, stranger, 'PATCH', `/bots/${pub.id}`, { is_public: false })).status).toBe(404);
+    expect((await ok(request, pub.token, 'getMyShortDescription')).short_description).toBe('Погода за секунду');
+  });
+
+  test('каталог: публичный, свой, с общего сервера, из лички; чужой приватный не виден', async ({ request }) => {
+    priv = await createBot(request, owner, `Тайный ${tag}`);
+    await ok(request, priv.token, 'setMyDescription', { description: `Секретный помощник ${tag}\nвторая строка` });
+    srv = await createBot(request, owner, `Модератор ${tag}`);
+    const s = await call(request, guild, 'POST', '/servers', { name: `Гильдия ${tag}` });
+    serverId = s.body.server_id;
+    expect((await call(request, guild, 'POST', `/servers/${serverId}/bots`, { username: srv.username })).status).toBe(201);
+
+    // Владелец: все три, свои — первыми, с отметкой mine
+    const own = await dir(owner);
+    expect(own.map((x) => x.id).sort()).toEqual([pub.id, priv.id, srv.id].sort());
+    expect(own.every((x) => x.mine)).toBe(true);
+    // Нет short_description — первая строка description
+    expect(own.find((x) => x.id === priv.id)).toMatchObject({ short_description: `Секретный помощник ${tag}`, is_public: false });
+
+    // Участник сервера: публичный и бот сервера (с названием сервера), но не приватный
+    const g = await dir(guild);
+    expect(g.map((x) => x.id).sort()).toEqual([pub.id, srv.id].sort());
+    expect(g.find((x) => x.id === srv.id)).toMatchObject({ mine: false, servers: [{ id: serverId, name: `Гильдия ${tag}` }], has_dm: false });
+    expect(g[0].id).toBe(srv.id); // сначала боты ваших серверов, потом каталог
+
+    // Посторонний: только публичный
+    const st = await dir(stranger);
+    expect(st.map((x) => x.id)).toEqual([pub.id]);
+    expect(st[0]).toMatchObject({ username: pub.username, mine: false, servers: [], has_dm: false, is_public: true, short_description: 'Погода за секунду' });
+    expect(JSON.stringify(st)).not.toContain(priv.username);
+
+    // Поиск: регистр (кириллица), @имя, описание
+    expect((await dir(stranger, `СИНОПТИК ${tag}`)).map((x) => x.id)).toEqual([pub.id]);
+    expect((await dir(stranger, `@${pub.username}`)).map((x) => x.id)).toEqual([pub.id]);
+    expect((await dir(owner, `помощник ${tag}`)).map((x) => x.id)).toEqual([priv.id]);
+    expect(await dir(stranger, `помощник ${tag}`)).toEqual([]);
+    // Пагинация
+    const page1 = await call(request, owner, 'GET', `/bots/directory?q=${tag}&limit=2`);
+    expect(page1.body.bots).toHaveLength(2);
+    expect(page1.body.has_more).toBe(true);
+    const page2 = await call(request, owner, 'GET', `/bots/directory?q=${tag}&limit=2&offset=2`);
+    expect(page2.body.bots).toHaveLength(1);
+    expect(page2.body.has_more).toBe(false);
+    expect((await call(request, owner, 'GET', `/bots/directory?q=${'я'.repeat(65)}`)).status).toBe(400);
+
+    // Личка с приватным ботом (по полному @имени) — теперь он виден и этому человеку
+    const dm = await dmWith(request, stranger, priv);
+    const after = await dir(stranger);
+    expect(after.find((x) => x.id === priv.id)).toMatchObject({ has_dm: true, dm_channel_id: dm, mine: false });
+  });
+
+  test('карточка по @имени: описание, команды, владелец по приватности, dm_started; невидимый — 404', async ({ request }) => {
+    const card = await call(request, stranger, 'GET', `/bots/by-username/${pub.username.toUpperCase()}`);
+    expect(card.status).toBe(200);
+    expect(card.body.bot).toMatchObject({
+      id: pub.id,
+      username: pub.username,
+      display_name: `Синоптик ${tag}`,
+      description: `Прогноз погоды ${tag}\nПишите /weather Город`,
+      short_description: 'Погода за секунду',
+      commands: [{ command: 'weather', description: 'Погода в городе' }],
+      owner: null, // незнакомцу владелец не показывается
+      has_dm: false,
+      dm_started: false,
+      blocked: false,
+      menu_button: { type: 'default' },
+    });
+    expect(JSON.stringify(card.body)).not.toContain('token');
+    const self = await call(request, owner, 'GET', `/bots/by-username/@${pub.username}`);
+    expect(self.body.bot.owner).toMatchObject({ id: owner.id, username: owner.username });
+
+    // Чужой приватный и бот чужого сервера — как несуществующие
+    const other = await apiRegister(request, 'Чужак');
+    for (const name of [srv.username, 'nobody_at_all_bot', 'bad name']) {
+      const r = await call(request, other, 'GET', `/bots/by-username/${encodeURIComponent(name)}`);
+      expect(r.status, name).toBe(404);
+    }
+    expect((await call(request, guild, 'GET', `/bots/by-username/${srv.username}`)).status).toBe(200);
+
+    // dm_started: личка есть, но человек ещё не писал → «Начать»; после /start — false → true
+    const before = await call(request, stranger, 'GET', `/bots/by-username/${priv.username}`);
+    expect(before.body.bot).toMatchObject({ has_dm: true, dm_started: false });
+    await drain(request, priv.token);
+    await post(request, stranger, before.body.bot.dm_channel_id, '/start');
+    const ups = await drain(request, priv.token);
+    expect(ups[0].message).toMatchObject({ text: '/start', entities: [{ type: 'bot_command', offset: 0, length: 6 }] });
+    expect((await call(request, stranger, 'GET', `/bots/by-username/${priv.username}`)).body.bot.dm_started).toBe(true);
+  });
+
+  test('личка с ботом не требует дружбы и не смотрит приватность «кто может писать»', async ({ request }) => {
+    const shy = await apiRegister(request, 'Скромный');
+    expect((await call(request, shy, 'PATCH', '/settings/privacy', { dm: 'friends' })).status).toBe(200);
+    const r = await call(request, shy, 'POST', '/dms', { user_id: pub.id, username: pub.username });
+    expect(r.status).toBe(201);
+    // Открыть личку с публичным ботом можно и по id (бот виден в каталоге)
+    const again = await call(request, stranger, 'POST', '/dms', { user_id: pub.id });
+    expect(again.status).toBe(201);
+  });
+
+  test('бот или владелец заблокированы — бота нет в каталоге, карточка 404', async ({ request }) => {
+    expect((await dir(stranger)).some((x) => x.id === pub.id)).toBe(true);
+    await dbRun('UPDATE users SET banned = 1 WHERE id = ?', owner.id);
+    try {
+      expect((await dir(stranger)).some((x) => x.id === pub.id)).toBe(false);
+      expect((await call(request, stranger, 'GET', `/bots/by-username/${pub.username}`)).status).toBe(404);
+    } finally {
+      await dbRun('UPDATE users SET banned = 0 WHERE id = ?', owner.id);
+    }
+    await dbRun('UPDATE users SET banned = 1 WHERE id = ?', pub.id);
+    try {
+      expect((await dir(stranger)).some((x) => x.id === pub.id)).toBe(false);
+    } finally {
+      await dbRun('UPDATE users SET banned = 0 WHERE id = ?', pub.id);
+    }
+    // Флаг выключили — пропал у постороннего, остался у владельца
+    await call(request, owner, 'PATCH', `/bots/${pub.id}`, { is_public: false });
+    // У постороннего есть личка с ним (тест выше) — значит, виден как «вы писали»
+    const st = await dir(stranger);
+    expect(st.find((x) => x.id === pub.id)).toMatchObject({ has_dm: true, is_public: false });
+    const nobody = await apiRegister(request, 'Новичок');
+    expect((await dir(nobody)).some((x) => x.id === pub.id)).toBe(false);
+  });
+
+  test('чужой приватный бот: перебором id не добавить на сервер или в беседу, профиль 404; по полному @имени — можно', async ({ request }) => {
+    const hid = await createBot(request, owner, `Невидимка ${tag}`);
+    await ok(request, hid.token, 'setMyDescription', { description: `Секретное описание ${tag}` });
+    const thief = await apiRegister(request, 'Перебирающий');
+    const s = await call(request, thief, 'POST', '/servers', { name: `Ловушка ${tag}` });
+    const sid = s.body.server_id;
+    // По id — 404 и без описания в ответе; бот так и не виден
+    const byId = await call(request, thief, 'POST', `/servers/${sid}/bots`, { bot_id: hid.id });
+    expect(byId.status).toBe(404);
+    expect(JSON.stringify(byId.body)).not.toContain('Секретное');
+    expect((await dir(thief)).some((x) => x.id === hid.id)).toBe(false);
+    expect((await call(request, thief, 'GET', `/bots/by-username/${hid.username}`)).status).toBe(404);
+    // Профиль по номеру — как несуществующий пользователь
+    const prof = await call(request, thief, 'GET', `/users/${hid.id}/profile`);
+    expect(prof.status).toBe(404);
+    expect(JSON.stringify(prof.body)).not.toContain('Секретное');
+    expect((await call(request, owner, 'GET', `/users/${hid.id}/profile`)).body.bot_description).toBe(`Секретное описание ${tag}`);
+    // В беседу по одному id — тоже 404
+    const g = await call(request, thief, 'POST', '/channels', { type: 'group', name: `Беседа ${tag}` });
+    expect((await call(request, thief, 'POST', `/channels/${g.body.channel_id}/members`, { user_id: hid.id })).status).toBe(404);
+    // Свой бот по id добавляется
+    const own = await createBot(request, thief, `Свой ${tag}`);
+    expect((await call(request, thief, 'POST', `/servers/${sid}/bots`, { bot_id: own.id })).status).toBe(201);
+    // Полное @имя дали — как личку (§7): на сервер и в беседу можно, после этого бот виден
+    expect((await call(request, thief, 'POST', `/channels/${g.body.channel_id}/members`, { user_id: hid.id, username: `@${hid.username}` })).status).toBe(200);
+    expect((await call(request, thief, 'POST', `/servers/${sid}/bots`, { username: hid.username })).status).toBe(201);
+    expect((await call(request, thief, 'GET', `/users/${hid.id}/profile`)).status).toBe(200);
+    // Бот заблокирован админом — не добавить и по @имени
+    const s2 = await call(request, thief, 'POST', '/servers', { name: `Ещё ${tag}` });
+    await dbRun('UPDATE users SET banned = 1 WHERE id = ?', hid.id);
+    try {
+      expect((await call(request, thief, 'POST', `/servers/${s2.body.server_id}/bots`, { username: hid.username })).status).toBe(404);
+      expect((await call(request, thief, 'GET', `/users/${hid.id}/profile`)).status).toBe(404);
+    } finally {
+      await dbRun('UPDATE users SET banned = 0 WHERE id = ?', hid.id);
+    }
+  });
+
+  test('публичный бот заблокированного владельца: личку по id не открыть', async ({ request }) => {
+    const open = await createBot(request, owner, `Открытый ${tag}`);
+    await call(request, owner, 'PATCH', `/bots/${open.id}`, { is_public: true });
+    const fan = await apiRegister(request, 'Поклонник');
+    expect((await call(request, fan, 'GET', `/users/${open.id}/profile`)).status).toBe(200);
+    await dbRun('UPDATE users SET banned = 1 WHERE id = ?', owner.id);
+    try {
+      expect((await call(request, fan, 'POST', '/dms', { user_id: open.id })).status).toBe(404);
+      expect((await call(request, fan, 'POST', '/dms', { user_id: open.id, username: open.username })).status).toBe(404);
+      expect((await call(request, fan, 'GET', `/users/${open.id}/profile`)).status).toBe(404);
+    } finally {
+      await dbRun('UPDATE users SET banned = 0 WHERE id = ?', owner.id);
+    }
+    expect((await call(request, fan, 'POST', '/dms', { user_id: open.id })).status).toBe(201);
+  });
+
+  test('dm_started не пропадает: нажатие кнопки в личке, затем очистка нажатий и удаление сообщения', async ({ request }) => {
+    const helper = await createBot(request, owner, `Кнопочный ${tag}`);
+    const guest = await apiRegister(request, 'Гость');
+    const ch = await dmWith(request, guest, helper);
+    const sent = await ok(request, helper.token, 'sendMessage', { chat_id: ch, text: 'Выберите', reply_markup: keyboard([[{ text: 'Да', callback_data: 'yes' }]]) });
+    const card = async () => (await call(request, guest, 'GET', `/bots/by-username/${helper.username}`)).body.bot;
+    expect((await card()).dm_started).toBe(false);
+    expect((await call(request, guest, 'POST', `/channels/${ch}/messages/${sent.message_id}/callback`, { data: 'yes' })).status).toBe(200);
+    expect((await card()).dm_started).toBe(true);
+    // Нажатия живут 15 минут — их чистка «Начать» не возвращает
+    await dbRun('DELETE FROM bot_callbacks WHERE channel_id = ?', ch);
+    expect((await card()).dm_started).toBe(true);
+
+    // Своё сообщение, затем его удаление — тоже без возврата «Начать»
+    const other = await apiRegister(request, 'Второй гость');
+    const ch2 = await dmWith(request, other, helper);
+    const mid = await post(request, other, ch2, 'привет');
+    const c2 = async () => (await call(request, other, 'GET', `/bots/by-username/${helper.username}`)).body.bot;
+    expect((await c2()).dm_started).toBe(true);
+    expect((await call(request, other, 'DELETE', `/channels/${ch2}/messages/${mid}`)).status).toBe(200);
+    expect((await c2()).dm_started).toBe(true);
+  });
+
+  test('каталог без поиска: страницы по SQL, has_more честный, свои первыми', async ({ request }) => {
+    const solo = await apiRegister(request, 'Коллекционер');
+    const ids: number[] = [];
+    for (const n of ['Альфа', 'Бета', 'Гамма']) ids.push((await createBot(request, solo, `${n} ${tag}`)).id);
+    const all: number[] = [];
+    let offset = 0;
+    for (;;) {
+      const r = await call(request, solo, 'GET', `/bots/directory?limit=2&offset=${offset}`);
+      expect(r.status).toBe(200);
+      all.push(...r.body.bots.map((x: any) => x.id));
+      if (!r.body.has_more) break;
+      expect(r.body.bots).toHaveLength(2);
+      offset += 2;
+    }
+    expect(new Set(all).size).toBe(all.length);
+    // Свои — первыми, по имени
+    expect(all.slice(0, 3)).toEqual(ids);
+    // Символ % ищется буквально (instr, не LIKE)
+    expect((await call(request, solo, 'GET', `/bots/directory?q=${encodeURIComponent('%')}`)).body.bots).toEqual([]);
   });
 });

@@ -573,7 +573,9 @@ grammY, Telegraf) подключаются сменой адреса серве�
 |---|---|---|
 | GET | `/bots` | `{bots: [бот]}` — мои боты |
 | POST | `/bots` | `{username, display_name?}` → **201** `{bot, token}`; токен показывается **один раз** |
-| PATCH | `/bots/{id}` | `{display_name?, description? (≤512), read_all?: bool}` → `{bot}` |
+| PATCH | `/bots/{id}` | `{display_name?, description? (≤512), short_description? (≤120, одна строка) **[new]**, read_all?: bool, is_public?: bool **[new]**}` → `{bot}` |
+| GET | `/bots/directory?q=&limit=&offset=` | **[new]** каталог ботов, видимых вам (§21.9) → `{bots: [элемент каталога], has_more}` |
+| GET | `/bots/by-username/{username}` | **[new]** карточка бота (можно с `@`, без учёта регистра); невидимый вам бот — 404 (§21.9) |
 | POST | `/bots/{id}/token` | новый токен → `{bot, token}`; старый сразу перестаёт работать (ждущий `getUpdates` получает 401) |
 | DELETE | `/bots/{id}` | удалить бота с его сообщениями и очередью → `{status:"deleted"}`; открытым клиентам — WS `message_deleted` (до 1000 последних его сообщений), `server_member_left` и `channel_member_left` (беседы и лички) |
 | GET | `/servers/{id}/bots` | только владелец сервера → `{bots: [{id, username, display_name, avatar_path, description}]}` |
@@ -585,8 +587,8 @@ grammY, Telegraf) подключаются сменой адреса серве�
 | POST | `/bots/{id}/webapp` | **[new]** открыть мини-приложение (§21.8): `{url, channel_id?, message_id? \| ephemeral_id?, theme_params?}` → `{url_with_fragment, init_data, theme_params, signed, bot: {id, username, display_name}}` |
 | GET | `/bots/{id}/menu_button?channel_id=` | **[new]** кнопка меню бота для этого чата (§21.8) → `{menu_button: {type: "default"\|"commands"} \| {type: "web_app", text, web_app: {url}}}` |
 
-Объект бота: `{id, username, display_name, avatar_path, description, token_hint, read_all, webhook_url, webhook_error,
-commands: [{command, description}], servers: [{id, name}], owner_id, created_at}`. `token_hint` — последние 4 символа
+Объект бота: `{id, username, display_name, avatar_path, description, short_description, is_public, token_hint, read_all,
+webhook_url, webhook_error, commands: [{command, description}], servers: [{id, name}], owner_id, created_at}`. `token_hint` — последние 4 символа
 токена, сам токен нигде больше не возвращается (в базе — только sha256).
 
 Правила: `username` — 5–32 символа `[a-z0-9_]` (приводится к нижнему регистру, ведущий `@` убирается), оканчивается
@@ -676,6 +678,9 @@ python-telegram-bot: `Application.builder().token(TOKEN).base_url("https://<се
 | `deleteMessage` | `chat_id`, `message_id` | `true`; только свои сообщения бота; WS `message_deleted` |
 | `answerCallbackQuery` | `callback_query_id`, `text?` (≤200), `show_alert?`, `url?` (http/https) | `true`; повторный ответ или старше 15 минут — 400 `query is too old or already answered`; бота убрали из чата — 403 `bot is not a member of the chat` |
 | `setMyCommands` / `getMyCommands` / `deleteMyCommands` | `commands: [{command (1–32, a-z0-9_), description (1–256)}]` (≤100; `scope`, `language_code` игнорируются) | `true` / [BotCommand] / `true` |
+| `setMyDescription` / `getMyDescription` **[new]** | `description?` (0–512, можно с переводами строк), `language_code?` (игнорируется) | `true` / `{description}`; пустое — убрать. Показывается в пустой личке («Что умеет этот бот?») и на странице бота (§21.9); длиннее — 400 `description is too long (at most 512 characters)` |
+| `setMyShortDescription` / `getMyShortDescription` **[new]** | `short_description?` (0–120, одна строка), `language_code?` (игнорируется) | `true` / `{short_description}`; текст карточки в каталоге |
+| `setMyName` / `getMyName` **[new]** | `name?` (1–32; пустое — оставить как есть), `language_code?` (игнорируется) | `true` / `{name}`; это `display_name` бота, людям — WS `user_updated` |
 | `getChat` | `chat_id` | Chat (+ поля ChatFullInfo, которые требуют библиотеки) |
 | `sendChatAction` | `chat_id`, `action` | `true`; участникам — обычное WS `typing` (§3) |
 | `setChatMenuButton` **[new]** | `chat_id?`, `menu_button?` (`{type: "web_app", text 1–64, web_app: {url}}`, `{type: "commands"}`, `{type: "default"}`) | `true`; без `chat_id` — для всех чатов бота, с `chat_id` — для одного (бот — участник); без `menu_button` или `default` — сброс к общей. Адрес — как у кнопки `web_app` (§21.8) и не на хосте самого Vicinity, иначе 400 `BUTTON_URL_INVALID`. После изменения — WS `{"type":"bot_menu_button_changed","bot_id","channel_id"}` участникам чата (`channel_id` 0 — всем, у кого личка с ботом): шапка лички перечитывает кнопку сразу |
@@ -863,6 +868,46 @@ data = safe_parse_webapp_init_data(TOKEN, init_data)   # ValueError, если п
 создании бота и перевыпуске токена (старые initData после перевыпуска не проходят), а у ботов, созданных раньше, —
 при первом успешном вызове Bot API (любой метод, видно открытый токен). Ключ даёт только подпись initData, вызывать
 Bot API им нельзя.
+
+### 21.9 Каталог ботов и кнопка «Начать» **[new]**
+
+**Кто какого бота видит.** Бот виден пользователю, если выполнено хоть одно: владелец включил «Показывать в каталоге»
+(`is_public`, по умолчанию выключено; PATCH `/bots/{id}`), это ваш бот, бот состоит на сервере, где состоите и вы,
+у вас с ботом есть личка или общая беседа. Бот, заблокированный админом, или бот заблокированного владельца не виден
+никому: ни в каталоге, ни в профиле, и личку с ним не открыть (404). Публичного бота можно открыть в личке и по одному
+`user_id` (POST `/dms`), остальных — как раньше, по полному `username` (§7); настройки приватности людей боту не мешают,
+дружба не нужна. Те же правила видимости действуют для профиля бота (GET `/users/{id}/profile`: невидимый бот — 404, как
+несуществующий пользователь; с `?username=<полный ник>` — 200, как личка по нику), для добавления бота на сервер (POST `/servers/{id}/bots` по `bot_id` или `username`) и в
+беседу (POST `/channels/{id}/members`): чужого приватного бота, которого вы не видите, по одному id не добавить — 404.
+С полным `username` (на сервер — поле `username`, в беседу — `{user_id, username}`) можно, как открыть личку (§7).
+Бот, заблокированный админом, или бот заблокированного владельца не добавить никак.
+
+GET `/bots/directory?q=&limit=&offset=` → `{bots, has_more}`. Порядок: ваши, с ваших серверов, с личкой, остальные
+публичные; внутри — по имени. `q` (до 64 символов, иначе 400) ищет без учёта регистра (латиница и кириллица) по имени,
+`@username` и описаниям; поиск с `q` — не чаще 30 раз в минуту (как другие поиски, 429), список без `q` — не чаще 60 раз
+в минуту. `limit` 1–100 (50), `offset` ≥ 0; ограничения на общее число ботов нет — `has_more` честный.
+Элемент: `{id, username, display_name, avatar_path, short_description, is_public, mine, servers: [{id, name}] (общие с вами),
+has_dm, dm_channel_id (0 — нет)}`; `short_description` — короткое описание, а если его нет — первая строка `description`
+(до 120 символов).
+
+GET `/bots/by-username/{username}` → `{bot}`: элемент каталога (здесь `short_description` — как задано, без подстановки)
++ `description`, `commands` (как `getMyCommands`), `owner: {id, username, display_name} | null` (только тем, кому виден
+профиль владельца: он сам, друзья, общий чат или сервер), `dm_started` (вы уже писали боту в личку или нажимали его
+кнопку там; отметка постоянная — не пропадает, если сообщение удалят), `blocked` (вы заблокировали бота — сам бот
+никого не блокирует), `menu_button` (как `getChatMenuButton` для лички, иначе общая).
+Невидимый вам, несуществующий или заблокированный бот — 404 `Бот не найден`.
+
+**Клиент.** Раздел «Боты» в рейке и в списке личных сообщений (на телефоне — в меню навигации): адрес `/bots`, страница
+бота — `/bots/<username>`. На странице: описание, команды, владелец, «Написать» (открывает личку), «Добавить на сервер»
+(серверы, где вы владелец, — POST `/servers/{id}/bots`), «Поделиться» (копирует ссылку `/bots/<username>`).
+В личке с ботом, где вы ещё не писали (`dm_started: false` и в ленте нет ваших сообщений), над лентой — карточка бота
+(«Что умеет этот бот?», команды), а вместо поля ввода — кнопка «Начать»: она отправляет обычное сообщение `/start`
+(бот получает `message` с сущностью `bot_command`, §21.5). Ссылка `/bots/<username>?start=<payload>`
+(`payload` — `[A-Za-z0-9_-]{1,64}`, иначе не учитывается) запоминает параметр до перезагрузки, и «Начать» отправляет
+`/start <payload>`, как глубокая ссылка Telegram; с таким параметром «Начать» появляется и в уже начатом диалоге.
+«Написать своё сообщение» открывает обычное поле ввода сразу. Пока карточка бота грузится, вместо поля ввода — пустая
+заглушка той же высоты (без мигания поля ввода и надписи «пусто»).
+ПК-приложение и Android открывают `/bots/…` (и `vicinity://bots/…`) в приложении и передают только параметр `start`.
 
 ## 22. Входящие вебхуки каналов **[new]**
 

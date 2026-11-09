@@ -50,6 +50,7 @@
                 <data android:pathPrefix="/u/" />
                 <data android:pathPrefix="/users/" />
                 <data android:pathPrefix="/channels/" />
+                <data android:pathPrefix="/bots" />
             </intent-filter>
             <!-- vicinity://invite/КОД — кнопка «Открыть в приложении» на сайте -->
             <intent-filter>

@@ -40,7 +40,12 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // Экраны веб-клиента, которые можно открыть по ссылке (web/src/lib/routes.ts)
-const APP_PATH = /^\/(invite|gift|u|users|channels)\//;
+const APP_PATH = /^\/(?:(?:invite|gift|u|users|channels)\/|bots(?:\/|$))/;
+// Параметр запуска бота: /bots/<username>?start=<payload> (docs/API.md §21.9) — единственный query, который передаём
+const withStart = (u) => {
+  const start = /^\/bots\/[A-Za-z0-9_@]+$/.test(u.pathname) ? u.searchParams.get('start') : null;
+  return start && /^[A-Za-z0-9_-]{1,64}$/.test(start) ? `${u.pathname}?start=${start}` : u.pathname;
+};
 
 /** Путь экрана из ссылки: vicinity://invite/ABC → /invite/ABC, https://<сайт>/invite/ABC → /invite/ABC; иначе null */
 function deepLinkPath(raw) {
@@ -49,10 +54,10 @@ function deepLinkPath(raw) {
     if (raw.toLowerCase().startsWith(PROTOCOL + '://')) {
       const rest = raw.slice(PROTOCOL.length + 3).replace(/^\/+/, '');
       const u = new URL('https://x/' + rest);
-      return APP_PATH.test(u.pathname) ? u.pathname : null;
+      return APP_PATH.test(u.pathname) ? withStart(u) : null;
     }
     const u = new URL(raw);
-    return u.origin === ORIGIN && APP_PATH.test(u.pathname) ? u.pathname : null;
+    return u.origin === ORIGIN && APP_PATH.test(u.pathname) ? withStart(u) : null;
   } catch {
     return null;
   }

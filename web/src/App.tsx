@@ -16,6 +16,7 @@ import { Sidebar } from './components/Sidebar';
 import { Chat } from './components/Chat';
 import { Friends } from './components/Friends';
 import { Home } from './components/Home';
+import { BotsDirectory } from './components/BotsDirectory';
 import { GroupPanel } from './components/GroupPanel';
 import { MemberList } from './components/MemberList';
 import { ProfileModal } from './components/ProfileModal';
@@ -116,6 +117,8 @@ export default function App() {
           <Home onMenu={() => setNavOpen(true)} />
         ) : view.kind === 'friends' ? (
           <Friends onMenu={() => setNavOpen(true)} />
+        ) : view.kind === 'bots' ? (
+          <BotsDirectory onMenu={() => setNavOpen(true)} />
         ) : (
           <Chat
             onMenu={() => setNavOpen(true)}

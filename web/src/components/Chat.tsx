@@ -1,6 +1,8 @@
-import { AppWindow, AudioLines, Bell, BellOff, Hash, Menu, NotebookPen, Phone, PhoneOff, Pin, UserPlus, Users, Wallpaper } from 'lucide-react';
+import { AppWindow, AudioLines, Bell, BellOff, Hash, Menu, NotebookPen, Phone, PhoneOff, Pin, Play, UserPlus, Users, Wallpaper } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { api, MenuButton } from '../lib/api';
+import { api, ApiError, BLOCKS_CHANGED, BotCard, MenuButton } from '../lib/api';
+import { useBots } from '../lib/bots';
+import { useBotStart } from '../lib/botStart';
 import { useCall } from '../lib/call';
 import { useChannelMembers } from '../lib/channelMembers';
 import { useNotifySettings } from '../lib/notify';
@@ -84,6 +86,60 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
       off();
     };
   }, [botId, channelId]);
+
+  // Личка с ботом, которому вы ещё не писали (docs/API.md §21.9): карточка бота над лентой и «Начать» вместо поля ввода
+  const [botCard, setBotCard] = useState<BotCard | null>(null);
+  const [botGone, setBotGone] = useState(false);
+  // Карточка загрузилась или запрос завершился ошибкой; до этого — ни поля ввода, ни «Начать» (без мигания)
+  const [botSettled, setBotSettled] = useState(false);
+  const [composeAnyway, setComposeAnyway] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  const botUsername = botId !== null ? dm?.username ?? null : null;
+  useEffect(() => {
+    setBotCard(null);
+    setBotGone(false);
+    setBotSettled(false);
+    setComposeAnyway(false);
+    setPressed(false);
+    if (!botUsername) return;
+    let alive = true;
+    const load = () =>
+      api.botCard(botUsername).then(
+        (c) => {
+          if (!alive) return;
+          setBotCard(c);
+          setBotGone(false);
+          setBotSettled(true);
+        },
+        (e) => {
+          if (!alive) return;
+          if (e instanceof ApiError && e.status === 404) setBotGone(true);
+          setBotSettled(true);
+        },
+      );
+    void load();
+    // Разблокировали или заблокировали бота из профиля поверх лички — подсказка и «Начать» обновляются сразу
+    window.addEventListener(BLOCKS_CHANGED, load);
+    return () => {
+      alive = false;
+      window.removeEventListener(BLOCKS_CHANGED, load);
+    };
+  }, [botUsername, channelId]);
+  const wroteHere = useStore((s) => channelId !== null && !!s.messages[channelId]?.some((m) => m.author_id === s.me?.user_id));
+  // Нажатие кнопки бота тоже считается началом разговора
+  const pressing = useBots((s) => channelId !== null && Object.keys(s.pending).some((k) => k.startsWith(`${channelId}:`)));
+  useEffect(() => {
+    if (pressing) setPressed(true);
+  }, [pressing]);
+  const fresh = !!botCard && !botCard.dm_started && !wroteHere && !pressed;
+  // Пришли по ссылке /bots/<имя>?start=<payload>: «Начать» нужна и в начатом диалоге, чтобы бот получил /start <payload>
+  const payload = useBotStart((s) => (botUsername ? s.payloads[botUsername.toLowerCase()] : undefined));
+  const showStart = !!botCard && !botCard.blocked && !composeAnyway && (fresh || !!payload);
+  const botLoading = botUsername !== null && !botSettled;
+  const start = () => {
+    if (!dm || channelId === null) return;
+    useStore.getState().sendMessage(channelId, useBotStart.getState().take(dm.username), null, null);
+  };
 
   let title = '';
   let placeholder = '';
@@ -213,8 +269,32 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
       {(dm || group) && channelId && <VoiceRoom channelId={channelId} />}
       {channelId ? (
         <>
-          <MessageList key={channelId} channelId={channelId} />
-          <Composer key={`c${channelId}`} channelId={channelId} placeholder={placeholder} />
+          <MessageList
+            key={channelId}
+            channelId={channelId}
+            intro={fresh && botCard ? <BotIntro card={botCard} canStart={showStart} /> : botLoading ? null : undefined}
+          />
+          {botGone && <p className="bot-start-note small bot-gone">Бот недоступен: его отключили или удалили. Сообщения ему не дойдут.</p>}
+          {botCard?.blocked && (
+            <p className="bot-start-note small">Вы заблокировали этого бота — разблокируйте его в профиле, чтобы написать.</p>
+          )}
+          {botLoading ? (
+            <div className="bot-start" aria-busy="true">
+              <div className="bot-start-wait" />
+            </div>
+          ) : showStart ? (
+            <div className="bot-start">
+              <button type="button" className="btn primary bot-start-btn" onClick={start}>
+                <Icon icon={Play} size={16} />
+                Начать
+              </button>
+              <button type="button" className="link-btn small" onClick={() => setComposeAnyway(true)}>
+                Написать своё сообщение
+              </button>
+            </div>
+          ) : (
+            <Composer key={`c${channelId}`} channelId={channelId} placeholder={placeholder} autoFocus={!pressed} />
+          )}
         </>
       ) : (
         <div className="empty-state">В этом сервере пока нет текстовых каналов</div>
@@ -235,5 +315,40 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
         <NotifyMenu channelId={channelId} serverId={serverId} anchor={notifyBtn.current} onClose={() => setPanel(null)} />
       )}
     </div>
+  );
+}
+
+/** Карточка бота над пустой личкой: кто это, что умеет, какие команды знает */
+function BotIntro({ card, canStart }: { card: BotCard; canStart: boolean }) {
+  return (
+    <section className="bot-intro" aria-label={`О боте ${card.display_name}`}>
+      <Avatar name={card.display_name} src={card.avatar_path} id={card.id} size={64} />
+      <strong className="bot-intro-name">
+        <span className="ellipsis">{card.display_name}</span>
+        <span className="bot-tag">Бот</span>
+      </strong>
+      <span className="muted small">@{card.username}</span>
+      <div className="bot-intro-block">
+        <h3>Что умеет этот бот?</h3>
+        <p className="bot-intro-desc">
+          {card.description ||
+            card.short_description ||
+            (canStart ? 'Бот пока ничего о себе не рассказал. Нажмите «Начать», чтобы узнать.' : 'Бот пока ничего о себе не рассказал.')}
+        </p>
+      </div>
+      {card.commands.length > 0 && (
+        <div className="bot-intro-block">
+          <h3>Команды</h3>
+          <ul className="bot-commands small">
+            {card.commands.map((c) => (
+              <li key={c.command}>
+                <code>/{c.command}</code>
+                <span className="muted">{c.description}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }

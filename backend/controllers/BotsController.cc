@@ -23,6 +23,7 @@ namespace {
 
 constexpr int kMaxBotsPerOwner = 10;
 constexpr size_t kMaxDescription = 512;
+constexpr size_t kMaxShortDescription = 120;
 
 int64_t uid(const HttpRequestPtr& req) { return req->attributes()->get<int64_t>("user_id"); }
 
@@ -58,6 +59,115 @@ Json::Value shortBot(const orm::Row& r) {
     return b;
 }
 
+
+// ---------- Каталог (docs/API.md §21.9) ----------
+
+// Боты, которых видит пользователь (Bots::kVisibleWhere: публичные, свои, с общего сервера, из общей лички или беседы;
+// бот или его владелец заблокирован админом — бота нет нигде), в порядке каталога: свои, с общих серверов, с личкой, по имени.
+// Сначала отбор по видимости, потом сортировка и страница — в SQL. name — только бот с этим @именем (пусто — все);
+// needle — ASCII-подстрока поиска в нижнем регистре (пусто — без поиска); limit < 0 — без предела
+orm::Result visibleBots(const orm::DbClientPtr& db, int64_t viewer, std::string name, std::string needle,
+                        int64_t limit, int64_t offset) {
+    const std::string sql =
+        "SELECT u.id, u.username, u.display_name, u.avatar_path, b.short_description, b.description, "
+        "b.is_public, b.owner_id, b.commands, "
+        "EXISTS(SELECT 1 FROM server_members v2 JOIN server_members v1 ON v1.server_id = v2.server_id AND v1.user_id = u.id "
+        "  WHERE v2.user_id = ?) AS on_server, "
+        "EXISTS(SELECT 1 FROM channel_members d2 JOIN channel_members d1 ON d1.channel_id = d2.channel_id AND d1.user_id = u.id "
+        "  JOIN channels dc ON dc.id = d2.channel_id AND dc.type = 'dm' WHERE d2.user_id = ?) AS in_dm "
+        "FROM bots b JOIN users u ON u.id = b.user_id JOIN users o ON o.id = b.owner_id WHERE " +
+        std::string(Bots::kVisibleWhere) +
+        " AND (? = '' OR u.username = ? COLLATE NOCASE) "
+        "AND (? = '' OR instr(lower(u.display_name), ?) > 0 OR instr('@' || lower(u.username), ?) > 0 "
+        "  OR instr(lower(b.short_description), ?) > 0 OR instr(lower(b.description), ?) > 0) "
+        "ORDER BY (b.owner_id = ?) DESC, on_server DESC, in_dm DESC, u.display_name COLLATE NOCASE, u.id "
+        "LIMIT ? OFFSET ?";
+    std::string name2 = name, n2 = needle, n3 = needle, n4 = needle, n5 = needle;
+    return db->execSqlSync(sql, viewer, viewer, viewer, viewer, viewer, name, name2, needle, n2, n3, n4, n5, viewer,
+                           limit, offset);
+}
+
+// Личка ровно этих двоих (0 — нет)
+int64_t dmWith(const orm::DbClientPtr& db, int64_t viewer, int64_t botId) {
+    auto r = db->execSqlSync(
+        "SELECT c.id FROM channel_members m2 JOIN channel_members m1 ON m1.channel_id = m2.channel_id AND m1.user_id = ? "
+        "JOIN channels c ON c.id = m2.channel_id AND c.type = 'dm' WHERE m2.user_id = ? "
+        "AND (SELECT COUNT(*) FROM channel_members x WHERE x.channel_id = c.id) = 2 ORDER BY c.id LIMIT 1",
+        botId, viewer);
+    return r.empty() ? 0 : r[0]["id"].as<int64_t>();
+}
+
+// Нижний регистр для поиска: ASCII и кириллица (А–Я, Ё)
+std::string fold(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        if (c < 0x80) { out += static_cast<char>(std::tolower(c)); continue; }
+        if (c == 0xD0 && i + 1 < s.size()) {
+            const auto d = static_cast<unsigned char>(s[i + 1]);
+            if (d >= 0x90 && d <= 0x9F) { out += static_cast<char>(0xD0); out += static_cast<char>(d + 0x20); ++i; continue; }
+            if (d >= 0xA0 && d <= 0xAF) { out += static_cast<char>(0xD1); out += static_cast<char>(d - 0x20); ++i; continue; }
+            if (d == 0x81) { out += static_cast<char>(0xD1); out += static_cast<char>(0x91); ++i; continue; }
+        }
+        out += static_cast<char>(c);
+    }
+    return out;
+}
+
+// Первые n символов UTF-8 (по кодовым точкам)
+std::string utf8Prefix(const std::string& s, size_t n) {
+    size_t i = 0, count = 0;
+    while (i < s.size() && count < n) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        const size_t len = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : 4;
+        i += len;
+        ++count;
+    }
+    return s.substr(0, std::min(i, s.size()));
+}
+
+// Короткое описание для списка: short_description, а если его нет — первая строка description (до 120 символов)
+std::string shortAbout(const orm::Row& r) {
+    std::string s = r["short_description"].isNull() ? std::string() : r["short_description"].as<std::string>();
+    if (!s.empty()) return s;
+    std::string d = r["description"].isNull() ? std::string() : r["description"].as<std::string>();
+    d = TextUtils::trim(d.substr(0, d.find('\n')));
+    if (TextUtils::utf8Length(d) > kMaxShortDescription) d = utf8Prefix(d, kMaxShortDescription - 1) + "…";
+    return d;
+}
+
+// Общие с пользователем серверы бота
+Json::Value sharedServers(const orm::DbClientPtr& db, int64_t botId, int64_t viewer) {
+    Json::Value arr(Json::arrayValue);
+    for (const auto& s : db->execSqlSync(
+             "SELECT s.id, s.name FROM servers s JOIN server_members a ON a.server_id = s.id AND a.user_id = ? "
+             "JOIN server_members m ON m.server_id = s.id AND m.user_id = ? ORDER BY s.name COLLATE NOCASE", botId, viewer)) {
+        Json::Value v;
+        v["id"]   = static_cast<Json::Int64>(s["id"].as<int64_t>());
+        v["name"] = s["name"].as<std::string>();
+        arr.append(v);
+    }
+    return arr;
+}
+
+// Элемент каталога: {id, username, display_name, avatar_path, short_description, is_public, mine, servers, has_dm, dm_channel_id}
+Json::Value directoryItem(const orm::DbClientPtr& db, const orm::Row& r, int64_t viewer) {
+    Json::Value b;
+    const int64_t id = r["id"].as<int64_t>();
+    b["id"]                = static_cast<Json::Int64>(id);
+    b["username"]          = r["username"].as<std::string>();
+    b["display_name"]      = r["display_name"].as<std::string>();
+    b["avatar_path"]       = r["avatar_path"].isNull() ? std::string() : r["avatar_path"].as<std::string>();
+    b["short_description"] = shortAbout(r);
+    b["is_public"]         = r["is_public"].as<int>() != 0;
+    b["mine"]              = r["owner_id"].as<int64_t>() == viewer;
+    b["servers"]           = sharedServers(db, id, viewer);
+    const int64_t dm = r["in_dm"].as<int>() != 0 ? dmWith(db, viewer, id) : 0;
+    b["has_dm"]            = dm != 0;
+    b["dm_channel_id"]     = static_cast<Json::Int64>(dm);
+    return b;
+}
 } // namespace
 
 // GET /api/v1/bots — мои боты
@@ -69,6 +179,109 @@ void BotsController::list(const HttpRequestPtr& req, std::function<void(const Ht
             arr.append(Bots::botObject(db, r["user_id"].as<int64_t>()));
         Json::Value resp;
         resp["bots"] = arr;
+        cb(HttpUtils::json(std::move(resp)));
+    } catch (const std::exception& e) {
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
+    }
+}
+
+// GET /api/v1/bots/directory?q=&limit=&offset= — каталог: боты, видимые пользователю (§21.9)
+void BotsController::directory(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb) {
+    const int64_t self = uid(req);
+    std::string q = TextUtils::trim(req->getParameter("q"));
+    if (!TextUtils::isValidUtf8(q) || TextUtils::utf8Length(q) > 64) { cb(error("Слишком длинный запрос", k400BadRequest)); return; }
+    const int64_t limit = std::clamp<int64_t>(HttpUtils::intParam(req, "limit", 50), 1, 100);
+    const int64_t offset = std::max<int64_t>(HttpUtils::intParam(req, "offset", 0), 0);
+    // Поиск — как другие поиски (30 в минуту), просто список — 60 в минуту
+    if (!UserRateLimiter::instance().allow(q.empty() ? UserRateLimiter::Action::Directory : UserRateLimiter::Action::Search, self)) {
+        cb(HttpUtils::tooManyRequests()); return;
+    }
+    auto db = app().getDbClient();
+    try {
+        const std::string needle = fold(q);
+        const bool ascii = std::all_of(needle.begin(), needle.end(), [](unsigned char c) { return c < 0x80; });
+        Json::Value arr(Json::arrayValue);
+        bool more = false;
+        if (ascii) {
+            // Поиск латиницей (ники, имена, описания) — целиком в SQL: lower() и instr() точны для ASCII
+            const auto rows = visibleBots(db, self, "", needle, limit + 1, offset);
+            for (const auto& r : rows) {
+                if (static_cast<int64_t>(arr.size()) >= limit) { more = true; break; }
+                arr.append(directoryItem(db, r, self));
+            }
+        } else {
+            // Кириллица и прочее: регистр сворачивает fold(), отбор видимых — всё равно в SQL
+            int64_t matched = 0;
+            for (const auto& r : visibleBots(db, self, "", "", -1, 0)) {
+                const std::string hay = fold(r["display_name"].as<std::string>()) + "\n@" + r["username"].as<std::string>() +
+                                        "\n" + fold(r["short_description"].as<std::string>()) + "\n" +
+                                        fold(r["description"].as<std::string>());
+                if (hay.find(needle) == std::string::npos) continue;
+                if (matched++ < offset) continue;
+                if (static_cast<int64_t>(arr.size()) >= limit) { more = true; break; }
+                arr.append(directoryItem(db, r, self));
+            }
+        }
+        Json::Value resp;
+        resp["bots"] = arr;
+        resp["has_more"] = more;
+        cb(HttpUtils::json(std::move(resp)));
+    } catch (const std::exception& e) {
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
+    }
+}
+
+// GET /api/v1/bots/by-username/{username} — карточка бота (§21.9); невидимый пользователю бот — 404
+void BotsController::card(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb,
+                          const std::string& username) {
+    const int64_t self = uid(req);
+    std::string name = username;
+    if (!name.empty() && name[0] == '@') name.erase(0, 1);
+    const bool okName = !name.empty() && name.size() <= 32 && std::all_of(name.begin(), name.end(), [](unsigned char c) {
+        return std::isalnum(c) || c == '_';
+    });
+    if (!okName) { cb(error("Бот не найден", k404NotFound)); return; }
+    auto db = app().getDbClient();
+    try {
+        auto rows = visibleBots(db, self, name, "", 1, 0);
+        if (rows.empty()) { cb(error("Бот не найден", k404NotFound)); return; }
+        const auto& r = rows[0];
+        const int64_t id = r["id"].as<int64_t>();
+        Json::Value b = directoryItem(db, r, self);
+        b["short_description"] = r["short_description"].as<std::string>();
+        b["description"] = r["description"].as<std::string>();
+        Json::Value commands(Json::arrayValue);
+        if (!JsonUtils::parse(r["commands"].as<std::string>(), commands) || !commands.isArray()) commands = Json::Value(Json::arrayValue);
+        b["commands"] = commands;
+        // Владелец — только тем, кому виден его профиль (знакомые: друзья, общий чат или сервер)
+        const int64_t owner = r["owner_id"].as<int64_t>();
+        b["owner"] = Json::Value(Json::nullValue);
+        if (Access::canSeeProfile(db, self, owner)) {
+            auto o = db->execSqlSync("SELECT username, display_name FROM users WHERE id = ?", owner);
+            if (!o.empty()) {
+                Json::Value ov;
+                ov["id"]           = static_cast<Json::Int64>(owner);
+                ov["username"]     = o[0]["username"].as<std::string>();
+                ov["display_name"] = o[0]["display_name"].as<std::string>();
+                b["owner"] = ov;
+            }
+        }
+        const int64_t dm = b["dm_channel_id"].asInt64();
+        // Писал ли пользователь боту (сообщение или нажатие кнопки в личке) — иначе в личке кнопка «Начать».
+        // Отметка в bot_dm_started не пропадает, даже если сообщение потом удалят
+        bool started = false;
+        if (dm != 0) {
+            started = !db->execSqlSync("SELECT 1 FROM bot_dm_started WHERE channel_id = ? AND user_id = ?", dm, self).empty();
+            if (!started && !db->execSqlSync("SELECT 1 FROM messages WHERE channel_id = ? AND author_id = ? LIMIT 1", dm, self).empty()) {
+                db->execSqlSync("INSERT OR IGNORE INTO bot_dm_started(channel_id, user_id) VALUES(?, ?)", dm, self);
+                started = true;
+            }
+        }
+        b["dm_started"] = started;
+        b["blocked"] = Access::blockedBetween(db, self, id);
+        b["menu_button"] = Bots::menuButton(db, id, dm);
+        Json::Value resp;
+        resp["bot"] = b;
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
         cb(error(HttpUtils::internal(e), k500InternalServerError));
@@ -127,7 +340,7 @@ void BotsController::create(const HttpRequestPtr& req, std::function<void(const 
     }
 }
 
-// PATCH /api/v1/bots/{id} {display_name?, description?, read_all?}
+// PATCH /api/v1/bots/{id} {display_name?, description?, short_description?, read_all?, is_public?}
 void BotsController::update(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id) {
     auto json = req->getJsonObject();
     if (!json || !json->isObject()) { cb(error("Invalid JSON", k400BadRequest)); return; }
@@ -148,8 +361,17 @@ void BotsController::update(const HttpRequestPtr& req, std::function<void(const 
             }
             db->execSqlSync("UPDATE bots SET description = ? WHERE user_id = ?", d, id);
         }
+        if (JsonUtils::has(*json, "short_description")) {
+            std::string d = TextUtils::trim(JsonUtils::getStr(*json, "short_description"));
+            if (!TextUtils::isValidUtf8(d) || TextUtils::utf8Length(d) > kMaxShortDescription || TextUtils::hasControlChars(d)) {
+                cb(error("Короткое описание — одна строка не длиннее 120 символов", k400BadRequest)); return;
+            }
+            db->execSqlSync("UPDATE bots SET short_description = ? WHERE user_id = ?", d, id);
+        }
         if (JsonUtils::has(*json, "read_all"))
             db->execSqlSync("UPDATE bots SET read_all = ? WHERE user_id = ?", JsonUtils::getBool(*json, "read_all") ? 1 : 0, id);
+        if (JsonUtils::has(*json, "is_public"))
+            db->execSqlSync("UPDATE bots SET is_public = ? WHERE user_id = ?", JsonUtils::getBool(*json, "is_public") ? 1 : 0, id);
         if (renamed) Broadcast::userUpdated(id);
         Json::Value resp;
         resp["bot"] = Bots::botObject(db, id);
@@ -250,7 +472,12 @@ void BotsController::addToServer(const HttpRequestPtr& req, std::function<void(c
                               "JOIN bots b ON b.user_id = u.id WHERE u.id = ?", botIdParam)
             : db->execSqlSync("SELECT u.id, u.username, u.display_name, u.avatar_path, b.description FROM users u "
                               "JOIN bots b ON b.user_id = u.id WHERE u.username = ? COLLATE NOCASE", username);
-        if (r.empty()) { cb(error("Бот не найден — проверьте @имя", k404NotFound)); return; }
+        // По id — только бот, которого вы видите (§21.9): перебором номеров чужого приватного бота не добавить.
+        // По полному @имени — как личку (§7): имя знает тот, кому его дали; заблокированный админом бот — нигде
+        if (r.empty() || (botIdParam > 0 ? !Bots::visibleTo(db, self, r[0]["id"].as<int64_t>())
+                                         : !Bots::available(db, r[0]["id"].as<int64_t>()))) {
+            cb(error("Бот не найден — проверьте @имя", k404NotFound)); return;
+        }
         const int64_t botId = r[0]["id"].as<int64_t>();
         if (Access::isBanned(db, id, botId)) { cb(error("Этот бот заблокирован на сервере", k403Forbidden)); return; }
         auto ins = db->execSqlSync(
@@ -357,6 +584,9 @@ void BotsController::press(const HttpRequestPtr& req, std::function<void(const H
             cb(error("Бот больше не в этом чате — кнопка не работает", k400BadRequest)); return;
         }
         std::string queryId = CryptoUtils::randomHex(16);
+        // Нажатие в личке с ботом — диалог начат (кнопка «Начать» больше не нужна, docs/API.md §21.9)
+        db->execSqlSync("INSERT OR IGNORE INTO bot_dm_started(channel_id, user_id) SELECT id, ? FROM channels WHERE id = ? AND type = 'dm'",
+                        self, id);
         db->execSqlSync("INSERT INTO bot_callbacks(id, bot_id, user_id, channel_id, message_id, data) VALUES(?, ?, ?, ?, ?, ?)",
                         queryId, botId, self, id, mid, data);
         Json::Value q;

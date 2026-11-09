@@ -186,15 +186,17 @@
   flex: 1;
   min-height: 8px;
 }
-/* Разделы в рейке (Главная, Друзья, Голос): квадраты со скруглением, активный — мягкая заливка акцентом */
+/* Разделы в рейке (Главная, Друзья, Боты, Голос): квадраты со скруглением, активный — мягкая заливка акцентом */
 .rail-item.start,
 .rail-item.friends,
+.rail-item.bots,
 .rail-item.voice {
   color: var(--text-2);
   background: transparent;
 }
 .rail-item.start:hover,
 .rail-item.friends:hover,
+.rail-item.bots:hover,
 .rail-item.voice:hover {
   background: var(--bg-hover);
   color: var(--text);
@@ -202,6 +204,7 @@
 }
 .rail-item.start.active,
 .rail-item.friends.active,
+.rail-item.bots.active,
 .rail-item.voice.active {
   background: var(--accent-soft);
   color: var(--accent);

@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { ChatBgLayer } from './ChatBackground';
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Message, parseTs } from '../lib/api';
 import { useBots } from '../lib/bots';
 import { imageMenuProps, imageTarget } from '../lib/imageMenu';
@@ -26,7 +26,9 @@ const NO_EPHEMERAL: Message[] = [];
 
 const newestId = (list: Message[] | undefined) => (list ?? []).reduce((a, m) => (m.local ? a : Math.max(a, m.id)), 0);
 
-export function MessageList({ channelId }: { channelId: number }) {
+/** intro — карточка над лентой (пустая личка с ботом: описание и команды, docs/API.md §21.9);
+ *  null — ни карточки, ни надписи «пусто» (карточка бота ещё грузится) */
+export function MessageList({ channelId, intro }: { channelId: number; intro?: ReactNode }) {
   const messages = useStore((s) => s.messages[channelId]);
   // Эфемерные сообщения ботов — только у меня, всегда внизу ленты
   const ephemeral = useBots((s) => s.ephemeral[channelId] ?? NO_EPHEMERAL);
@@ -217,7 +219,8 @@ export function MessageList({ channelId }: { channelId: number }) {
     <div className="messages-wrap">
       <ChatBgLayer channelId={channelId} />
       <div className="messages" ref={scrollRef} onScroll={onScroll} role="log" aria-label="Сообщения">
-        {messages.length === 0 && <div className="empty-state">Здесь пока пусто — напишите первым!</div>}
+        {intro}
+        {messages.length === 0 && intro === undefined && <div className="empty-state">Здесь пока пусто — напишите первым!</div>}
         {hasMore === true && (
           <div className="history-note">
             <button className="link-btn small" onClick={older} disabled={loadingOlder}>

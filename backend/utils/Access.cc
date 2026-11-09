@@ -101,6 +101,11 @@ int64_t profileLinkOwner(const drogon::orm::DbClientPtr& db, const std::string& 
 bool canReach(const drogon::orm::DbClientPtr& db, int64_t viewer, int64_t target,
               const std::string& link, std::string username) {
     if (canSeeProfile(db, viewer, target)) return true;
+    // Бот из каталога (is_public, docs/API.md §21.9) открыт всем — как его страница
+    // (кроме заблокированного админом бота или бота заблокированного владельца)
+    if (!db->execSqlSync("SELECT 1 FROM bots b JOIN users u ON u.id = b.user_id JOIN users o ON o.id = b.owner_id "
+                         "WHERE b.user_id = ? AND b.is_public = 1 AND u.banned = 0 AND o.banned = 0", target).empty())
+        return true;
     if (!link.empty() && profileLinkOwner(db, link) == target) return true;
     if (!username.empty() && username[0] == '@') username.erase(0, 1);
     if (username.empty() || username.size() > 64) return false;

@@ -1240,6 +1240,24 @@ bool isBot(const drogon::orm::DbClientPtr& db, int64_t userId) {
     return !r.empty() && !r[0]["is_bot"].isNull() && r[0]["is_bot"].as<int>() != 0;
 }
 
+const char* const kVisibleWhere =
+    "u.banned = 0 AND o.banned = 0 AND (b.is_public = 1 OR b.owner_id = ? "
+    "OR EXISTS(SELECT 1 FROM server_members s2 JOIN server_members s1 ON s1.server_id = s2.server_id AND s1.user_id = u.id "
+    "  WHERE s2.user_id = ?) "
+    "OR EXISTS(SELECT 1 FROM channel_members a2 JOIN channel_members a ON a.channel_id = a2.channel_id AND a.user_id = u.id "
+    "  JOIN channels ch ON ch.id = a2.channel_id AND ch.type IN ('dm', 'group') WHERE a2.user_id = ?))";
+
+bool visibleTo(const drogon::orm::DbClientPtr& db, int64_t viewer, int64_t botId) {
+    return !db->execSqlSync(std::string("SELECT 1 FROM bots b JOIN users u ON u.id = b.user_id JOIN users o ON o.id = b.owner_id "
+                                        "WHERE b.user_id = ? AND ") + kVisibleWhere,
+                            botId, viewer, viewer, viewer).empty();
+}
+
+bool available(const drogon::orm::DbClientPtr& db, int64_t botId) {
+    return !db->execSqlSync("SELECT 1 FROM bots b JOIN users u ON u.id = b.user_id JOIN users o ON o.id = b.owner_id "
+                            "WHERE b.user_id = ? AND u.banned = 0 AND o.banned = 0", botId).empty();
+}
+
 std::string usernameProblem(const std::string& username) {
     if (username.size() < 5 || username.size() > 32) return "Имя бота — от 5 до 32 символов";
     for (char c : username)
@@ -1252,7 +1270,7 @@ std::string usernameProblem(const std::string& username) {
 Json::Value botObject(const drogon::orm::DbClientPtr& db, int64_t botId) {
     auto r = db->execSqlSync(
         "SELECT u.id, u.username, u.display_name, u.avatar_path, b.description, b.token_hint, b.read_all, "
-        "b.webhook_url, b.webhook_error, b.commands, b.owner_id, b.created_at FROM bots b JOIN users u ON u.id = b.user_id "
+        "b.webhook_url, b.webhook_error, b.commands, b.owner_id, b.created_at, b.short_description, b.is_public FROM bots b JOIN users u ON u.id = b.user_id "
         "WHERE b.user_id = ?", botId);
     if (r.empty()) return Json::Value(Json::nullValue);
     const auto& row = r[0];
@@ -1262,6 +1280,8 @@ Json::Value botObject(const drogon::orm::DbClientPtr& db, int64_t botId) {
     b["display_name"]  = row["display_name"].as<std::string>();
     b["avatar_path"]   = str(row, "avatar_path");
     b["description"]   = str(row, "description");
+    b["short_description"] = str(row, "short_description");
+    b["is_public"]     = row["is_public"].as<int>() != 0;
     b["token_hint"]    = str(row, "token_hint");
     b["read_all"]      = row["read_all"].as<int>() != 0;
     b["webhook_url"]   = str(row, "webhook_url");

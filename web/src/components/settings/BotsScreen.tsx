@@ -33,7 +33,7 @@ export function BotsScreen() {
 
   const replace = (b: Bot) => setBots((list) => (list ?? []).map((x) => (x.id === b.id ? b : x)));
 
-  const patch = async (b: Bot, p: { read_all?: boolean }) => {
+  const patch = async (b: Bot, p: { read_all?: boolean; is_public?: boolean }) => {
     replace({ ...b, ...p });
     try {
       replace(await api.patchBot(b.id, p));
@@ -137,6 +137,13 @@ export function BotsScreen() {
                 checked={!!b.read_all}
                 onChange={(read_all) => void patch(b, { read_all })}
               />
+              <Toggle
+                label="Показывать в каталоге"
+                hint="Бота найдут все в разделе «Боты». Выключено — его видят только вы, участники ваших серверов с ботом и те, кто ему уже писал"
+                checked={!!b.is_public}
+                onChange={(is_public) => void patch(b, { is_public })}
+              />
+              <BotAbout bot={b} onSaved={replace} />
               <div className="stack-row wrap">
                 <button type="button" className="btn small" onClick={() => write(b)}>
                   <Icon icon={MessageSquare} size={14} />
@@ -172,6 +179,52 @@ export function BotsScreen() {
         </ConfirmDialog>
       )}
     </div>
+  );
+}
+
+/** Описание бота: полное — в пустой личке («Что умеет этот бот?»), короткое — в каталоге (setMyDescription / setMyShortDescription) */
+function BotAbout({ bot, onSaved }: { bot: Bot; onSaved: (b: Bot) => void }) {
+  const toast = useStore((s) => s.toast);
+  const [description, setDescription] = useState(bot.description ?? '');
+  const [short, setShort] = useState(bot.short_description ?? '');
+  const [busy, setBusy] = useState(false);
+  // Бот сам поменял описание через Bot API — показываем новое, пока поле не трогали
+  useEffect(() => setDescription(bot.description ?? ''), [bot.description]);
+  useEffect(() => setShort(bot.short_description ?? ''), [bot.short_description]);
+  const changed = description !== (bot.description ?? '') || short !== (bot.short_description ?? '');
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!changed || busy) return;
+    setBusy(true);
+    try {
+      onSaved(await api.patchBot(bot.id, { description, short_description: short }));
+      toast('Описание сохранено');
+    } catch (err) {
+      toast(errText(err, 'Не удалось сохранить описание'), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="stack bot-about-form" onSubmit={save} aria-label={`Описание бота @${bot.username}`}>
+      <label>
+        Короткое описание
+        <input value={short} maxLength={120} placeholder="Погода в любом городе за секунду" onChange={(e) => setShort(e.target.value.replace(/\n/g, ' '))} />
+        <span className="bot-about-count">Видно в каталоге · {short.length}/120</span>
+      </label>
+      <label>
+        Что умеет этот бот?
+        <textarea value={description} maxLength={512} placeholder="Расскажите, что делает бот и с какой команды начать" onChange={(e) => setDescription(e.target.value)} />
+        <span className="bot-about-count">Видно в пустой личке с ботом и на его странице · {description.length}/512</span>
+      </label>
+      <div className="row end">
+        <button className="btn small" disabled={!changed || busy}>
+          Сохранить описание
+        </button>
+      </div>
+    </form>
   );
 }
 

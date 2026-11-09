@@ -16,6 +16,7 @@ Limit limitFor(UserRateLimiter::Action a) {
         case A::CallInvite:    return {10, 60};
         case A::Typing:        return {1, 2};
         case A::Search:        return {30, 60};
+        case A::Directory:     return {60, 60};
         case A::Presence:      return {10, 60};
         case A::VoiceJoin:     return {20, 60};
         case A::VoiceQuery:    return {30, 60};

@@ -27,6 +27,7 @@ import { notifyMessage } from './notify';
 import { popupSurface } from './popups';
 import { loadPlan } from './plan';
 import { parsePath, viewForRoute } from './routes';
+import { startPayload, useBotStart } from './botStart';
 import { socket, WsEvent } from './ws';
 
 // Что открыто в основной области
@@ -35,7 +36,9 @@ export type View =
   | { kind: 'friends' }
   | { kind: 'dm'; channelId: number }
   | { kind: 'group'; channelId: number }
-  | { kind: 'server'; serverId: number; channelId: number | null };
+  | { kind: 'server'; serverId: number; channelId: number | null }
+  /** Каталог ботов; username — открыта страница бота */
+  | { kind: 'bots'; username: string | null };
 
 export interface VoiceUser {
   user_id: number;
@@ -912,6 +915,8 @@ export const useStore = create<State>((set, get) => {
     if (e !== epoch) return;
     // Экран из адреса (прямая ссылка, перезагрузка), иначе последний открытый — если он ещё доступен
     const route = parsePath(location.pathname);
+    // Ссылка на бота с параметром запуска (/bots/<username>?start=…) — «Начать» в личке отправит его боту
+    if (route?.kind === 'bots' && route.username) useBotStart.getState().remember(route.username, startPayload(location.search));
     const s = get();
     let v: View | null = route && route.kind !== 'invite' && route.kind !== 'gift' ? viewForRoute(s, route) : null;
     if (!v) {
@@ -919,6 +924,7 @@ export const useStore = create<State>((set, get) => {
       const ok =
         last.kind === 'friends' ||
         last.kind === 'home' ||
+        last.kind === 'bots' ||
         (last.kind === 'dm' && s.dms.some((d) => d.channel_id === last.channelId)) ||
         (last.kind === 'group' && s.groups.some((g) => g.id === last.channelId)) ||
         (last.kind === 'server' && s.servers.some((x) => x.id === last.serverId));

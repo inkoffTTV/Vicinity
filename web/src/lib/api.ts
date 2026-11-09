@@ -306,6 +306,38 @@ export interface Bot {
   commands: BotCommand[];
   servers: { id: number; name: string }[];
   created_at: string;
+  /** Короткое описание для каталога (≤120) */
+  short_description?: string;
+  /** «Показывать в каталоге» */
+  is_public?: boolean;
+}
+
+/** Бот в каталоге (GET /bots/directory, docs/API.md §21.9) */
+export interface DirectoryBot {
+  id: number;
+  username: string;
+  display_name: string;
+  avatar_path: string;
+  /** short_description, а если его нет — первая строка описания */
+  short_description: string;
+  is_public: boolean;
+  mine: boolean;
+  /** Общие с вами серверы, где есть бот */
+  servers: { id: number; name: string }[];
+  has_dm: boolean;
+  dm_channel_id: number;
+}
+
+/** Карточка бота (GET /bots/by-username/{username}) */
+export interface BotCard extends DirectoryBot {
+  description: string;
+  commands: BotCommand[];
+  owner: { id: number; username: string; display_name: string } | null;
+  /** Вы уже писали боту в личку (или нажимали его кнопки) — «Начать» не нужна */
+  dm_started: boolean;
+  /** Вы заблокировали бота (сам бот никого не блокирует) — написать нельзя, пока не разблокируете */
+  blocked: boolean;
+  menu_button: MenuButton;
 }
 
 export interface ServerBot {
@@ -837,6 +869,13 @@ export function setToken(t: string | null) {
 export function getToken() {
   return token;
 }
+/** Событие окна: блокировки изменились (block/unblock) — открытые экраны перечитывают своё («Начать» в личке с ботом) */
+export const BLOCKS_CHANGED = 'vicinity:blocks-changed';
+function blocksChanged<T>(r: T): T {
+  window.dispatchEvent(new Event(BLOCKS_CHANGED));
+  return r;
+}
+
 export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn;
 }
@@ -992,8 +1031,9 @@ export const api = {
   listGroups: () => get<{ channels: Group[] }>('/channels').then((r) => r.channels),
   createGroup: (name: string) =>
     post<{ channel_id: number }>('/channels', { type: 'group', name }),
-  addGroupMember: (channelId: number, user_id: number) =>
-    post<InviteResult>(`/channels/${channelId}/members`, { user_id }),
+  /** username — полный @ник бота: чужого приватного бота по одному id не добавить (docs/API.md §21.9) */
+  addGroupMember: (channelId: number, user_id: number, username?: string) =>
+    post<InviteResult>(`/channels/${channelId}/members`, username ? { user_id, username } : { user_id }),
   /** Переименовать беседу или канал сервера */
   renameChannel: (channelId: number, name: string) =>
     post<{ channel_id: number; name: string }>(`/channels/${channelId}/update`, { name }),
@@ -1086,7 +1126,16 @@ export const api = {
     get<{ menu_button: MenuButton }>(`/bots/${botId}/menu_button?channel_id=${channelId}`).then((r) => r.menu_button),
   bots: () => get<{ bots: Bot[] }>('/bots').then((r) => r.bots),
   createBot: (username: string, display_name: string) => post<{ bot: Bot; token: string }>('/bots', { username, display_name }),
-  patchBot: (id: number, p: { display_name?: string; description?: string; read_all?: boolean }) =>
+  botDirectory: (q: string, offset = 0, limit = 50) =>
+    get<{ bots: DirectoryBot[]; has_more: boolean }>(
+      `/bots/directory?q=${encodeURIComponent(q)}&offset=${offset}&limit=${limit}`,
+    ),
+  botCard: (username: string) =>
+    get<{ bot: BotCard }>(`/bots/by-username/${encodeURIComponent(username)}`).then((r) => r.bot),
+  patchBot: (
+    id: number,
+    p: { display_name?: string; description?: string; short_description?: string; read_all?: boolean; is_public?: boolean },
+  ) =>
     request<{ bot: Bot }>('PATCH', `/bots/${id}`, p).then((r) => r.bot),
   /** Новый токен; старый сразу перестаёт работать */
   botToken: (id: number) => post<{ bot: Bot; token: string }>(`/bots/${id}/token`),
@@ -1146,8 +1195,8 @@ export const api = {
   friendRespond: (user_id: number, accept: boolean) =>
     post<{ status: string }>('/friends/respond', { user_id, accept }),
   friendRemove: (id: number) => del(`/friends/${id}`),
-  block: (id: number) => post<{ blocked: boolean }>(`/users/${id}/block`),
-  unblock: (id: number) => del<{ blocked: boolean }>(`/users/${id}/block`),
+  block: (id: number) => post<{ blocked: boolean }>(`/users/${id}/block`).then(blocksChanged),
+  unblock: (id: number) => del<{ blocked: boolean }>(`/users/${id}/block`).then(blocksChanged),
   blocks: () => get<{ users: UserSummary[] }>('/blocks').then((r) => r.users),
 
   // ── Профиль ──

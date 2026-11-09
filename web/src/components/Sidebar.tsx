@@ -1,4 +1,4 @@
-import { ChevronDown, Hash, Home, Image, Link, LogOut, MessagesSquare, NotebookPen, Paperclip, Pencil, Plus, Settings, ShieldQuestion, Trash2, UserRound, Users, Volume2 } from 'lucide-react';
+import { Bot, ChevronDown, Hash, Home, Image, Link, LogOut, MessagesSquare, NotebookPen, Paperclip, Pencil, Plus, Settings, ShieldQuestion, Trash2, UserRound, Users, Volume2 } from 'lucide-react';
 import { FormEvent, MouseEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { ADMIN_USERNAME, isAdminUsername, openAdminDm } from '../lib/admin';
 import { api, ApiError, LastMessage, normalizeExt, parseTs, Presence, ServerChannel } from '../lib/api';
@@ -102,6 +102,15 @@ function HomeSide() {
           </span>
           <span className="grow">Друзья</span>
           {incoming.length > 0 && <span className="badge inline">{incoming.length}</span>}
+        </button>
+        <button
+          className={`side-item${view.kind === 'bots' ? ' active' : ''}`}
+          onClick={() => open({ kind: 'bots', username: null })}
+        >
+          <span className="side-icon" aria-hidden="true">
+            <Icon icon={Bot} />
+          </span>
+          <span className="grow">Боты</span>
         </button>
         {showAdmin && (
           <button className="side-item admin-item" title={`Личные сообщения с администратором @${ADMIN_USERNAME}`} onClick={() => void openAdminDm()}>

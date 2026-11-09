@@ -832,6 +832,52 @@ HttpResponsePtr deleteMyCommands(Ctx& c) {
     return ok(true);
 }
 
+// Описание бота (docs/API.md §21.9): description до 512 символов — «Что умеет этот бот?» в пустой личке,
+// short_description до 120 — в каталоге. Пустое значение убирает описание; language_code принимается и игнорируется
+HttpResponsePtr setDescriptionField(Ctx& c, const char* param, const char* column, size_t maxLen, bool multiline) {
+    const std::string raw = c.p.str(param);
+    const std::string d = TextUtils::trim(raw);
+    if (!TextUtils::isValidUtf8(d) || TextUtils::hasControlChars(d, multiline))
+        return fail(400, std::string("Bad Request: ") + param + " is invalid");
+    if (TextUtils::utf8Length(d) > maxLen)
+        return fail(400, std::string("Bad Request: ") + param + " is too long (at most " + std::to_string(maxLen) + " characters)");
+    std::string value = d;
+    c.db->execSqlSync(std::string("UPDATE bots SET ") + column + " = ? WHERE user_id = ?", value, c.bot);
+    return ok(true);
+}
+
+HttpResponsePtr getDescriptionField(Ctx& c, const char* column, const char* key) {
+    auto r = c.db->execSqlSync(std::string("SELECT ") + column + " AS v FROM bots WHERE user_id = ?", c.bot);
+    Json::Value res(Json::objectValue);
+    res[key] = r.empty() || r[0]["v"].isNull() ? std::string() : r[0]["v"].as<std::string>();
+    return ok(res);
+}
+
+HttpResponsePtr setMyDescription(Ctx& c) { return setDescriptionField(c, "description", "description", 512, true); }
+HttpResponsePtr getMyDescription(Ctx& c) { return getDescriptionField(c, "description", "description"); }
+HttpResponsePtr setMyShortDescription(Ctx& c) {
+    return setDescriptionField(c, "short_description", "short_description", 120, false);
+}
+HttpResponsePtr getMyShortDescription(Ctx& c) { return getDescriptionField(c, "short_description", "short_description"); }
+
+// Имя бота (display_name, 1–32 символа); пустое name — оставить как есть (в Telegram — убрать имя для языка)
+HttpResponsePtr setMyName(Ctx& c) {
+    const std::string raw = TextUtils::trim(c.p.str("name"));
+    if (raw.empty()) return ok(true);
+    auto name = TextUtils::cleanName(raw, Vicinity::MAX_DISPLAY_NAME_LEN);
+    if (!name) return fail(400, "Bad Request: name is too long (at most 32 characters)");
+    c.db->execSqlSync("UPDATE users SET display_name = ? WHERE id = ?", *name, c.bot);
+    Broadcast::userUpdated(c.bot);
+    return ok(true);
+}
+
+HttpResponsePtr getMyName(Ctx& c) {
+    auto r = c.db->execSqlSync("SELECT display_name FROM users WHERE id = ?", c.bot);
+    Json::Value res(Json::objectValue);
+    res["name"] = r.empty() ? std::string() : r[0]["display_name"].as<std::string>();
+    return ok(res);
+}
+
 HttpResponsePtr getChat(Ctx& c) {
     int64_t chatId = 0;
     if (auto e = chatOf(c, chatId)) return e;
@@ -1084,6 +1130,12 @@ const std::map<std::string, Handler>& methods() {
         {"setmycommands", setMyCommands},
         {"getmycommands", getMyCommands},
         {"deletemycommands", deleteMyCommands},
+        {"setmydescription", setMyDescription},
+        {"getmydescription", getMyDescription},
+        {"setmyshortdescription", setMyShortDescription},
+        {"getmyshortdescription", getMyShortDescription},
+        {"setmyname", setMyName},
+        {"getmyname", getMyName},
         {"getchat", getChat},
         {"sendchataction", sendChatAction},
         {"setwebhook", setWebhook},

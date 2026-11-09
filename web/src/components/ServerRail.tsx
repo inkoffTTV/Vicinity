@@ -1,4 +1,4 @@
-import { Headphones, Home, Plus, Users } from 'lucide-react';
+import { Bot, Headphones, Home, Plus, Users } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useNotifySettings } from '../lib/notify';
@@ -52,6 +52,15 @@ export function ServerRail() {
         {incoming > 0 && <span className="badge">{incoming}</span>}
       </button>
       <button
+        className={`rail-item bots${view.kind === 'bots' ? ' active' : ''}`}
+        title="Боты"
+        aria-label="Боты"
+        aria-current={view.kind === 'bots' ? 'page' : undefined}
+        onClick={() => open({ kind: 'bots', username: null })}
+      >
+        <Icon icon={Bot} size={22} />
+      </button>
+      <button
         className={`rail-item voice${stageOpen && inVoice ? ' active' : ''}${inVoice ? ' live' : ''}`}
         title={inVoice ? 'Голосовой канал' : 'Вы не в голосовом канале'}
         aria-label="Голос"
@@ -94,7 +103,7 @@ export function ServerRail() {
       <div className="rail-spacer" />
       <div className="rail-sep" />
       <button
-        className={`rail-item home${homeActive && view.kind !== 'home' ? ' active' : ''}`}
+        className={`rail-item home${homeActive && view.kind !== 'home' && view.kind !== 'bots' ? ' active' : ''}`}
         title="Личные сообщения"
         aria-label="Личные сообщения"
         onClick={() => open({ kind: 'friends' })}

@@ -92,7 +92,7 @@ test('bots UI: settings, buttons, callbacks, ephemeral, commands, server bots an
   await expect(tokenInput).toHaveCount(0);
 
   // Режим «читать все сообщения» сохраняется на сервере
-  const readAll = card.getByRole('switch');
+  const readAll = card.getByRole('switch', { name: /Читать все сообщения/ });
   await readAll.click();
   await expect(readAll).toHaveJSProperty('checked', true);
   await expect.poll(async () => (await call(request, alice, 'GET', '/bots')).body.bots[0].read_all).toBe(true);

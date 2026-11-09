@@ -20,6 +20,7 @@ import { AccessibilityTab, SubscriptionTab, ThemeTab } from './ThemeSettings';
 import { AccountScreen } from './settings/AccountScreen';
 import { TelegramCard } from './settings/TelegramCard';
 import { BotsScreen } from './settings/BotsScreen';
+import { takeSettingsTab } from '../lib/settingsNav';
 
 type Tab = 'account' | 'profile' | 'activity' | 'privacy' | 'theme' | 'appicon' | 'voice' | 'notifications' | 'overlay' | 'hotkeys' | 'accessibility' | 'subscription' | 'bots' | 'admin';
 
@@ -65,9 +66,11 @@ export function Settings() {
   const logout = useStore((s) => s.logout);
   const tier = usePlan((s) => s.current.tier);
   const isAdmin = Boolean(me.developer);
-  const [tab, setTab] = useState<Tab>('account');
+  // Раздел, с которого открыли настройки (например, «Боты» из каталога ботов, lib/settingsNav.ts)
+  const [initialTab] = useState(() => takeSettingsTab() as Tab | null);
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'account');
   // Телефон: сначала список разделов, потом раздел (кнопка «Назад»)
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(initialTab !== null);
   const [query, setQuery] = useState('');
   const close = useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
   // Настройки — страница, а не окно: Esc закрывает её, если поверх нет окна (подтверждение, выбор файла)

@@ -35,11 +35,19 @@ int64_t authenticate(const drogon::orm::DbClientPtr& db, const std::string& toke
 
 bool isBot(const drogon::orm::DbClientPtr& db, int64_t userId);
 
+// Видимость бота человеку (docs/API.md §21.9): бот и его владелец не заблокированы админом и бот публичный (is_public),
+// свой, с общего сервера или из общей лички/беседы. Условие для запроса
+// «FROM bots b JOIN users u ON u.id = b.user_id JOIN users o ON o.id = b.owner_id»; три параметра — id зрителя
+extern const char* const kVisibleWhere;
+bool visibleTo(const drogon::orm::DbClientPtr& db, int64_t viewer, int64_t botId);
+// Бот есть и ни он, ни его владелец не заблокированы админом
+bool available(const drogon::orm::DbClientPtr& db, int64_t botId);
+
 // Ник бота: 5–32 символа [a-z0-9_], оканчивается на bot. Пусто — подходит, иначе причина
 std::string usernameProblem(const std::string& username);
 
-// Объект бота для владельца (GET /bots): {id, username, display_name, avatar_path, description, token_hint,
-// read_all, webhook_url, commands, servers:[{id,name}], created_at}; null — нет такого бота
+// Объект бота для владельца (GET /bots): {id, username, display_name, avatar_path, description, short_description,
+// is_public, token_hint, read_all, webhook_url, commands, servers:[{id,name}], created_at}; null — нет такого бота
 Json::Value botObject(const drogon::orm::DbClientPtr& db, int64_t botId);
 
 // ---------- Объекты Bot API ----------

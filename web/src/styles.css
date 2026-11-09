@@ -6318,3 +6318,363 @@ a:focus-visible > .ico {
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 }
+
+/* ── Раздел «Боты»: каталог, страница бота, «Начать» в личке (docs/API.md §21.9) ── */
+.bots-dir-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-4) var(--space-8);
+}
+.bots-dir-inner {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.bots-dir-search {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  gap: var(--space-2);
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-3);
+}
+.bots-dir-search input {
+  flex: 1;
+  min-width: 0;
+  height: var(--control-h);
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-body-sm);
+}
+.bots-dir-search input:focus {
+  outline: none;
+}
+.bots-dir-search:focus-within {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.bots-dir-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.bots-dir-title {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--lh-label);
+  font-weight: 700;
+  color: var(--text-2);
+}
+.bots-dir-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--space-2);
+}
+.bots-dir-card {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  color: var(--text);
+  text-align: left;
+  min-width: 0;
+  transition: background var(--dur-fast);
+}
+.bots-dir-card:hover {
+  background: var(--bg-hover);
+}
+.bots-dir-card:focus-visible,
+.bot-page-owner:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.bots-dir-card-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.bots-dir-card-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.bots-dir-about {
+  margin-top: var(--space-1);
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.bots-dir-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  min-width: 0;
+}
+.bots-dir-mark {
+  max-width: 100%;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.bots-dir-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-2);
+}
+.bots-dir-more {
+  display: flex;
+  justify-content: center;
+}
+.bots-dir-foot {
+  margin: var(--space-4) 0 0;
+  text-align: center;
+}
+.bot-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.bot-page-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.bot-page-names {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bot-page-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-title);
+  line-height: var(--lh-title);
+  font-weight: 700;
+}
+.bot-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.bot-page-note {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.bot-page-blocked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.bot-page-blocked .bot-page-note {
+  align-self: stretch;
+}
+.bot-page-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.bot-page-section h2,
+.bot-intro h3 {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--lh-label);
+  font-weight: 700;
+  color: var(--text-2);
+}
+.bot-page-desc,
+.bot-intro-desc {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bot-commands {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.bot-commands li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bot-commands code {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+.bot-page-owner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  min-width: 0;
+}
+.bot-page-owner:hover {
+  background: var(--bg-hover);
+}
+.bot-servers {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+.bot-servers li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+.bot-servers-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+.bot-servers-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.bot-servers-done {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-2);
+}
+/* Пустая личка с ботом: карточка над лентой и «Начать» вместо поля ввода */
+.bot-intro {
+  width: min(440px, calc(100% - 2 * var(--space-4)));
+  margin: var(--space-4) auto;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+.bot-intro-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  font-size: var(--fs-title);
+  line-height: var(--lh-title);
+}
+.bot-intro-block {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  text-align: left;
+}
+.bot-start {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+.bot-start .bot-start-btn {
+  width: 100%;
+  max-width: 560px;
+  min-height: var(--control-h);
+  font-weight: 700;
+}
+/* Заглушка высотой с кнопку «Начать», пока грузится карточка бота: раскладка не прыгает */
+.bot-start-wait {
+  width: 100%;
+  height: var(--control-h);
+}
+.bot-start-note {
+  margin: 0;
+  text-align: center;
+  color: var(--text-2);
+}
+@media (max-width: 480px) {
+  .bots-dir-create span {
+    display: none;
+  }
+  .bot-page-head {
+    gap: var(--space-3);
+  }
+}
+.chat > .bot-start-note {
+  padding: var(--space-2) var(--space-4) 0;
+}
+.bot-about-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+.bot-about-count {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}

@@ -44,7 +44,8 @@ interface Candidate {
 
 let stagedSeq = 0;
 
-export function Composer({ channelId, placeholder }: { channelId: number; placeholder: string }) {
+/** autoFocus: false — поле появилось не по действию в нём (нажали кнопку бота вместо «Начать») и не должно забирать фокус */
+export function Composer({ channelId, placeholder, autoFocus = true }: { channelId: number; placeholder: string; autoFocus?: boolean }) {
   const toast = useStore((s) => s.toast);
   const setEditing = useStore((s) => s.setEditing);
   const sendMessage = useStore((s) => s.sendMessage);
@@ -74,7 +75,7 @@ export function Composer({ channelId, placeholder }: { channelId: number; placeh
   staged.current = files;
 
   useEffect(() => {
-    if (window.matchMedia('(pointer: fine)').matches) ref.current?.focus();
+    if (autoFocus && window.matchMedia('(pointer: fine)').matches) ref.current?.focus();
   }, []);
 
   useEffect(() => {

@@ -8,6 +8,8 @@ class BotsController : public HttpController<BotsController> {
 public:
     METHOD_LIST_BEGIN
     ADD_METHOD_TO(BotsController::list,        "/api/v1/bots",                  Get,    Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::directory,   "/api/v1/bots/directory",        Get,    Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::card,        "/api/v1/bots/by-username/{username}", Get, Options, "AuthFilter");
     ADD_METHOD_TO(BotsController::create,      "/api/v1/bots",                  Post,   Options, "AuthFilter");
     ADD_METHOD_TO(BotsController::update,      "/api/v1/bots/{id}",             Patch,  Options, "AuthFilter");
     ADD_METHOD_TO(BotsController::remove,      "/api/v1/bots/{id}",             Delete, Options, "AuthFilter");
@@ -23,6 +25,9 @@ public:
 
     void list       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
     void create     (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    // Каталог ботов (docs/API.md §21.9): боты, видимые пользователю, и карточка бота по @имени
+    void directory  (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
+    void card       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, const std::string& username);
     void update     (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
     void remove     (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
     void regenerate (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
