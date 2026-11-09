@@ -1,6 +1,8 @@
 import { Check, Copy } from 'lucide-react';
 import { Fragment, KeyboardEvent, MouseEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { copyText } from '../lib/clipboard';
+import { codeLang } from '../lib/codeLangs';
+import { highlightBlock, highlighterReady, loadHighlighter, wantsHighlight } from '../lib/highlight';
 import { formatTime, MdNode, parseMarkdown, TimeStyle } from '../lib/markdown';
 import { useStore } from '../lib/store';
 import { Directory, resolveLogin, useUserDirectory } from '../lib/users';
@@ -186,23 +188,56 @@ function Spoiler({ children }: { children: ReactNode }) {
 function CodeBlock({ lang, code }: { lang: string; code: string }) {
   const toast = useStore((s) => s.toast);
   const [copied, setCopied] = useState(false);
+  const known = lang ? codeLang(lang) : null;
+  const want = wantsHighlight(lang);
+  // Библиотека уже загружена — подсвечиваем сразу, без мигания простым текстом
+  const [html, setHtml] = useState(() => (want ? readyHighlight(lang, code) ?? null : null));
+  useEffect(() => {
+    if (!want) return setHtml(null);
+    const ready = readyHighlight(lang, code);
+    if (ready !== undefined) return setHtml(ready);
+    let alive = true;
+    void loadHighlighter().then((m) => alive && m && setHtml(highlightBlock(m, lang, code)));
+    return () => {
+      alive = false;
+    };
+  }, [lang, code, want]);
   const copy = async () => {
     if (!(await copyText(code))) return toast('Не удалось скопировать', 'error');
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
   };
+  // Подпись — имя языка («C++», «Python»); неизвестный тег — как есть; без тега — без подписи
+  const label = known ? known.label : lang;
   return (
     <div className="md-codeblock">
       <div className="md-codeblock-head">
-        <span className="md-codeblock-lang">{lang}</span>
+        {label ? (
+          <span className="md-codeblock-lang" title={known && lang.toLowerCase() !== known.label.toLowerCase() ? lang : undefined}>
+            {label}
+          </span>
+        ) : (
+          <span />
+        )}
         <button type="button" className="md-codeblock-copy" onClick={copy}>
           <Icon key={copied ? 'done' : 'copy'} icon={copied ? Check : Copy} size={14} anim="pop" />
           {copied ? 'Скопировано' : 'Копировать'}
         </button>
       </div>
       <pre>
-        <code>{code}</code>
+        {html !== null ? (
+          // Вывод highlight.js: исходный текст экранирован библиотекой, добавлены только <span class="hljs-…">
+          <code className="hljs" data-lang={known?.id} dangerouslySetInnerHTML={{ __html: html }} />
+        ) : (
+          <code>{code}</code>
+        )}
       </pre>
     </div>
   );
+}
+
+// undefined — библиотека ещё не загружена
+function readyHighlight(lang: string, code: string): string | null | undefined {
+  const m = highlighterReady();
+  return m ? highlightBlock(m, lang, code) : undefined;
 }

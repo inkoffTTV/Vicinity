@@ -17,6 +17,8 @@ public:
     ADD_METHOD_TO(BotsController::removeFromServer, "/api/v1/servers/{id}/bots/{bid}", Delete, Options, "AuthFilter");
     ADD_METHOD_TO(BotsController::commands,    "/api/v1/channels/{id}/commands", Get,   Options, "AuthFilter");
     ADD_METHOD_TO(BotsController::press,       "/api/v1/channels/{id}/messages/{mid}/callback", Post, Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::webApp,      "/api/v1/bots/{id}/webapp",      Post,   Options, "AuthFilter");
+    ADD_METHOD_TO(BotsController::menu,        "/api/v1/bots/{id}/menu_button", Get,    Options, "AuthFilter");
     METHOD_LIST_END
 
     void list       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb);
@@ -29,4 +31,7 @@ public:
     void removeFromServer(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id, int64_t bid);
     void commands   (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
     void press      (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id, int64_t mid);
+    // Мини-приложения (docs/API.md §21.8): подписанный initData для открытия и кнопка меню бота
+    void webApp     (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
+    void menu       (const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id);
 };

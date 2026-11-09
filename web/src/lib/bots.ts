@@ -23,7 +23,7 @@ export interface BotAlert {
 interface State {
   /** Эфемерные сообщения по каналам — видны только мне и до перезагрузки */
   ephemeral: Record<number, Message[]>;
-  /** Нажатые кнопки, ждущие ответа бота: ключ кнопки → query_id ('' — запрос ещё идёт) */
+  /** Нажатые кнопки, ждущие ответа бота: ключ кнопки → query_id (или метка нажатия «#n», пока запрос ещё идёт) */
   pending: Record<string, string>;
   commands: Record<number, { at: number; list: ChannelCommand[] }>;
   alert: BotAlert | null;
@@ -51,6 +51,10 @@ const timers = new Map<string, number>();
 // Ответ бота может прийти раньше, чем сервер вернул query_id нажатия
 const early = new Map<string, WsEvent>();
 const loadingCommands = new Set<number>();
+// Метка нажатия, пока сервер не вернул query_id: своя у каждого нажатия, чтобы ответ первого нажатия не принял
+// за своё второе нажатие той же кнопки (бот успел поправить сообщение между ними)
+let pressSeq = 0;
+const isMark = (v: string) => v.startsWith('#');
 
 export const useBots = create<State>((set, get) => ({
   ephemeral: {},
@@ -75,20 +79,23 @@ export const useBots = create<State>((set, get) => ({
     if (!data) return;
     const key = buttonKey(msg, data);
     if (key in get().pending) return;
-    set({ pending: { ...get().pending, [key]: '' } });
+    const mark = `#${++pressSeq}`;
+    set({ pending: { ...get().pending, [key]: mark } });
     window.clearTimeout(timers.get(key));
     timers.set(key, window.setTimeout(() => finish(key), ANSWER_TIMEOUT));
     try {
       const r = await api.pressButton(msg.channel_id, msg.ephemeral ? 0 : msg.id, data, msg.ephemeral ? msg.ephemeral_id : undefined);
-      if (!(key in get().pending)) return;
+      const waiting = get().pending[key] === mark;
       const answer = early.get(r.query_id);
       if (answer) {
         early.delete(r.query_id);
-        finish(key);
+        if (waiting) finish(key);
         showAnswer(answer);
-      } else set({ pending: { ...get().pending, [key]: r.query_id } });
+      } else if (waiting) set({ pending: { ...get().pending, [key]: r.query_id } });
+      // Бот уже поправил сообщение (ожидание снято), но ответ на нажатие ещё может прийти — покажем его
+      else remember(r.query_id);
     } catch (e) {
-      finish(key);
+      if (get().pending[key] === mark) finish(key);
       toast(e instanceof ApiError ? e.message : 'Не удалось нажать кнопку', 'error');
     }
   },
@@ -112,6 +119,26 @@ function finish(key: string) {
   timers.delete(key);
   const { [key]: _, ...rest } = useBots.getState().pending;
   useBots.setState({ pending: rest });
+}
+
+// Ответы на нажатия, ожидание которых уже снято правкой сообщения: query_id → таймер забывания
+const released = new Map<string, number>();
+
+function remember(queryId: string) {
+  if (!queryId || isMark(queryId)) return;
+  window.clearTimeout(released.get(queryId));
+  released.set(queryId, window.setTimeout(() => released.delete(queryId), ANSWER_TIMEOUT));
+}
+
+/** Бот поправил или убрал сообщение — кнопки этого сообщения больше не ждут ответа (Telegram ведёт себя так же).
+ *  Ответ answerCallbackQuery, если он придёт позже правки, всё равно покажется. */
+function releaseMessage(channelId: number, messageId: number | string) {
+  const prefix = `${channelId}:${messageId}:`;
+  for (const [key, queryId] of Object.entries(useBots.getState().pending)) {
+    if (!key.startsWith(prefix)) continue;
+    finish(key);
+    remember(queryId);
+  }
 }
 
 function showAnswer(ev: WsEvent) {
@@ -151,12 +178,22 @@ socket.on((ev: WsEvent) => {
       };
       const list = (s.ephemeral[channelId] ?? []).filter((m) => m.ephemeral_id !== msg.ephemeral_id);
       useBots.setState({ ephemeral: { ...s.ephemeral, [channelId]: [...list, msg].slice(-MAX_EPHEMERAL) } });
+      // Эфемерное сообщение пришло заново с тем же id — это правка: ожидание его кнопок снимается
+      if (list.length < (s.ephemeral[channelId]?.length ?? 0)) releaseMessage(channelId, msg.ephemeral_id!);
       break;
     }
+    case 'message_edited':
+    case 'message_deleted':
+      if (typeof ev.channel_id === 'number' && typeof ev.id === 'number') releaseMessage(ev.channel_id, ev.id);
+      break;
     case 'callback_answer': {
       const key = Object.keys(s.pending).find((k) => s.pending[k] === ev.query_id);
       if (key) {
         finish(key);
+        showAnswer(ev);
+      } else if (typeof ev.query_id === 'string' && released.has(ev.query_id)) {
+        window.clearTimeout(released.get(ev.query_id));
+        released.delete(ev.query_id);
         showAnswer(ev);
       } else if (typeof ev.query_id === 'string') {
         // Нажатие ещё не вернуло query_id — запомним ответ ненадолго

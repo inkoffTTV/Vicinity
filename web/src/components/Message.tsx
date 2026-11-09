@@ -1,7 +1,7 @@
-import { Copy, ExternalLink, Paperclip, Pencil, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Pin, PinOff, Plus, Reply, SmilePlus, Trash2 } from 'lucide-react';
+import { AppWindow, Copy, ExternalLink, Paperclip, Pencil, Phone, PhoneIncoming, PhoneMissed, PhoneOutgoing, Pin, PinOff, Plus, Reply, SmilePlus, Trash2 } from 'lucide-react';
 import { parseProposal } from '../lib/chatBg';
 import { BgProposal } from './ChatBackground';
-import { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent, useEffect, useRef, useState } from 'react';
+import { CSSProperties, FocusEvent, KeyboardEvent, MouseEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CallMeta, InlineButton, Message, parseTs, Reaction } from '../lib/api';
 import { buttonKey, safeUrl, useBots } from '../lib/bots';
 import { useCall } from '../lib/call';
@@ -11,6 +11,7 @@ import { isEmojiOnly, mentionsUser, plainText } from '../lib/markdown';
 import { usePins } from '../lib/pins';
 import { nameCss, parseNameStyle } from '../lib/nameStyle';
 import { useStore } from '../lib/store';
+import { useWebApp } from '../lib/webapp';
 import { userMenuProps } from '../lib/userMenu';
 import { useUserDirectory } from '../lib/users';
 import { Attachment } from './Attachment';
@@ -508,8 +509,27 @@ export function composing(e: KeyboardEvent) {
 // Кнопки под сообщением бота (docs/API.md §21): callback — боту, ссылка — в новой вкладке, copy_text — в буфер
 function InlineKeyboard({ msg }: { msg: Message }) {
   const rows = (msg.reply_markup?.inline_keyboard ?? []).filter((r) => Array.isArray(r) && r.length > 0);
+  const root = useRef<HTMLDivElement>(null);
+  // Фокус клавиатуры был на кнопке: бот сменил меню и этой кнопки больше нет — фокус остаётся в меню, а не уходит в body
+  const focused = useRef(false);
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el || !focused.current || el.contains(document.activeElement)) return;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    el.querySelector<HTMLElement>('.bot-kb-btn')?.focus({ preventScroll: true });
+  }, [msg.reply_markup]);
   return (
-    <div className="bot-keyboard" role="group" aria-label="Кнопки бота">
+    <div
+      ref={root}
+      className="bot-keyboard"
+      role="group"
+      aria-label="Кнопки бота"
+      onFocus={() => (focused.current = true)}
+      onBlur={(e) => {
+        // Кнопку убрали из DOM — blur без нового адресата; фокус уходит сам — сбрасываем
+        if (e.relatedTarget || (e.target as HTMLElement).isConnected) focused.current = root.current?.contains(e.relatedTarget as Node) ?? false;
+      }}
+    >
       {rows.map((row, i) => (
         <div className="bot-kb-row" key={i}>
           {row.map((b, j) => (
@@ -524,7 +544,33 @@ function InlineKeyboard({ msg }: { msg: Message }) {
 function KeyboardButton({ msg, b }: { msg: Message; b: InlineButton }) {
   const waiting = useBots((s) => (b.callback_data ? buttonKey(msg, b.callback_data) in s.pending : false));
   const link = safeUrl(b.url ?? b.web_app?.url);
-  if (b.url || b.web_app) {
+  // Мини-приложение (docs/API.md §21.8) — в панели внутри Vicinity, а не новой вкладкой
+  if (b.web_app) {
+    if (!link) return null;
+    return (
+      <button
+        type="button"
+        className="bot-kb-btn"
+        aria-disabled={!!msg.local || undefined}
+        title={`${b.text} — мини-приложение ${link.host}`}
+        onClick={() => {
+          if (msg.local) return;
+          useWebApp.getState().open({
+            botId: msg.author_id,
+            botName: msg.author_name,
+            url: b.web_app!.url,
+            channelId: msg.channel_id,
+            messageId: msg.ephemeral ? undefined : msg.id,
+            ephemeralId: msg.ephemeral ? msg.ephemeral_id : undefined,
+          });
+        }}
+      >
+        <span className="bot-kb-label">{b.text}</span>
+        <Icon icon={AppWindow} size={14} />
+      </button>
+    );
+  }
+  if (b.url) {
     if (!link) return null;
     return (
       <a className="bot-kb-btn" href={link.href} target="_blank" rel="noopener noreferrer" title={`${b.text} — ${link.host}`}>

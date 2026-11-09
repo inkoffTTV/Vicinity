@@ -17,6 +17,8 @@ namespace CryptoUtils {
     std::string hmacSha1Base64(const std::string& key, const std::string& data);
     // hex(HMAC-SHA256(key, data)) — подпись задачи капчи ALTCHA
     std::string hmacSha256Hex(const std::string& key, const std::string& data);
+    // HMAC-SHA256(key, data) — 32 байта как есть (ключ следующего HMAC: подпись initData мини-приложений)
+    std::string hmacSha256Raw(const std::string& key, const std::string& data);
     // Сравнение строк в постоянном времени (подписи, коды подтверждения)
     bool constTimeEquals(const std::string& a, const std::string& b);
     // Криптостойкое случайное число в [0, bound) без перекоса по модулю

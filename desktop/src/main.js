@@ -168,6 +168,18 @@ const sameOrigin = (url) => {
     return false;
   }
 };
+// Ведро на открытие окон: 3 сразу, пополняется одним в секунду
+let openTokens = 3;
+let openAt = Date.now();
+function openBudget() {
+  const now = Date.now();
+  openTokens = Math.min(3, openTokens + (now - openAt) / 1000);
+  openAt = now;
+  if (openTokens < 1) return false;
+  openTokens -= 1;
+  return true;
+}
+
 const openExternal = (url) => {
   if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) void shell.openExternal(url);
 };
@@ -391,8 +403,11 @@ function createWindow() {
   const first = deepLinkFromArgv(process.argv);
   void win.loadURL(first ? APP_URL + first : START_URL);
 
-  // Ссылки на экраны Vicinity — в этом же окне; остальные — в браузер
+  // Ссылки на экраны Vicinity — в этом же окне; остальные — в браузер.
+  // window.open приходит сюда из любого фрейма (и из мини-приложения бота), а блокировщика всплывающих окон, как в Chrome,
+  // в Electron нет: не больше 3 открытий подряд и дальше одно в секунду — иначе страница завалила бы браузер вкладками
   win.webContents.setWindowOpenHandler(({ url }) => {
+    if (!openBudget()) return { action: 'deny' };
     const p = deepLinkPath(url);
     if (p) openDeepLink(p);
     else openExternal(url);

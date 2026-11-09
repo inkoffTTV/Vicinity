@@ -24,6 +24,8 @@ import { Toasts } from './components/Toasts';
 import { UserMenu } from './components/UserMenu';
 import { ImageMenu } from './components/ImageMenu';
 import { BotAlert } from './components/BotAlert';
+import { NotifyPopups } from './components/NotifyPopups';
+import { WebAppPanel } from './components/WebAppPanel';
 import { IncomingCall } from './components/IncomingCall';
 import { InviteCard } from './components/InviteCard';
 import { GiftCard } from './components/GiftCard';
@@ -136,9 +138,11 @@ export default function App() {
       {switcher && <QuickSwitcher onClose={closeSwitcher} />}
       <UserMenu />
       <ImageMenu />
+      <WebAppPanel />
       <BotAlert />
       <CallOverlay />
       <IncomingCall />
+      <NotifyPopups />
       <Toasts />
     </div>
   );

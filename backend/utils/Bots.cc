@@ -5,6 +5,7 @@
 #include "TextUtils.h"
 #include "Uploads.h"
 #include <drogon/drogon.h>
+#include <cctype>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -671,7 +672,18 @@ std::string fromHtml(const std::string& html) {
                 if (name == "a") f.href = decodeAll(attr(inner, "href"));
                 if (name == "code" && !stack.empty() && stack.back().tag == "pre") {
                     const std::string cls = attr(inner, "class");
-                    if (cls.rfind("language-", 0) == 0) stack.back().lang = cls.substr(9);
+                    // class="language-cpp" → ```cpp; тег — первое слово, только символы, которые понимает клиент
+                    if (cls.rfind("language-", 0) == 0) {
+                        std::string lang;
+                        for (size_t k = 9; k < cls.size() && lang.size() < 20; ++k) {
+                            const char ch = cls[k];
+                            if (std::isalnum(static_cast<unsigned char>(ch)) || ch == '_' || ch == '+' || ch == '#' || ch == '.' || ch == '-')
+                                lang += ch;
+                            else
+                                break;
+                        }
+                        stack.back().lang = lang;
+                    }
                     stack.push_back(f);
                     continue;
                 }
@@ -1062,6 +1074,7 @@ void init() {
             auto db = app().getDbClient();
             db->execSqlSync("DELETE FROM bot_updates WHERE created_at < datetime('now', '-1 day')");
             db->execSqlSync("DELETE FROM bot_callbacks WHERE created_at < datetime('now', '-15 minutes')");
+            db->execSqlSync("DELETE FROM bot_webapp_queries WHERE created_at < datetime('now', '-1 hour')");
         } catch (const std::exception& e) {
             LOG_WARN << "bots: cleanup: " << e.what();
         }
@@ -1072,11 +1085,133 @@ void init() {
 
 bool allowPrivateWebhooks() { return gAllowPrivate; }
 
+// ---------- Мини-приложения ----------
+
+std::string webAppKey(const std::string& token) { return CryptoUtils::hmacSha256Hex("WebAppData", token); }
+
+// Браузер разбирает адрес по WHATWG URL: «\» там — тот же «/», %-коды и полноширинные цифры в хосте раскрываются,
+// а «127.1», «0x7f000001» или «2130706433» — это IPv4. Такие записи не пропускаем вовсе: иначе проверка частных адресов
+// видела бы одно имя, а браузер открыл бы другое
+std::string webAppHost(const std::string& url) {
+    if (url.find('\\') != std::string::npos) return "";
+    ParsedUrl u;
+    if (!parseUrl(url, u)) return "";
+    std::string h = u.host;
+    if (u.origin.compare(u.scheme.size() + 3, 1, "[") == 0) {
+        unsigned char b[16];
+        return inet_pton(AF_INET6, h.c_str(), b) == 1 ? h : "";
+    }
+    if (!h.empty() && h.back() == '.') h.pop_back();
+    if (h.empty() || h.size() > 253) return "";
+    for (unsigned char c : h)
+        if (!(std::isalnum(c) || c == '-' || c == '.' || c == '_')) return "";
+    // Последняя метка — число (десятичное или 0x…): для браузера это IPv4, принимаем только каноничный a.b.c.d
+    const std::string last = h.substr(h.rfind('.') == std::string::npos ? 0 : h.rfind('.') + 1);
+    const bool decimal = !last.empty() && std::all_of(last.begin(), last.end(), [](unsigned char c) { return std::isdigit(c); });
+    const bool hex = last.size() >= 2 && last[0] == '0' && last[1] == 'x' &&
+                     std::all_of(last.begin() + 2, last.end(), [](unsigned char c) { return std::isxdigit(c); });
+    if (decimal || hex) {
+        unsigned char b[4];
+        if (inet_pton(AF_INET, h.c_str(), b) != 1) return "";
+    }
+    return h;
+}
+
+std::string requestHost(const std::string& hostHeader) {
+    std::string h = lower(hostHeader);
+    if (!h.empty() && h[0] == '[') {
+        const auto close = h.find(']');
+        return close == std::string::npos ? std::string() : h.substr(1, close - 1);
+    }
+    h = h.substr(0, h.find(':'));
+    if (!h.empty() && h.back() == '.') h.pop_back();
+    return h;
+}
+
+bool webAppUrlOk(const std::string& url) {
+    if (!httpUrl(url, 512)) return false;
+    const std::string host = webAppHost(url);
+    if (host.empty()) return false;
+    const std::string scheme = lower(url.substr(0, url.find("://")));
+    if (scheme == "https") return gAllowPrivate || !privateHost(host);
+    return gAllowPrivate;   // http — только для разработки и e2e
+}
+
+bool parseMenuButton(const Json::Value& in, Json::Value& out, std::string& err) {
+    if (!in.isObject()) { err = "menu_button must be an object"; return false; }
+    const std::string type = JsonUtils::getStr(in, "type");
+    out = Json::Value(Json::objectValue);
+    if (type == "default" || type == "commands") {
+        out["type"] = type;
+        return true;
+    }
+    if (type != "web_app") { err = "unsupported menu button type"; return false; }
+    const std::string text = TextUtils::trim(JsonUtils::getStr(in, "text"));
+    if (text.empty() || !TextUtils::isValidUtf8(text) || TextUtils::utf8Length(text) > 64 || TextUtils::hasControlChars(text)) {
+        err = "menu button text must be 1-64 characters";
+        return false;
+    }
+    const std::string url = in["web_app"].isObject() ? JsonUtils::getStr(in["web_app"], "url") : std::string();
+    if (!webAppUrlOk(url)) { err = "BUTTON_URL_INVALID: web_app.url must be an https link"; return false; }
+    out["type"] = "web_app";
+    out["text"] = text;
+    out["web_app"]["url"] = url;
+    return true;
+}
+
+Json::Value menuButton(const drogon::orm::DbClientPtr& db, int64_t botId, int64_t channelId) {
+    auto r = db->execSqlSync("SELECT button FROM bot_menu_buttons WHERE bot_id = ? AND channel_id IN (0, ?) "
+                             "ORDER BY channel_id DESC LIMIT 1", botId, channelId);
+    Json::Value b;
+    if (r.empty() || !JsonUtils::parse(r[0]["button"].as<std::string>(), b) || !b.isObject()) {
+        b = Json::Value(Json::objectValue);
+        b["type"] = "default";
+    }
+    return b;
+}
+
+std::string urlEncode(const std::string& s) {
+    static const char* hex = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(s.size() * 3);
+    for (unsigned char c : s) {
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out += static_cast<char>(c);
+        } else {
+            out += '%';
+            out += hex[c >> 4];
+            out += hex[c & 15];
+        }
+    }
+    return out;
+}
+
+std::string signInitData(const std::vector<std::pair<std::string, std::string>>& fields, const std::string& keyHex) {
+    std::string query;
+    for (const auto& [k, v] : fields) {
+        if (!query.empty()) query += '&';
+        query += k + "=" + urlEncode(v);
+    }
+    if (keyHex.size() != 64) return query;
+    std::string key;
+    key.reserve(32);
+    for (size_t i = 0; i < 64; i += 2) key += static_cast<char>(std::stoi(keyHex.substr(i, 2), nullptr, 16));
+    auto sorted = fields;
+    std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::string check;
+    for (const auto& [k, v] : sorted) {
+        if (!check.empty()) check += '\n';
+        check += k + "=" + v;
+    }
+    return query + "&hash=" + CryptoUtils::hmacSha256Hex(key, check);
+}
+
 Token newToken(int64_t botId) {
     Token t;
     t.token = std::to_string(botId) + ":" + CryptoUtils::randomHex(24);
     t.hash = CryptoUtils::sha256Hex(t.token);
     t.hint = t.token.substr(t.token.size() - 4);
+    t.webappKey = webAppKey(t.token);
     return t;
 }
 
@@ -1085,13 +1220,19 @@ int64_t authenticate(const drogon::orm::DbClientPtr& db, const std::string& toke
     if (colon == std::string::npos || colon == 0 || token.size() > 128) return 0;
     std::string hash = CryptoUtils::sha256Hex(token);
     // Бот перестаёт работать, если заблокирован он сам или его владелец
-    auto r = db->execSqlSync("SELECT b.user_id FROM bots b JOIN users u ON u.id = b.user_id "
+    auto r = db->execSqlSync("SELECT b.user_id, b.webapp_key IS NULL AS no_key FROM bots b JOIN users u ON u.id = b.user_id "
                              "JOIN users o ON o.id = b.owner_id "
                              "WHERE b.token_hash = ? AND u.banned = 0 AND o.banned = 0", hash);
     if (r.empty()) return 0;
     const int64_t id = r[0]["user_id"].as<int64_t>();
     // Номер в начале токена должен совпадать с ботом (как в Telegram)
-    return token.substr(0, colon) == std::to_string(id) ? id : 0;
+    if (token.substr(0, colon) != std::to_string(id)) return 0;
+    // Бот создан до мини-приложений: открытый токен виден только сейчас — выводим ключ подписи initData
+    if (r[0]["no_key"].as<int>() != 0) {
+        std::string key = webAppKey(token);
+        db->execSqlSync("UPDATE bots SET webapp_key = ? WHERE user_id = ? AND webapp_key IS NULL", key, id);
+    }
+    return id;
 }
 
 bool isBot(const drogon::orm::DbClientPtr& db, int64_t userId) {
@@ -1344,7 +1485,7 @@ bool parseMarkup(const Json::Value& in, Json::Value& out, std::string& err, bool
             if (b.isMember("web_app")) {
                 ++kinds;
                 const std::string url = JsonUtils::getStr(b["web_app"], "url");
-                if (!httpUrl(url, 512, true)) { err = "web_app.url must be an https link"; return false; }
+                if (!webAppUrlOk(url)) { err = "web_app.url must be an https link"; return false; }
                 cb["web_app"]["url"] = url;
             }
             if (kinds == 0) {

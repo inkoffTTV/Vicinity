@@ -121,6 +121,15 @@ std::string hmacSha256Hex(const std::string& key, const std::string& data) {
     return toHex(mac, macLen);
 }
 
+std::string hmacSha256Raw(const std::string& key, const std::string& data) {
+    unsigned char mac[EVP_MAX_MD_SIZE];
+    unsigned int macLen = 0;
+    if (!HMAC(EVP_sha256(), key.data(), static_cast<int>(key.size()),
+              reinterpret_cast<const unsigned char*>(data.data()), data.size(), mac, &macLen))
+        throw std::runtime_error("HMAC failed");
+    return std::string(reinterpret_cast<const char*>(mac), macLen);
+}
+
 bool constTimeEquals(const std::string& a, const std::string& b) { return constTimeEq(a, b); }
 
 uint64_t randomBelow(uint64_t bound) {

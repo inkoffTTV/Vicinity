@@ -13,6 +13,8 @@
 #include <drogon/drogon.h>
 #include <algorithm>
 #include <cctype>
+#include <ctime>
+#include <regex>
 
 using namespace drogon;
 using HttpUtils::error;
@@ -109,8 +111,8 @@ void BotsController::create(const HttpRequestPtr& req, std::function<void(const 
                 username, *name);
             botId = ins[0]["id"].as<int64_t>();
             token = Bots::newToken(botId);
-            tr->execSqlSync("INSERT INTO bots(user_id, owner_id, token_hash, token_hint) VALUES(?, ?, ?, ?)",
-                            botId, self, token.hash, token.hint);
+            tr->execSqlSync("INSERT INTO bots(user_id, owner_id, token_hash, token_hint, webapp_key) VALUES(?, ?, ?, ?, ?)",
+                            botId, self, token.hash, token.hint, token.webappKey);
         } catch (...) {
             tr->rollback();
             throw;
@@ -200,7 +202,8 @@ void BotsController::regenerate(const HttpRequestPtr& req, std::function<void(co
     try {
         if (auto e = ownBot(db, id, uid(req))) { cb(e); return; }
         const Bots::Token token = Bots::newToken(id);
-        db->execSqlSync("UPDATE bots SET token_hash = ?, token_hint = ? WHERE user_id = ?", token.hash, token.hint, id);
+        db->execSqlSync("UPDATE bots SET token_hash = ?, token_hint = ?, webapp_key = ? WHERE user_id = ?", token.hash,
+                        token.hint, token.webappKey, id);
         Bots::cancelWaiter(id, Bots::fail(401, "Unauthorized"));
         Json::Value resp;
         resp["bot"]   = Bots::botObject(db, id);
@@ -369,6 +372,177 @@ void BotsController::press(const HttpRequestPtr& req, std::function<void(const H
         Json::Value resp;
         resp["ok"]       = true;
         resp["query_id"] = queryId;
+        cb(HttpUtils::json(std::move(resp)));
+    } catch (const std::exception& e) {
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
+    }
+}
+
+namespace {
+
+// Ключи theme_params, которые знает telegram-web-app.js; значения — только #rrggbb
+const char* const kThemeKeys[] = {"bg_color", "text_color", "hint_color", "link_color", "button_color", "button_text_color",
+                                  "secondary_bg_color", "header_bg_color", "bottom_bar_bg_color", "accent_text_color",
+                                  "section_bg_color", "section_header_text_color", "section_separator_color",
+                                  "subtitle_text_color", "destructive_text_color"};
+
+Json::Value cleanTheme(const Json::Value& in) {
+    Json::Value out(Json::objectValue);
+    if (!in.isObject()) return out;
+    static const std::regex hex("#[0-9a-fA-F]{6}");
+    for (const char* k : kThemeKeys) {
+        const std::string v = JsonUtils::getStr(in, k);
+        if (std::regex_match(v, hex)) out[k] = v;
+    }
+    return out;
+}
+
+// Кнопка web_app с этим адресом есть в кнопках сообщения
+bool markupHasWebApp(const Json::Value& markup, const std::string& url) {
+    if (!markup.isObject() || !markup["inline_keyboard"].isArray()) return false;
+    for (const auto& row : markup["inline_keyboard"])
+        if (row.isArray())
+            for (const auto& b : row)
+                if (b.isObject() && b["web_app"].isObject() && b["web_app"]["url"].isString() &&
+                    b["web_app"]["url"].asString() == url)
+                    return true;
+    return false;
+}
+
+} // namespace
+
+// POST /api/v1/bots/{id}/webapp {url, channel_id?, message_id?, ephemeral_id?, theme_params?} — открыть мини-приложение:
+// адрес с параметрами telegram-web-app.js во фрагменте и подписанный initData. Адрес — из кнопки сообщения
+// (message_id или ephemeral_id) или кнопки меню бота
+void BotsController::webApp(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id) {
+    const int64_t self = uid(req);
+    auto json = req->getJsonObject();
+    if (!json || !json->isObject()) { cb(error("Invalid JSON", k400BadRequest)); return; }
+    const std::string url = JsonUtils::getStr(*json, "url");
+    const int64_t channelId = JsonUtils::getInt(*json, "channel_id");
+    const int64_t messageId = JsonUtils::getInt(*json, "message_id");
+    const std::string ephemeralId = JsonUtils::getStr(*json, "ephemeral_id");
+    if (!Bots::webAppUrlOk(url)) { cb(error("Мини-приложение открывается только по https-ссылке", k400BadRequest)); return; }
+    // Хост самого Vicinity (с любым портом и схемой): с allow-same-origin такая страница вышла бы из песочницы iframe,
+    // а соседний порт делит с Vicinity куки. Сравниваем имена так, как их разберёт браузер (Bots::webAppHost)
+    const std::string host = Bots::requestHost(req->getHeader("host"));
+    if (!host.empty() && Bots::webAppHost(url) == host) {
+        cb(error("Мини-приложение не может быть на адресе самого Vicinity", k400BadRequest)); return;
+    }
+    auto db = app().getDbClient();
+    try {
+        if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::Callback, self)) {
+            cb(error("Слишком часто — подождите пару секунд", k429TooManyRequests)); return;
+        }
+        auto bot = db->execSqlSync("SELECT u.username, u.display_name, b.webapp_key FROM bots b JOIN users u ON u.id = b.user_id "
+                                   "WHERE b.user_id = ? AND u.banned = 0", id);
+        if (bot.empty()) { cb(error("Бот не найден", k404NotFound)); return; }
+        Access::ChannelInfo info;
+        if (channelId > 0) {
+            const auto acc = Access::channel(db, channelId, self, &info);
+            if (acc != Access::Result::Ok) { cb(HttpUtils::accessError(acc)); return; }
+        }
+        if (messageId > 0 || !ephemeralId.empty()) {
+            if (channelId <= 0) { cb(error("Не указан чат сообщения", k400BadRequest)); return; }
+            Json::Value msg;
+            if (!ephemeralId.empty()) {
+                const auto eph = Bots::findEphemeral(ephemeralId);
+                if (!eph || eph->userId != self || eph->channelId != channelId) {
+                    cb(error("Сообщение устарело — попросите бота прислать его снова", k404NotFound)); return;
+                }
+                if (eph->botId == id) msg = eph->message;
+            } else {
+                msg = Messages::load(db, messageId);
+                if (msg.isNull() || msg["channel_id"].asInt64() != channelId) {
+                    cb(error("Сообщение не найдено", k404NotFound)); return;
+                }
+                if (!msg["author_bot"].asBool() || msg["author_id"].asInt64() != id) msg = Json::Value();
+            }
+            if (!markupHasWebApp(msg["reply_markup"], url)) {
+                cb(error("Кнопка устарела — попросите бота прислать сообщение снова", k400BadRequest)); return;
+            }
+        } else {
+            const Json::Value menu = Bots::menuButton(db, id, channelId > 0 ? channelId : 0);
+            if (JsonUtils::getStr(menu, "type") != "web_app" || JsonUtils::getStr(menu["web_app"], "url") != url) {
+                cb(error("У бота нет такого мини-приложения", k400BadRequest)); return;
+            }
+        }
+        if (channelId > 0 && Access::channel(db, channelId, id) != Access::Result::Ok) {
+            cb(error("Бот больше не в этом чате — мини-приложение не открыть", k400BadRequest)); return;
+        }
+
+        auto me = db->execSqlSync("SELECT username, display_name FROM users WHERE id = ?", self);
+        Json::Value user;
+        user["id"]                 = static_cast<Json::Int64>(self);
+        user["first_name"]         = me.empty() ? std::string() : me[0]["display_name"].as<std::string>();
+        user["username"]           = me.empty() ? std::string() : me[0]["username"].as<std::string>();
+        user["language_code"]      = "ru";
+        user["allows_write_to_pm"] = true;
+        std::string userJson = JsonUtils::write(user);
+        while (!userJson.empty() && userJson.back() == '\n') userJson.pop_back();
+
+        const std::string queryId = CryptoUtils::randomHex(16);
+        std::vector<std::pair<std::string, std::string>> fields = {
+            {"query_id", queryId}, {"user", userJson}, {"auth_date", std::to_string(std::time(nullptr))}};
+        if (channelId > 0) {
+            // Как у Telegram: «sender» — личка открывшего с самим ботом
+            const std::string chatType = info.serverId ? "supergroup" : info.type == "dm" ? "sender" : "group";
+            fields.emplace_back("chat_type", chatType);
+            fields.emplace_back("chat_instance", std::to_string(channelId));
+        }
+        db->execSqlSync("INSERT INTO bot_webapp_queries(id, bot_id, user_id, channel_id) VALUES(?, ?, ?, ?)", queryId, id,
+                        self, channelId > 0 ? channelId : 0);
+        const std::string key = bot[0]["webapp_key"].isNull() ? std::string() : bot[0]["webapp_key"].as<std::string>();
+        const std::string initData = Bots::signInitData(fields, key);
+
+        const Json::Value theme = cleanTheme((*json)["theme_params"]);
+        std::string params = "tgWebAppData=" + Bots::urlEncode(initData) + "&tgWebAppVersion=7.10&tgWebAppPlatform=web";
+        if (!theme.empty()) {
+            std::string t = JsonUtils::write(theme);
+            while (!t.empty() && t.back() == '\n') t.pop_back();
+            params += "&tgWebAppThemeParams=" + Bots::urlEncode(t);
+        }
+        // Свой фрагмент у адреса: «#/путь» — параметры после «?», «#a=b» — через «&» (так их читает telegram-web-app.js)
+        std::string full = url;
+        const auto hash = url.find('#');
+        if (hash == std::string::npos) full += "#" + params;
+        else if (hash + 1 == url.size()) full += params;
+        else if (url.find_first_of("?=", hash) != std::string::npos) full += "&" + params;
+        else full += "?" + params;
+
+        Json::Value resp;
+        resp["url_with_fragment"] = full;
+        resp["init_data"]         = initData;
+        resp["theme_params"]      = theme;
+        resp["signed"]            = key.size() == 64;
+        Json::Value b;
+        b["id"]           = static_cast<Json::Int64>(id);
+        b["username"]     = bot[0]["username"].as<std::string>();
+        b["display_name"] = bot[0]["display_name"].as<std::string>();
+        resp["bot"] = b;
+        cb(HttpUtils::json(std::move(resp)));
+    } catch (const std::exception& e) {
+        cb(error(HttpUtils::internal(e), k500InternalServerError));
+    }
+}
+
+// GET /api/v1/bots/{id}/menu_button?channel_id= — кнопка меню бота для шапки лички (setChatMenuButton)
+void BotsController::menu(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& cb, int64_t id) {
+    int64_t channelId = 0;
+    try {
+        channelId = std::stoll(req->getParameter("channel_id").empty() ? "0" : req->getParameter("channel_id"));
+    } catch (...) {
+        cb(error("Неверный channel_id", k400BadRequest)); return;
+    }
+    auto db = app().getDbClient();
+    try {
+        if (!Bots::isBot(db, id)) { cb(error("Бот не найден", k404NotFound)); return; }
+        if (channelId > 0) {
+            const auto acc = Access::channel(db, channelId, uid(req));
+            if (acc != Access::Result::Ok) { cb(HttpUtils::accessError(acc)); return; }
+        }
+        Json::Value resp;
+        resp["menu_button"] = Bots::menuButton(db, id, channelId > 0 ? channelId : 0);
         cb(HttpUtils::json(std::move(resp)));
     } catch (const std::exception& e) {
         cb(error(HttpUtils::internal(e), k500InternalServerError));

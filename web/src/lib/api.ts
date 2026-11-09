@@ -269,6 +269,23 @@ export interface ReplyMarkup {
   inline_keyboard: InlineButton[][];
 }
 
+/** Кнопка меню бота (setChatMenuButton, docs/API.md §21.8) */
+export interface MenuButton {
+  type: 'default' | 'commands' | 'web_app';
+  text?: string;
+  web_app?: { url: string };
+}
+
+/** Открытие мини-приложения: адрес с параметрами telegram-web-app.js во фрагменте (docs/API.md §21.8) */
+export interface WebAppLaunch {
+  url_with_fragment: string;
+  init_data: string;
+  theme_params: Record<string, string>;
+  /** false — у бота ещё нет ключа подписи: initData без hash */
+  signed: boolean;
+  bot: { id: number; username: string; display_name: string };
+}
+
 export interface BotCommand {
   command: string;
   description: string;
@@ -1060,6 +1077,13 @@ export const api = {
     post<{ ok: boolean; query_id: string }>(`/channels/${channelId}/messages/${mid}/callback`, ephemeral_id ? { data, ephemeral_id } : { data }),
   channelCommands: (channelId: number) =>
     get<{ commands: ChannelCommand[] }>(`/channels/${channelId}/commands`).then((r) => r.commands ?? []),
+  /** Мини-приложение: из кнопки сообщения (message_id или ephemeral_id) или из кнопки меню бота */
+  openWebApp: (
+    botId: number,
+    p: { url: string; channel_id?: number; message_id?: number; ephemeral_id?: string; theme_params?: Record<string, string> },
+  ) => post<WebAppLaunch>(`/bots/${botId}/webapp`, p),
+  botMenuButton: (botId: number, channelId: number) =>
+    get<{ menu_button: MenuButton }>(`/bots/${botId}/menu_button?channel_id=${channelId}`).then((r) => r.menu_button),
   bots: () => get<{ bots: Bot[] }>('/bots').then((r) => r.bots),
   createBot: (username: string, display_name: string) => post<{ bot: Bot; token: string }>('/bots', { username, display_name }),
   patchBot: (id: number, p: { display_name?: string; description?: string; read_all?: boolean }) =>

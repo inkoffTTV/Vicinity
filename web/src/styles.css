@@ -1534,6 +1534,139 @@ button.side-head:hover {
   color: var(--on-danger);
 }
 
+/* Всплывающие уведомления о сообщениях (NotifyPopups.tsx): справа сверху, на телефоне — сверху на всю ширину */
+.notify-popups {
+  position: fixed;
+  top: calc(var(--space-4) + env(safe-area-inset-top));
+  right: calc(var(--space-4) + env(safe-area-inset-right));
+  z-index: 190;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 360px;
+  max-width: calc(100vw - 2 * var(--space-4));
+  pointer-events: none;
+}
+.notify-popup {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-modal);
+  color: var(--text);
+  box-shadow: var(--shadow-modal);
+  pointer-events: auto;
+  touch-action: pan-y;
+  animation: popup-in var(--dur-base) var(--ease-out-soft);
+  transition:
+    transform var(--dur-fast) ease-out,
+    opacity var(--dur-fast) ease-out;
+}
+.notify-popup.dragging {
+  transition: none;
+}
+.notify-popup.mention {
+  border-color: var(--accent);
+}
+@keyframes popup-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--space-2)));
+  }
+}
+.notify-popup-open {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  color: inherit;
+}
+.notify-popup-open:hover {
+  background: var(--bg-hover);
+}
+/* На подсвеченном фоне text-3 в графитовой теме чуть ниже 4.5:1 — подпись ярче */
+.notify-popup-open:hover .notify-popup-where {
+  color: var(--text-2);
+}
+.notify-popup-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.notify-popup-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.notify-popup-name {
+  flex-shrink: 0;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-author);
+  line-height: var(--lh-author);
+  font-weight: 600;
+}
+.notify-popup-where {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--text-3);
+}
+.notify-popup-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-body-sm);
+  line-height: var(--lh-body-sm);
+  color: var(--text-2);
+}
+.notify-popup-close {
+  margin: var(--space-1) var(--space-1) 0 0;
+}
+.notify-popup-close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.notify-popups-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  align-self: flex-end;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--bg-modal);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-modal);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  pointer-events: auto;
+}
+@media (max-width: 600px) {
+  .notify-popups {
+    top: calc(var(--space-2) + env(safe-area-inset-top));
+    left: calc(var(--space-2) + env(safe-area-inset-left));
+    right: calc(var(--space-2) + env(safe-area-inset-right));
+    width: auto;
+    max-width: none;
+  }
+}
+
 .call-banner {
   position: fixed;
   top: 16px;
@@ -1787,8 +1920,8 @@ button.reply-quote:hover .reply-text {
   color: var(--text-3);
 }
 .md-codeblock-lang {
-  font-family: ui-monospace, Consolas, monospace;
-  text-transform: lowercase;
+  font-weight: 600;
+  color: var(--text-2);
 }
 .md-codeblock-copy {
   padding: 2px 6px;
@@ -1806,6 +1939,70 @@ button.reply-quote:hover .reply-text {
   overflow-x: auto;
   white-space: pre;
   font: 13px/1.45 ui-monospace, 'Cascadia Code', Consolas, 'Liberation Mono', monospace;
+}
+/* Подсветка синтаксиса (lib/hljs.ts): классы highlight.js → токены --code-*, без внешних тем hljs */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-doctag,
+.hljs-section,
+.hljs-name,
+.hljs-selector-pseudo {
+  color: var(--code-keyword);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-char,
+.hljs-symbol,
+.hljs-template-tag,
+.hljs-addition,
+.hljs-meta .hljs-string {
+  color: var(--code-string);
+}
+.hljs-number,
+.hljs-literal,
+.hljs-bullet {
+  color: var(--code-number);
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--code-comment);
+  font-style: italic;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_.inherited__ {
+  color: var(--code-function);
+}
+.hljs-type,
+.hljs-built_in,
+.hljs-title.class_,
+.hljs-class .hljs-title {
+  color: var(--code-type);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-link {
+  color: var(--code-attr);
+}
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-tag {
+  color: var(--code-meta);
+}
+.hljs-deletion {
+  color: var(--danger-text);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 700;
 }
 .md-quote {
   margin: 2px 0;
@@ -5773,6 +5970,8 @@ a:focus-visible > .ico {
   gap: var(--space-1);
   margin-top: var(--space-2);
   max-width: min(560px, 100%);
+  /* Короткий текст сообщения не сужает меню: две кнопки по 8rem встают в ряд, как задал бот */
+  min-width: min(16.25rem, calc(100vw - 8rem));
 }
 /* Кнопки ряда делят ширину поровну; если подписи не помещаются, кнопки переносятся на новую строку,
    а длинная подпись — на несколько строк: текст ответа виден целиком, без многоточия */
@@ -5967,5 +6166,155 @@ a:focus-visible > .ico {
   }
   .bot-facts dd + dt {
     margin-top: var(--space-1);
+  }
+}
+
+/* ── Мини-приложение бота (docs/API.md §21.8): окно справа внизу, на телефоне — весь экран ── */
+.webapp-panel {
+  position: fixed;
+  /* над окном звонка (120), под модальными окнами (130): попап мини-приложения и подтверждения — поверх */
+  z-index: 125;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  width: min(420px, calc(100vw - 2 * var(--space-4)));
+  height: min(720px, calc(100dvh - 2 * var(--space-4)));
+  display: flex;
+  flex-direction: column;
+  /* Непрозрачная основа: при стекле токены фона полупрозрачны, а сквозь окно не должна просвечивать шапка чата.
+     Цвета темы для мини-приложения (lib/webapp.ts) сводятся поверх этого же bg-ground */
+  background: var(--bg-ground);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+  animation: fade var(--dur-fast) ease-out;
+}
+.webapp-panel:focus {
+  outline: none;
+}
+.webapp-panel:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.webapp-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  background: var(--bg-raised);
+  color: var(--text);
+}
+/* Цвет шапки задало мини-приложение; текст — цветом текста или фона Vicinity, что контрастнее */
+.webapp-head.tinted {
+  background: var(--webapp-head-bg);
+}
+.webapp-head.inverse {
+  color: var(--bg-ground);
+}
+.webapp-head.tinted .icon-btn,
+.webapp-head.tinted .webapp-title span {
+  color: inherit;
+}
+.webapp-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.webapp-title strong {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.webapp-title span {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--text-2);
+}
+.webapp-warn {
+  flex-shrink: 0;
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: var(--text-2);
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+}
+.webapp-warn svg {
+  flex-shrink: 0;
+  color: var(--danger-text);
+}
+.webapp-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--webapp-bg, var(--bg-panel));
+}
+.webapp-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+.webapp-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--webapp-bg, var(--bg-panel));
+}
+.webapp-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-2);
+}
+.webapp-empty p {
+  margin: 0;
+}
+.webapp-foot {
+  flex-shrink: 0;
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--webapp-bar, var(--bg-raised));
+}
+.webapp-foot .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--hit-min);
+}
+.webapp-popup-text {
+  margin: 0 0 var(--space-4);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.webapp-popup-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+/* Кнопка мини-приложения в шапке лички с ботом (кнопка меню бота) */
+.chat-head .webapp-open {
+  max-width: 40%;
+  flex-shrink: 1;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .webapp-panel {
+    inset: 0;
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 }

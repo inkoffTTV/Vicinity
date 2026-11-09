@@ -37,7 +37,7 @@ test('markdown renders safely; XSS attempts stay inert text; mentions and emoji-
 
   // Блок кода: подпись языка, прокрутка вбок, копирование
   const block = text.locator('.md-codeblock');
-  await expect(block.locator('.md-codeblock-lang')).toHaveText('js');
+  await expect(block.locator('.md-codeblock-lang')).toHaveText('JavaScript');
   await expect(block.locator('pre')).toHaveCSS('overflow-x', 'auto');
   await expect(block.locator('pre')).toHaveCSS('white-space', 'pre');
   await block.getByRole('button', { name: 'Копировать' }).click();

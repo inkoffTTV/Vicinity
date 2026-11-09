@@ -47,7 +47,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { id: 'theme', label: 'Внешний вид', keywords: 'тема светлая тёмная графит чёрная цвет оформление' },
       { id: 'appicon', label: 'Значок приложения', keywords: 'иконка значок вкладка favicon лого' },
       { id: 'voice', label: 'Голос и видео', keywords: 'микрофон динамик звук камера громкость' },
-      { id: 'notifications', label: 'Уведомления', keywords: 'звук оповещения упоминания telegram телеграм бот' },
+      { id: 'notifications', label: 'Уведомления', keywords: 'звук оповещения упоминания всплывающие баннер telegram телеграм бот' },
       { id: 'overlay', label: 'Оверлей в играх', keywords: 'оверлей игра поверх голос кто говорит' },
       { id: 'hotkeys', label: 'Горячие клавиши', keywords: 'клавиатура сочетания ctrl alt' },
       { id: 'accessibility', label: 'Доступность', keywords: 'контраст насыщенность шрифт анимация компактный' },
@@ -363,6 +363,12 @@ function NotificationsTab() {
         />
       )}
       <Toggle label="Звук новых сообщений" checked={notify.sound} onChange={notify.setSound} />
+      <Toggle
+        label="Всплывающие уведомления в приложении"
+        hint="Баннер о новом сообщении в другом чате, пока Vicinity открыт"
+        checked={notify.popups}
+        onChange={notify.setPopups}
+      />
       <TelegramCard />
       {servers.length > 0 && (
         <section className="stack">

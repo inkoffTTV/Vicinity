@@ -34,6 +34,14 @@ struct ThemeTable {
     QColor onScrimColor;
     QColor mentionColor;
     QColor speakingColor;
+    QColor codeKeywordColor;
+    QColor codeStringColor;
+    QColor codeNumberColor;
+    QColor codeCommentColor;
+    QColor codeFunctionColor;
+    QColor codeTypeColor;
+    QColor codeAttrColor;
+    QColor codeMetaColor;
 };
 
 static const ThemeTable kThemes[] = {
@@ -67,6 +75,14 @@ static const ThemeTable kThemes[] = {
       /* on-scrim     */ QColor(255, 255, 255, 255),
       /* mention      */ QColor(43, 224, 184, 41),
       /* speaking     */ QColor(61, 214, 140, 255),
+      /* code-keyword */ QColor(201, 167, 255, 255),
+      /* code-string  */ QColor(159, 220, 124, 255),
+      /* code-number  */ QColor(255, 184, 119, 255),
+      /* code-comment */ QColor(140, 151, 166, 255),
+      /* code-function */ QColor(127, 191, 255, 255),
+      /* code-type    */ QColor(242, 210, 122, 255),
+      /* code-attr    */ QColor(111, 216, 232, 255),
+      /* code-meta    */ QColor(247, 146, 184, 255),
     },
     { "light",
       /* bg-ground    */ QColor(233, 236, 241, 255),
@@ -98,6 +114,14 @@ static const ThemeTable kThemes[] = {
       /* on-scrim     */ QColor(255, 255, 255, 255),
       /* mention      */ QColor(17, 122, 102, 31),
       /* speaking     */ QColor(26, 154, 90, 255),
+      /* code-keyword */ QColor(122, 63, 209, 255),
+      /* code-string  */ QColor(44, 122, 28, 255),
+      /* code-number  */ QColor(166, 82, 0, 255),
+      /* code-comment */ QColor(95, 101, 115, 255),
+      /* code-function */ QColor(27, 95, 184, 255),
+      /* code-type    */ QColor(138, 93, 0, 255),
+      /* code-attr    */ QColor(11, 106, 128, 255),
+      /* code-meta    */ QColor(176, 36, 94, 255),
     },
     { "graphite",
       /* bg-ground    */ QColor(26, 27, 31, 255),
@@ -129,6 +153,14 @@ static const ThemeTable kThemes[] = {
       /* on-scrim     */ QColor(255, 255, 255, 255),
       /* mention      */ QColor(43, 198, 164, 41),
       /* speaking     */ QColor(61, 214, 140, 255),
+      /* code-keyword */ QColor(205, 176, 255, 255),
+      /* code-string  */ QColor(166, 221, 134, 255),
+      /* code-number  */ QColor(255, 189, 128, 255),
+      /* code-comment */ QColor(154, 158, 171, 255),
+      /* code-function */ QColor(140, 196, 255, 255),
+      /* code-type    */ QColor(242, 210, 122, 255),
+      /* code-attr    */ QColor(122, 219, 234, 255),
+      /* code-meta    */ QColor(247, 154, 192, 255),
     },
     { "black",
       /* bg-ground    */ QColor(0, 0, 0, 255),
@@ -160,6 +192,14 @@ static const ThemeTable kThemes[] = {
       /* on-scrim     */ QColor(255, 255, 255, 255),
       /* mention      */ QColor(43, 198, 164, 41),
       /* speaking     */ QColor(61, 214, 140, 255),
+      /* code-keyword */ QColor(201, 167, 255, 255),
+      /* code-string  */ QColor(159, 220, 124, 255),
+      /* code-number  */ QColor(255, 184, 119, 255),
+      /* code-comment */ QColor(143, 148, 161, 255),
+      /* code-function */ QColor(127, 191, 255, 255),
+      /* code-type    */ QColor(242, 210, 122, 255),
+      /* code-attr    */ QColor(111, 216, 232, 255),
+      /* code-meta    */ QColor(247, 146, 184, 255),
     },
 };
 

@@ -4,6 +4,7 @@
 import { create } from 'zustand';
 import { Message } from './api';
 import { plainText } from './markdown';
+import { popupSurface, showPopup } from './popups';
 
 /** Сервер: уведомлять обо всех сообщениях, только об упоминаниях или ни о чём */
 export type NotifyLevel = 'all' | 'mentions' | 'none';
@@ -20,12 +21,15 @@ interface Settings {
   muted: number[];
   /** Звуковой сигнал о новых сообщениях */
   sound: boolean;
+  /** Баннер о сообщении в другом чате, пока окно Vicinity на экране */
+  popups: boolean;
 }
 
 interface State extends Settings {
   setServerLevel: (serverId: number, level: NotifyLevel) => void;
   toggleMute: (channelId: number) => void;
   setSound: (on: boolean) => void;
+  setPopups: (on: boolean) => void;
 }
 
 const KEY = 'vicinity.notify';
@@ -37,15 +41,16 @@ function load(): Settings {
       servers: raw && typeof raw.servers === 'object' && raw.servers ? raw.servers : {},
       muted: Array.isArray(raw?.muted) ? raw.muted.filter((x: unknown) => typeof x === 'number') : [],
       sound: raw?.sound !== false,
+      popups: raw?.popups !== false,
     };
   } catch {
-    return { servers: {}, muted: [], sound: true };
+    return { servers: {}, muted: [], sound: true, popups: true };
   }
 }
 
 function save(s: Settings) {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ servers: s.servers, muted: s.muted, sound: s.sound }));
+    localStorage.setItem(KEY, JSON.stringify({ servers: s.servers, muted: s.muted, sound: s.sound, popups: s.popups }));
   } catch {
     /* приватный режим — настройки живут до перезагрузки */
   }
@@ -66,6 +71,10 @@ export const useNotifySettings = create<State>((set, get) => ({
     set({ sound });
     save(get());
   },
+  setPopups: (popups) => {
+    set({ popups });
+    save(get());
+  },
 }));
 
 /** Уровень уведомлений сервера; по умолчанию — только упоминания */
@@ -79,8 +88,23 @@ export interface NotifyContext {
   active: boolean;
   /** Статус «Не беспокоить» */
   dnd: boolean;
+  /** Где сообщение: «Личные сообщения», название беседы, «#канал · Сервер» */
+  where: string;
   /** Открыть канал по щелчку на уведомлении */
   open: () => void;
+  /** Открыть канал на этом сообщении (баннер в приложении) */
+  openMessage: () => void;
+}
+
+/** Короткий текст сообщения для уведомления: разметка снята, вложение — словом */
+export function messagePreview(msg: Message): string {
+  if (msg.kind === 'voice') return 'Голосовое сообщение';
+  if (msg.kind === 'call') return 'Звонок';
+  const text = plainText(msg.text ?? '');
+  if (text) return text;
+  if (msg.attachment_type === 'file') return `Файл: ${msg.attachment_name || 'без имени'}`;
+  if (msg.attachment_type === 'image' || msg.attachment) return 'Фото';
+  return 'Сообщение';
 }
 
 /** Чужое новое сообщение: уведомить, если это личка/беседа или упоминание (или так настроен сервер) */
@@ -92,17 +116,29 @@ export function notifyMessage(msg: Message, ctx: NotifyContext) {
     if (level === 'none' || (level === 'mentions' && !ctx.mentioned)) return;
   }
   const focused = !document.hidden && document.hasFocus();
-  if (ctx.active && focused) return;
+  const screen = popupSurface();
+  if (ctx.active && !screen.chatHidden && focused) return;
   if (s.sound) playChime();
-  if (focused || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  // Окно на экране, но открыт другой чат — баннер в приложении; окно в фоне — системное уведомление
+  if (focused) {
+    if (s.popups && !screen.blocked)
+      showPopup({
+        channelId: msg.channel_id,
+        messageId: msg.id,
+        authorId: msg.author_id,
+        authorName: msg.author_name,
+        avatar: msg.author_avatar,
+        where: ctx.where,
+        text: messagePreview(msg),
+        mentioned: ctx.mentioned,
+        open: ctx.openMessage,
+      });
+    return;
+  }
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   try {
     const n = new Notification(ctx.mentioned ? `${msg.author_name} упоминает вас` : msg.author_name, {
-      body:
-        msg.kind === 'voice'
-          ? 'Голосовое сообщение'
-          : msg.kind === 'call'
-            ? 'Пропущенный звонок'
-            : plainText(msg.text) || (msg.attachment_type === 'file' ? `Файл: ${msg.attachment_name || 'без имени'}` : 'Изображение'),
+      body: msg.kind === 'call' ? 'Пропущенный звонок' : messagePreview(msg),
       icon: msg.author_avatar || '/favicon.svg',
       tag: `ch-${msg.channel_id}`,
     });

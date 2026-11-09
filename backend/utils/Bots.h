@@ -6,6 +6,8 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 // Боты (docs/API.md §21): пользователи с is_bot = 1, Bot API в стиле Telegram и доставка им обновлений.
 // Обновления копятся в bot_updates (getUpdates, длинный опрос без блокировки потоков) или уходят
@@ -24,10 +26,11 @@ struct Token {
     std::string token;   // «<id>:<секрет>» — показывается владельцу один раз
     std::string hash;    // sha256 токена — в bots.token_hash
     std::string hint;    // последние 4 символа — чтобы узнать токен в списке
+    std::string webappKey;   // ключ подписи initData мини-приложений (webAppKey) — в bots.webapp_key
 };
 Token newToken(int64_t botId);
 
-// id бота по токену из URL; 0 — токен неверный
+// id бота по токену из URL; 0 — токен неверный. Заодно заполняет bots.webapp_key, если его ещё нет
 int64_t authenticate(const drogon::orm::DbClientPtr& db, const std::string& token);
 
 bool isBot(const drogon::orm::DbClientPtr& db, int64_t userId);
@@ -137,5 +140,32 @@ struct Ephemeral {
 // callback_query; память ограничена (на бота и всего), вытесняются самые старые
 void rememberEphemeral(const std::string& id, const Ephemeral& e);
 std::optional<Ephemeral> findEphemeral(const std::string& id);
+
+// ---------- Мини-приложения (docs/API.md §21.8) ----------
+
+// Ключ подписи initData, как secret_key у Telegram: hex(HMAC_SHA256(key = "WebAppData", msg = токен))
+std::string webAppKey(const std::string& token);
+
+// Адрес мини-приложения: https до 512 символов (http и частные адреса — только с allow_private_webhooks)
+bool webAppUrlOk(const std::string& url);
+// Хост адреса мини-приложения так, как его разберёт браузер: нижний регистр, без порта и точки в конце;
+// "" — запись, которую браузер понял бы иначе («\», %-коды, не-ASCII, IPv4 вида 127.1 или 0x7f000001)
+std::string webAppHost(const std::string& url);
+// Имя хоста из заголовка Host: нижний регистр, без порта и точки в конце (IPv6 — без скобок)
+std::string requestHost(const std::string& hostHeader);
+
+// Кнопка меню (setChatMenuButton): {type: commands|default} или {type: web_app, text 1–64, web_app: {url}}.
+// false — ошибка, причина в err (описание Bot API без «Bad Request: »)
+bool parseMenuButton(const Json::Value& in, Json::Value& out, std::string& err);
+
+// Кнопка меню бота в чате channelId (своя для чата, иначе общая; channelId = 0 — общая); {type: "default"}, если не задана
+Json::Value menuButton(const drogon::orm::DbClientPtr& db, int64_t botId, int64_t channelId);
+
+// Процентное кодирование для query-строки: всё, кроме A-Z a-z 0-9 - _ . ~
+std::string urlEncode(const std::string& s);
+
+// initData из пар ключ–значение (значения без кодирования): «k=v&…&hash=…», hash = hex(HMAC_SHA256(key = ключ
+// из webAppKey, data_check_string)), data_check_string — «k=v» по алфавиту через \n. keyHex пустой — без hash
+std::string signInitData(const std::vector<std::pair<std::string, std::string>>& fields, const std::string& keyHex);
 
 } // namespace Bots

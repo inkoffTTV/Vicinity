@@ -968,6 +968,106 @@ HttpResponsePtr sendEphemeralMessage(Ctx& c) {
     return ok(result);
 }
 
+// ---------- Мини-приложения (§21.8) ----------
+
+// {type:"bot_menu_button_changed", bot_id, channel_id}: шапка лички с ботом перечитывает кнопку меню.
+// channel_id 0 — кнопка для всех чатов бота: событие получают все, у кого с ним личка
+void menuButtonChanged(Ctx& c, int64_t chatId) {
+    Json::Value ev;
+    ev["type"]       = "bot_menu_button_changed";
+    ev["bot_id"]     = static_cast<Json::Int64>(c.bot);
+    ev["channel_id"] = static_cast<Json::Int64>(chatId);
+    try {
+        if (chatId > 0) {
+            Broadcast::toChannel(chatId, ev, c.bot);
+            return;
+        }
+        auto r = c.db->execSqlSync("SELECT m2.user_id FROM channel_members m1 "
+                                   "JOIN channels ch ON ch.id = m1.channel_id AND ch.type = 'dm' "
+                                   "JOIN channel_members m2 ON m2.channel_id = m1.channel_id AND m2.user_id != m1.user_id "
+                                   "WHERE m1.user_id = ? LIMIT 10000", c.bot);
+        for (const auto& row : r) Broadcast::toUser(row["user_id"].as<int64_t>(), ev);
+    } catch (...) {}   // кнопка сохранена; без события клиент увидит её при следующем открытии лички
+}
+
+// setChatMenuButton(chat_id?, menu_button?) — без chat_id кнопка для всех чатов бота, без menu_button — default
+HttpResponsePtr setChatMenuButton(Ctx& c) {
+    int64_t chatId = 0;
+    if (c.p.has("chat_id"))
+        if (auto e = chatOf(c, chatId)) return e;
+    Json::Value button;
+    if (c.p.has("menu_button")) {
+        std::string err;
+        if (!Bots::parseMenuButton(c.p.json("menu_button"), button, err)) return fail(400, "Bad Request: " + err);
+    } else {
+        button["type"] = "default";
+    }
+    // Адрес самого Vicinity мини-приложению не годится (docs/API.md §21.8): открыть его всё равно не дадим
+    if (button["type"].asString() == "web_app") {
+        const std::string self = Bots::requestHost(c.req ? c.req->getHeader("host") : std::string());
+        if (!self.empty() && Bots::webAppHost(button["web_app"]["url"].asString()) == self)
+            return fail(400, "Bad Request: BUTTON_URL_INVALID: web_app.url must not point to Vicinity itself");
+    }
+    if (button["type"].asString() == "default") {
+        c.db->execSqlSync("DELETE FROM bot_menu_buttons WHERE bot_id = ? AND channel_id = ?", c.bot, chatId);
+        menuButtonChanged(c, chatId);
+        return ok(true);
+    }
+    std::string stored = JsonUtils::write(button);
+    while (!stored.empty() && stored.back() == '\n') stored.pop_back();
+    c.db->execSqlSync("INSERT INTO bot_menu_buttons(bot_id, channel_id, button) VALUES(?, ?, ?) "
+                      "ON CONFLICT(bot_id, channel_id) DO UPDATE SET button = excluded.button", c.bot, chatId, stored);
+    menuButtonChanged(c, chatId);
+    return ok(true);
+}
+
+HttpResponsePtr getChatMenuButton(Ctx& c) {
+    int64_t chatId = 0;
+    if (c.p.has("chat_id"))
+        if (auto e = chatOf(c, chatId)) return e;
+    return ok(Bots::menuButton(c.db, c.bot, chatId));
+}
+
+// answerWebAppQuery(web_app_query_id, result: InlineQueryResultArticle) — отличие от Telegram: сообщение приходит от
+// самого бота в чат, откуда открыли мини-приложение (от имени человека Vicinity не пишет). Один ответ на query_id, час
+HttpResponsePtr answerWebAppQuery(Ctx& c) {
+    const std::string id = c.p.str("web_app_query_id");
+    const Json::Value result = c.p.json("result");
+    if (!result.isObject()) return fail(400, "Bad Request: result must be an object");
+    if (JsonUtils::getStr(result, "type") != "article")
+        return fail(400, "Bad Request: only InlineQueryResultArticle is supported");
+    const Json::Value& content = result["input_message_content"];
+    if (!content.isObject() || !content["message_text"].isString())
+        return fail(400, "Bad Request: input_message_content.message_text is required");
+    const std::string raw = content["message_text"].asString();
+    if (!TextUtils::isValidUtf8(raw)) return fail(400, "Bad Request: text must be encoded in UTF-8");
+    const std::string text = Bots::convertText(raw, JsonUtils::getStr(content, "parse_mode"));
+    if (TextUtils::trim(text).empty()) return fail(400, "Bad Request: message text is empty");
+    if (static_cast<int>(TextUtils::utf8Length(text)) > Vicinity::MAX_MESSAGE_LEN)
+        return fail(400, "Bad Request: message is too long");
+    Json::Value markup;
+    std::string err;
+    if (!Bots::parseMarkup(result["reply_markup"], markup, err)) return fail(400, "Bad Request: " + err);
+    auto q = c.db->execSqlSync("SELECT channel_id FROM bot_webapp_queries WHERE id = ? AND bot_id = ? AND answered = 0 "
+                               "AND created_at > datetime('now', '-1 hour')", id, c.bot);
+    if (q.empty()) return fail(400, "Bad Request: QUERY_ID_INVALID");
+    const int64_t chatId = q[0]["channel_id"].as<int64_t>();
+    if (chatId <= 0 || Access::channel(c.db, chatId, c.bot) != Access::Result::Ok)
+        return fail(400, "Bad Request: chat not found");
+    if (const int64_t peer = Access::dmPeer(c.db, chatId, c.bot); peer && Access::blockedBetween(c.db, c.bot, peer))
+        return fail(403, "Forbidden: bot was blocked by the user");
+    if (!UserRateLimiter::instance().allow(UserRateLimiter::Action::BotSend, c.bot)) return tooFast();
+    if (c.db->execSqlSync("UPDATE bot_webapp_queries SET answered = 1 WHERE id = ? AND answered = 0 RETURNING id", id).empty())
+        return fail(400, "Bad Request: QUERY_ID_INVALID");
+    Messages::Post post;
+    post.text = text;
+    post.replyMarkup = markupColumn(markup);
+    post.push = false;
+    post.activity = false;
+    Messages::post(c.db, chatId, c.bot, post);
+    return ok(Json::Value(Json::objectValue));   // SentWebAppMessage без inline_message_id
+}
+
 HttpResponsePtr trueResult(Ctx&) { return ok(true); }
 
 const std::map<std::string, Handler>& methods() {
@@ -990,6 +1090,9 @@ const std::map<std::string, Handler>& methods() {
         {"deletewebhook", deleteWebhook},
         {"getwebhookinfo", getWebhookInfo},
         {"sendephemeralmessage", sendEphemeralMessage},
+        {"setchatmenubutton", setChatMenuButton},
+        {"getchatmenubutton", getChatMenuButton},
+        {"answerwebappquery", answerWebAppQuery},
         {"logout", trueResult},
         {"close", trueResult},
     };

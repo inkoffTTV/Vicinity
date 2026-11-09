@@ -19,7 +19,7 @@ export interface User {
 export async function registerUser(
   browser: Browser,
   displayName: string,
-  opts: { viewport?: { width: number; height: number }; colorScheme?: 'dark' | 'light'; denoise?: boolean } = {},
+  opts: { viewport?: { width: number; height: number }; colorScheme?: 'dark' | 'light'; denoise?: boolean; popups?: boolean } = {},
 ): Promise<User> {
   const context = await browser.newContext({
     viewport: opts.viewport ?? { width: 1280, height: 800 },
@@ -33,6 +33,16 @@ export async function registerUser(
         if (localStorage.getItem('vicinity.media') === null) localStorage.setItem('vicinity.media', JSON.stringify({ denoise: false }));
       } catch {
         /* изолированный iframe активности без allow-same-origin: localStorage недоступен */
+      }
+    });
+  // Всплывающие уведомления о сообщениях встают поверх шапки чата справа сверху и мешали бы щелчкам в чужих тестах —
+  // по умолчанию выключены; тест баннеров включает их явно (popups: true)
+  if (!opts.popups)
+    await context.addInitScript(() => {
+      try {
+        if (localStorage.getItem('vicinity.notify') === null) localStorage.setItem('vicinity.notify', JSON.stringify({ popups: false }));
+      } catch {
+        /* localStorage недоступен */
       }
     });
   const page = await context.newPage();

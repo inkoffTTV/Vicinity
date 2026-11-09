@@ -503,6 +503,23 @@ void initialize() {
     // allowed_updates — JSON-список типов обновлений (NULL — все); для баз, где bots уже создана
     exec("ALTER TABLE bots ADD COLUMN allowed_updates TEXT DEFAULT NULL");
     exec("CREATE INDEX IF NOT EXISTS idx_bots_owner ON bots(owner_id)");
+    // Мини-приложения (docs/API.md §21.8): webapp_key = hex(HMAC_SHA256("WebAppData", токен)) — ключ подписи initData.
+    // Токен хранится только хэшем, поэтому ключ заполняется при создании/перевыпуске токена и при вызове Bot API
+    exec("ALTER TABLE bots ADD COLUMN webapp_key TEXT DEFAULT NULL");
+    // Кнопка меню бота (setChatMenuButton): channel_id = 0 — для всех чатов, иначе для одного
+    exec("CREATE TABLE IF NOT EXISTS bot_menu_buttons ("
+         "bot_id INTEGER NOT NULL,"
+         "channel_id INTEGER NOT NULL DEFAULT 0,"
+         "button TEXT NOT NULL,"
+         "PRIMARY KEY(bot_id, channel_id))");
+    // Открытые мини-приложения: query_id из initData для answerWebAppQuery (живёт час, ответ один)
+    exec("CREATE TABLE IF NOT EXISTS bot_webapp_queries ("
+         "id TEXT PRIMARY KEY,"
+         "bot_id INTEGER NOT NULL,"
+         "user_id INTEGER NOT NULL,"
+         "channel_id INTEGER NOT NULL DEFAULT 0,"
+         "answered INTEGER NOT NULL DEFAULT 0,"
+         "created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
     // Очередь обновлений для getUpdates: не старше суток и не больше 1000 на бота
     exec("CREATE TABLE IF NOT EXISTS bot_updates ("
          "update_id INTEGER PRIMARY KEY AUTOINCREMENT,"

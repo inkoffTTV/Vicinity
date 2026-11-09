@@ -19,6 +19,8 @@ test('nginx config: backend resolved per request, gzip, security headers', () =>
   expect(header('Referrer-Policy')).toBeTruthy();
   expect(header('Permissions-Policy')).toMatch(/microphone=\(self\).*camera=\(self\).*display-capture=\(self\)/);
   expect(header('Content-Security-Policy')).toMatch(/frame-ancestors 'none'/);
+  // Мини-приложения ботов (docs/API.md §21.8) — в iframe только по https; свои страницы (игры) — тоже
+  expect(header('Content-Security-Policy')).toMatch(/frame-src 'self' https:;/);
 });
 
 test('the app works under the Content-Security-Policy that nginx sends', async ({ browser }) => {
@@ -55,6 +57,11 @@ test('the app works under the Content-Security-Policy that nginx sends', async (
   await img.click();
   await expect(page.locator('.lightbox')).toBeVisible();
   await page.keyboard.press('Escape');
+
+  // Подсветка кода: highlight.js — отдельный чанк с того же origin, без eval и инлайн-стилей
+  await page.locator('.composer textarea').fill('```cpp\n#include <vector>\nint main() { return 0; }\n```');
+  await page.locator('.composer textarea').press('Enter');
+  await expect(page.locator('.md-codeblock code.hljs .hljs-keyword').first()).toBeVisible();
 
   await page.getByTitle('Настройки').click();
   await page.locator('.settings-groups button', { hasText: /^Профиль$/ }).click();

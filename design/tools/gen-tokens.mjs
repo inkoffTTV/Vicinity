@@ -15,6 +15,9 @@ const QML = {
   'link': 'linkColor', 'ok': 'presenceOnline', 'idle': 'presenceIdle', 'dnd': 'presenceDnd', 'offline': 'presenceOffline',
   'danger': 'dangerColor', 'danger-text': 'dangerTextColor', 'on-danger': 'onDangerColor', 'mention': 'mentionColor', 'speaking': 'speakingColor',
   'on-ok': 'onOkColor', 'scrim': 'scrimColor', 'on-scrim': 'onScrimColor',
+  'code-keyword': 'codeKeywordColor', 'code-string': 'codeStringColor', 'code-number': 'codeNumberColor',
+  'code-comment': 'codeCommentColor', 'code-function': 'codeFunctionColor', 'code-type': 'codeTypeColor',
+  'code-attr': 'codeAttrColor', 'code-meta': 'codeMetaColor',
 };
 
 const themes = t.color.themes.map((x) => x.id);

@@ -582,6 +582,8 @@ grammY, Telegraf) подключаются сменой адреса серве�
 | POST | `/channels/{id}/members` | `{user_id: <бот>}` — бот входит в беседу **сразу** (приглашения он не принимает) → `{status:"added", channel_id}`; уже в беседе — 409; остальным WS `channel_member_joined` |
 | GET | `/channels/{id}/commands` | команды ботов-участников канала для подсказок в композере: `{commands: [{bot_id, bot_username, command, description}]}` (кэшировать ~60 с) |
 | POST | `/channels/{id}/messages/{mid}/callback` | нажатие кнопки `{data}` → `{ok:true, query_id}`; у эфемерного сообщения `mid` = 0 и `{data, ephemeral_id}` |
+| POST | `/bots/{id}/webapp` | **[new]** открыть мини-приложение (§21.8): `{url, channel_id?, message_id? \| ephemeral_id?, theme_params?}` → `{url_with_fragment, init_data, theme_params, signed, bot: {id, username, display_name}}` |
+| GET | `/bots/{id}/menu_button?channel_id=` | **[new]** кнопка меню бота для этого чата (§21.8) → `{menu_button: {type: "default"\|"commands"} \| {type: "web_app", text, web_app: {url}}}` |
 
 Объект бота: `{id, username, display_name, avatar_path, description, token_hint, read_all, webhook_url, webhook_error,
 commands: [{command, description}], servers: [{id, name}], owner_id, created_at}`. `token_hint` — последние 4 символа
@@ -600,6 +602,9 @@ commands: [{command, description}], servers: [{id, name}], owner_id, created_at}
 не чаще 10 нажатий за 5 с (429). Бот получает `callback_query`; его `answerCallbackQuery` приходит
 **только нажавшему** WS-событием `{"type":"callback_answer","query_id","channel_id","message_id","text"?,"show_alert":bool,"url"?}`.
 Клиент показывает `text` (при `show_alert` — заметно, окном), `url` открывает. Ответа может не быть — ждать ~10 с.
+Правка или удаление этого сообщения (`message_edited` / `message_deleted`, для эфемерного — новое `ephemeral_message` с тем
+же `ephemeral_id`) сразу снимает ожидание с его кнопок, как в Telegram: меню «подменю → Назад» работает и без
+`answerCallbackQuery`; ответ, пришедший после правки, всё равно показывается.
 
 ### 21.2 Адрес и формат
 
@@ -673,6 +678,9 @@ python-telegram-bot: `Application.builder().token(TOKEN).base_url("https://<се
 | `setMyCommands` / `getMyCommands` / `deleteMyCommands` | `commands: [{command (1–32, a-z0-9_), description (1–256)}]` (≤100; `scope`, `language_code` игнорируются) | `true` / [BotCommand] / `true` |
 | `getChat` | `chat_id` | Chat (+ поля ChatFullInfo, которые требуют библиотеки) |
 | `sendChatAction` | `chat_id`, `action` | `true`; участникам — обычное WS `typing` (§3) |
+| `setChatMenuButton` **[new]** | `chat_id?`, `menu_button?` (`{type: "web_app", text 1–64, web_app: {url}}`, `{type: "commands"}`, `{type: "default"}`) | `true`; без `chat_id` — для всех чатов бота, с `chat_id` — для одного (бот — участник); без `menu_button` или `default` — сброс к общей. Адрес — как у кнопки `web_app` (§21.8) и не на хосте самого Vicinity, иначе 400 `BUTTON_URL_INVALID`. После изменения — WS `{"type":"bot_menu_button_changed","bot_id","channel_id"}` участникам чата (`channel_id` 0 — всем, у кого личка с ботом): шапка лички перечитывает кнопку сразу |
+| `getChatMenuButton` **[new]** | `chat_id?` | MenuButton: своя кнопка чата, иначе общая, иначе `{type: "default"}` |
+| `answerWebAppQuery` **[new]** | `web_app_query_id` (`query_id` из initData), `result: InlineQueryResultArticle` (`input_message_content.message_text`, `parse_mode?`; `reply_markup?`) | `{}` (SentWebAppMessage). **Отличие от Telegram:** сообщение приходит от самого бота в чат, откуда открыли мини-приложение (от имени человека Vicinity не пишет); один ответ на `query_id`, не позже часа, иначе 400 `QUERY_ID_INVALID`; открыли не из чата или бота убрали — 400 `chat not found` |
 | `sendEphemeralMessage` | `chat_id`, `user_id`, `text`, `parse_mode?`, `reply_markup?` | расширение Vicinity: сообщение видит только `user_id` (участник чата, иначе 400), в базе не хранится. Ответ — Message с `message_id: 0` и `ephemeral_id` |
 | `logOut`, `close` | — | `true` (ничего не делают) |
 
@@ -697,7 +705,7 @@ python-telegram-bot: `Application.builder().token(TOKEN).base_url("https://<се
 
 **reply_markup.** Поддерживается только `inline_keyboard` (`keyboard`, `remove_keyboard`, `force_reply` молча
 игнорируются). Кнопка: `text` (1–64) и ровно одно из `callback_data` (1–64 байта), `url` (http/https, ≤512),
-`copy_text: {text ≤256}`, `web_app: {url https}` (открывается как ссылка). Не больше 10 рядов, 8 кнопок в ряду,
+`copy_text: {text ≤256}`, `web_app: {url https}` (мини-приложение в панели Vicinity, §21.8). Не больше 10 рядов, 8 кнопок в ряду,
 50 всего; нарушение — 400 с понятным `description`.
 
 ### 21.5 Какие обновления получает бот
@@ -780,6 +788,82 @@ mp3/m4a/ogg/wav/flac — `audio`, голосовое — `voice`, остальн
 Неверный токен — 401, нет файла или нет права — 404, `..` и прочие пути вне каталога вложений не проходят маршрут.
 nginx не пишет эти адреса в логи (токен в пути).
 
+### 21.8 Мини-приложения (web_app) **[new]**
+
+Кнопка `web_app` под сообщением бота и кнопка меню бота (`setChatMenuButton`, в шапке лички с ботом — «Открыть
+мини-приложение: <text>») открывают страницу бота **внутри Vicinity**: окно ~420×720 справа внизу (на телефоне — на весь
+экран, модально: остальное приложение `inert`, кроме входящего звонка, тостов и уведомлений; баннеры уведомлений, пока оно
+открыто, не показываются — только звук) с шапкой (имя бота, «Мини-приложение · <хост>», «Обновить», «Открыть в браузере», «Закрыть») и
+`<iframe sandbox="allow-scripts allow-forms allow-same-origin allow-modals">`. `allow-same-origin` относится
+к origin самого мини-приложения: к странице Vicinity (другой origin) у него доступа нет, токен сессии ему не передаётся.
+`allow-popups` нет: `window.open` из мини-приложения не работает (ссылки — через `web_app_open_link`, с лимитом), а
+ПК-приложение вдобавок открывает окна из любого фрейма не чаще 3 подряд и дальше раза в секунду.
+Адрес на хосте самого Vicinity (с любым портом и схемой) не открывается: сервер — 400 и в `/bots/{id}/webapp`, и в
+`setChatMenuButton`; клиент — только «Открыть в браузере»; страница, редиректом попавшая на origin Vicinity, сразу
+убирается из окна. Адрес — только `https://` до 512 символов на публичный хост; `http://` и частные адреса — только с
+`allow_private_webhooks` (разработка, e2e). Хост сервер сверяет так, как его разберёт браузер (WHATWG URL), и записи,
+которые браузер понял бы иначе, отклоняет всегда (400 `BUTTON_URL_INVALID`): `\` в адресе, `%`-коды и не-ASCII в хосте
+(IDN — только punycode `xn--`), IPv4 не в виде `a.b.c.d` (`127.1`, `0x7f000001`, `2130706433`). Имя, которое DNS
+разрешает в частный адрес, сервер не ловит: проверка — по записи адреса. Prod CSP (`deploy/nginx.conf`): `frame-src 'self' https:`.
+
+**Совместимость с `telegram-web-app.js`.** Клиент вызывает `POST /bots/{id}/webapp` и грузит `url_with_fragment` — адрес
+бота с фрагментом `#tgWebAppData=<initData, urlencoded>&tgWebAppVersion=7.10&tgWebAppPlatform=web&tgWebAppThemeParams=<JSON>`
+(у адреса со своим фрагментом: `#/путь` → `#/путь?tgWebAppData=…`, `#a=b` → `#a=b&tgWebAppData=…`). Официальный скрипт
+Telegram работает без изменений: события — `postMessage` JSON-строкой `{eventType, eventData}`. Клиент принимает только
+сообщения с `event.source === iframe.contentWindow` (origin не сверяется с адресом кнопки: страница могла уйти
+редиректом, например `example.com` → `www.example.com`; сообщения с origin `null` и с origin Vicinity отбрасываются) и
+отвечает `iframe.contentWindow.postMessage(…, <origin, с которого iframe написал последним>)`; до первого сообщения — на
+origin адреса кнопки. Не больше 60 событий в секунду.
+
+| Событие мини-приложения | Что делает Vicinity |
+|---|---|
+| `web_app_ready` | убирает индикатор загрузки |
+| `web_app_expand`, `web_app_request_viewport` | → `viewport_changed {height, width, is_expanded: true, is_state_stable: true}` (и при каждом изменении размера окна) |
+| `web_app_request_theme` | → `theme_changed {theme_params}`; при смене оформления Vicinity — сам |
+| `web_app_setup_main_button`, `web_app_setup_secondary_button` | кнопки внизу окна: `text`, `color`/`text_color` (#rrggbb), `is_visible`, `is_active`, `is_progress_visible`; нажатие → `main_button_pressed` / `secondary_button_pressed` |
+| `web_app_setup_back_button` | «Назад» в шапке → `back_button_pressed`; `web_app_setup_settings_button` — кнопка настроек → `settings_button_pressed` |
+| `web_app_setup_closing_behavior` | `need_confirmation` — закрытие из шапки или Esc спрашивает «Закрыть мини-приложение?» |
+| `web_app_open_popup` | окно Vicinity: `title` ≤64, `message` 1–256, `buttons` 1–3 (`default`, `ok`, `close`, `cancel`, `destructive`) → `popup_closed {button_id}`; закрыли крестиком или Esc — `popup_closed {}`. Одно окно за раз и не больше 3 за 10 с; лишний или неверный попап не
+показывается, но сразу получает `popup_closed {}` (иначе `telegram-web-app.js` считал бы его открытым и отказывал в следующих) |
+| `web_app_open_link` | только http/https, новая вкладка (ПК-приложение — системный браузер); браузер не дал открыть — окно «Открыть <хост>»; не чаще раза в секунду |
+| `web_app_set_header_color` (`color` или `color_key`), `web_app_set_background_color`, `web_app_set_bottom_bar_color` | цвет шапки / фона под iframe / полосы кнопок; только #rrggbb. Текст шапки — цветом текста или фона темы, что контрастнее,
+и пересчитывается при смене темы Vicinity (`color_key` — тоже); цвет, на котором ни тот, ни другой не дают 4.5:1, не применяется |
+| `web_app_read_text_from_clipboard` | → `clipboard_text_received {req_id}` без данных (буфер обмена не отдаём) |
+| `web_app_request_safe_area`, `web_app_request_content_safe_area` | → `safe_area_changed` / `content_safe_area_changed` с нулями |
+| `web_app_request_phone`, `web_app_request_write_access`, `web_app_open_invoice`, `web_app_open_scan_qr_popup`, `web_app_request_fullscreen`, `web_app_biometry_get_info`, `web_app_check_home_screen`, `web_app_invoke_custom_method` | честный отказ (`cancelled`, `failed`, `UNSUPPORTED`, `available: false`), чтобы приложение не ждало ответа |
+| `web_app_close` | закрывает окно без подтверждения |
+| прочее (`web_app_data_send`, `web_app_open_tg_link`, `web_app_trigger_haptic_feedback`, …) | игнорируется |
+
+**theme_params** — токены текущей темы в `#rrggbb` (полупрозрачные и `color-mix` сведены поверх `bg-ground`):
+`bg_color` ← `bg-panel`, `secondary_bg_color` ← `bg-ground`, `section_bg_color`/`header_bg_color`/`bottom_bar_bg_color` ←
+`bg-raised`, `text_color` ← `text`, `subtitle_text_color` ← `text-2`, `hint_color` ← `text-3`,
+`link_color`/`accent_text_color`/`section_header_text_color` ← `link`, `button_color` ← `accent`, `button_text_color` ←
+`on-accent`, `destructive_text_color` ← `danger-text`, `section_separator_color` ← `border`. Сервер пропускает только эти
+ключи со значениями `#rrggbb`.
+
+**POST `/bots/{id}/webapp`** `{url, channel_id?, message_id? | ephemeral_id?, theme_params?}`: с `message_id`
+(`ephemeral_id`) — в кнопках этого сообщения бота в канале `channel_id` есть `web_app` ровно с этим `url`, иначе —
+`url` совпадает с кнопкой меню бота для `channel_id` (или общей). Доступ к каналу (403/404), бот — участник (иначе 400),
+не чаще 10 открытий и нажатий за 5 с (429). Ответ `signed: false` — у бота ещё нет ключа подписи (см. ниже): initData
+без `hash`, клиент предупреждает «Бот ещё не активировал мини-приложения».
+
+**initData** (как у Telegram, `aiogram.utils.web_app.safe_parse_webapp_init_data(token, init_data)` проходит):
+`query_id` (32 hex, для `answerWebAppQuery`), `user` — JSON `{id, first_name, username, language_code: "ru",
+allows_write_to_pm: true}`, `auth_date`, при открытии из чата — `chat_type` (`sender` — личка с самим ботом, `group`,
+`supergroup` — канал сервера) и `chat_instance` (id канала), `hash`. `hash = hex(HMAC_SHA256(key = secret_key,
+data_check_string))`, `secret_key = HMAC_SHA256(key = "WebAppData", msg = <токен бота>)`, `data_check_string` — пары
+`k=v` (раскодированные) без `hash`, по алфавиту, через `\n`. Проверка на стороне бота:
+
+```python
+from aiogram.utils.web_app import safe_parse_webapp_init_data
+data = safe_parse_webapp_init_data(TOKEN, init_data)   # ValueError, если подпись не сходится
+```
+
+Токен хранится только хэшем, поэтому сервер держит отдельно `bots.webapp_key` = `secret_key` (hex): он ставится при
+создании бота и перевыпуске токена (старые initData после перевыпуска не проходят), а у ботов, созданных раньше, —
+при первом успешном вызове Bot API (любой метод, видно открытый токен). Ключ даёт только подпись initData, вызывать
+Bot API им нельзя.
+
 ## 22. Входящие вебхуки каналов **[new]**
 
 Адрес, по которому внешний сервис (CI, мониторинг, форма) пишет в текстовый канал сервера — формат совместим
@@ -819,7 +903,35 @@ nginx не пишет эти адреса в логи (токен в пути).
 | `@логин` | упоминание (подсветка, если такой пользователь известен; считается в «упоминаниях» §4) |
 | `<t:UNIX>`, `<t:UNIX:стиль>` | время в часовом поясе читателя, ru-RU: `t` 14:30, `T` 14:30:05, `d` 05.11.2026, `D` 5 ноября 2026 г., `f` (по умолчанию) 5 ноября 2026 г. в 14:30, `F` с днём недели, `R` «через 5 минут» / «3 дня назад» |
 
-Боты получают текст в этой разметке; `parse_mode` Bot API переводится в неё (§21.4).
+Боты получают текст в этой разметке; `parse_mode` Bot API переводится в неё (§21.4). HTML `<pre><code class="language-cpp">`
+становится ```` ```cpp ````: тег — первое слово класса после `language-`, до 20 символов `A-Za-z0-9_+#.-`.
+
+**Блоки кода: подсветка синтаксиса** **[new]**. Тег после ```` ``` ```` (без учёта регистра) выбирает язык; в шапке блока —
+его имя, а не сырой тег (`py` → «Python», исходный тег — в подсказке). Подсветка — highlight.js (ядро и языки ниже), чанк
+грузится лениво при первом блоке с известным языком; цвета — токены `--code-*` темы (`design/tokens.json`), без тем hljs.
+Неизвестный тег — подпись как есть, без подсветки; блок без тега — без подписи и без подсветки (язык не угадывается).
+
+| Язык (подпись) | Теги |
+|---|---|
+| C | `c` |
+| C++ | `cpp`, `c++`, `cc`, `cxx`, `h`, `hpp`, `hh`, `hxx` |
+| C# | `csharp`, `cs`, `c#` |
+| Java / Kotlin | `java` / `kotlin`, `kt`, `kts` |
+| Python | `python`, `py`, `python3`, `py3` |
+| JavaScript / JSX | `javascript`, `js`, `node`, `mjs`, `cjs` / `jsx` |
+| TypeScript / TSX | `typescript`, `ts`, `mts` / `tsx` |
+| Go / Rust | `go`, `golang` / `rust`, `rs` |
+| PHP / Ruby / Swift / Dart / Lua | `php` / `ruby`, `rb` / `swift` / `dart` / `lua` |
+| SQL | `sql` |
+| Bash / PowerShell | `bash`, `sh`, `shell`, `zsh` / `powershell`, `ps`, `ps1`, `pwsh` |
+| JSON / YAML | `json` / `yaml`, `yml` |
+| HTML / XML / SVG | `html`, `htm` / `xml` / `svg` |
+| CSS / SCSS | `css` / `scss` |
+| Diff | `diff`, `patch` |
+| Markdown | `markdown`, `md` |
+| Dockerfile | `dockerfile`, `docker` |
+| INI / TOML | `ini`, `cfg`, `conf` / `toml` |
+| Текст (без подсветки) | `plaintext`, `text`, `txt`, `plain` |
 
 ### 23.1 Меню картинок и ПК-приложение 1.3.0
 

@@ -24,6 +24,7 @@ import { Reach,
 import { startAppearanceSync, stopAppearanceSync } from './appearanceSync';
 import { mentionsUser } from './markdown';
 import { notifyMessage } from './notify';
+import { popupSurface } from './popups';
 import { loadPlan } from './plan';
 import { parsePath, viewForRoute } from './routes';
 import { socket, WsEvent } from './ws';
@@ -530,15 +531,24 @@ export const useStore = create<State>((set, get) => {
   const notify = (msg: Message, mentioned: boolean) => {
     const s = get();
     const v = viewForChannel(s, msg.channel_id);
+    let where = 'Личные сообщения';
+    if (v?.kind === 'group') where = s.groups.find((g) => g.id === msg.channel_id)?.name || 'Беседа';
+    else if (v?.kind === 'server') {
+      const ch = s.channelsByServer[v.serverId]?.find((c) => c.id === msg.channel_id);
+      const srv = s.servers.find((x) => x.id === v.serverId);
+      where = [ch && `#${ch.name}`, srv?.name].filter(Boolean).join(' · ') || 'Сервер';
+    }
     notifyMessage(msg, {
       serverId: v?.kind === 'server' ? v.serverId : null,
       mentioned,
       active: activeChannelId(s.view) === msg.channel_id,
       dnd: s.me?.presence === 'dnd',
+      where,
       open: () => {
         const target = viewForChannel(get(), msg.channel_id);
         if (target) get().open(target);
       },
+      openMessage: () => void get().jumpTo(msg.channel_id, msg.id),
     });
   };
 
@@ -653,6 +663,9 @@ export const useStore = create<State>((set, get) => {
         unreadDuring.set(ch, { unread: d.unread + 1, mentions: d.mentions + (mentioned ? 1 : 0) });
       }
       notify(messageFromEvent(ev), mentioned);
+    } else if (visible && popupSurface().chatHidden && !ownMessage({ author_id: ev.author_id, webhook: ev.webhook }, s.me?.user_id)) {
+      // Чат открыт, но закрыт настройками или сценой звонка: непрочитанным не считаем, а баннер — показываем
+      notify(messageFromEvent(ev), !!s.me && mentionsUser(ev.text ?? '', s.me.username));
     }
     if (!knownChannel(s, ch)) {
       // Новая личка, которой ещё нет в списке, — один запрос, а не на каждое сообщение

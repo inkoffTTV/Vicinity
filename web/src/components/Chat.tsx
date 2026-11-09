@@ -1,11 +1,14 @@
-import { AudioLines, Bell, BellOff, Hash, Menu, NotebookPen, Phone, PhoneOff, Pin, UserPlus, Users, Wallpaper } from 'lucide-react';
+import { AppWindow, AudioLines, Bell, BellOff, Hash, Menu, NotebookPen, Phone, PhoneOff, Pin, UserPlus, Users, Wallpaper } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { api, MenuButton } from '../lib/api';
 import { useCall } from '../lib/call';
 import { useChannelMembers } from '../lib/channelMembers';
 import { useNotifySettings } from '../lib/notify';
 import { activeChannelId, useStore } from '../lib/store';
 import { userMenuProps } from '../lib/userMenu';
 import { useVoice } from '../lib/voice';
+import { useWebApp } from '../lib/webapp';
+import { socket, WsEvent } from '../lib/ws';
 import { AddMemberDialog } from './AddMemberDialog';
 import { ChatBgDialog } from './ChatBackground';
 import { Avatar } from './Avatar';
@@ -56,6 +59,32 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
   // Сменился канал — панели прежнего закрываются
   useEffect(() => setPanel(null), [channelId]);
 
+  // Кнопка меню бота (setChatMenuButton, docs/API.md §21.8): мини-приложение открывается из шапки лички с ботом
+  const [menu, setMenu] = useState<MenuButton | null>(null);
+  const botId = dm?.is_bot && !dm.notes ? dm.user_id : null;
+  useEffect(() => {
+    setMenu(null);
+    if (botId === null || channelId === null) return;
+    let alive = true;
+    let req = 0;
+    const load = () => {
+      const n = ++req;
+      api
+        .botMenuButton(botId, channelId)
+        .then((m) => alive && n === req && setMenu(m))
+        .catch(() => undefined); // старый сервер или нет доступа — просто без кнопки
+    };
+    load();
+    // Бот поменял кнопку (setChatMenuButton, обычно в ответ на /start) — шапка обновляется сразу
+    const off = socket.on((ev: WsEvent) => {
+      if (ev.type === 'bot_menu_button_changed' && ev.bot_id === botId && (ev.channel_id === 0 || ev.channel_id === channelId)) load();
+    });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, [botId, channelId]);
+
   let title = '';
   let placeholder = '';
   if (dm?.notes) {
@@ -96,6 +125,19 @@ export function Chat({ onMenu, membersOpen, onToggleMembers }: Props) {
           </div>
         )}
         <div className="grow" />
+        {dm && menu?.type === 'web_app' && menu.web_app && (
+          <button
+            className="btn small primary webapp-open"
+            aria-label={`Открыть мини-приложение: ${menu.text ?? ''}`}
+            title={`Открыть мини-приложение: ${menu.text ?? ''}`}
+            onClick={() =>
+              useWebApp.getState().open({ botId: dm.user_id, botName: dm.display_name, url: menu.web_app!.url, channelId: dm.channel_id })
+            }
+          >
+            <Icon icon={AppWindow} size={14} />
+            <span className="ellipsis">{menu.text}</span>
+          </button>
+        )}
         {/* Боту не позвонить: голоса у него нет */}
         {dm && !dm.notes && !dm.is_bot && (
           <button

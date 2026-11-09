@@ -33,6 +33,8 @@ static void channelRows(const std::shared_ptr<drogon::orm::Transaction>& tr, int
     // Боты и вебхуки: нажатия кнопок и вебхуки этого канала
     tr->execSqlSync("DELETE FROM bot_callbacks WHERE channel_id = ?", channelId);
     tr->execSqlSync("DELETE FROM webhooks WHERE channel_id = ?", channelId);
+    tr->execSqlSync("DELETE FROM bot_menu_buttons WHERE channel_id = ?", channelId);
+    tr->execSqlSync("DELETE FROM bot_webapp_queries WHERE channel_id = ?", channelId);
     tr->execSqlSync("DELETE FROM channels WHERE id = ?", channelId);
 }
 
@@ -93,6 +95,8 @@ static void userRows(const std::shared_ptr<drogon::orm::Transaction>& tr, int64_
     tr->execSqlSync("DELETE FROM bots WHERE user_id = ?", userId);
     tr->execSqlSync("DELETE FROM bot_updates WHERE bot_id = ?", userId);
     tr->execSqlSync("DELETE FROM bot_callbacks WHERE bot_id = ? OR user_id = ?", userId, userId);
+    tr->execSqlSync("DELETE FROM bot_menu_buttons WHERE bot_id = ?", userId);
+    tr->execSqlSync("DELETE FROM bot_webapp_queries WHERE bot_id = ? OR user_id = ?", userId, userId);
     tr->execSqlSync("DELETE FROM webhooks WHERE created_by = ?", userId);
     tr->execSqlSync("DELETE FROM users WHERE id = ?", userId);
 }
